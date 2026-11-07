@@ -28,7 +28,7 @@
 // (program_plan.js doctrine); an expected lane holding work is turned off with a signed tailoring entry naming the answer.
 (function (root) {
     'use strict';
-    var VERSION = '2.1';
+    var VERSION = '2.2';
     function E(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
     function U() { return root.SLAutopilotUI || null; }
     function PP() { return root.PROGRAM_PLAN || null; }
@@ -191,7 +191,7 @@
     // Q(k, section, question, options [[id, label, what it means]], text {id: sentence} | fn(v), o)
     //   o.type 'one' (default) | 'checks' (several at once) | 'num' (a number, or "auto")
     //   o.da: the objectives it helps meet; o.tools: the pages that hold the evidence; o.set: what it sets in Safety Lab
-    //   o.when(): asked only when it applies; o.own === false: no "our own way" choice; o.reasonFor: the answers that need a reason
+    //   o.when(): asked only when it applies; o.parent: the earlier question it follows from (drawn indented under it); o.own === false: no "our own way" choice; o.reasonFor: the answers that need a reason
     //   o.need(v): a message when the pick does not work with the rest of the plan
     function Q(k, sec, text, opts, txt, o) { return Object.assign({ k: k, sec: sec, text: text, opts: opts, txt: txt, da: [], tools: [], reasonFor: ['none'] }, o || {}); }
     var NOTP = function (what) { return ['none', 'Not planned', 'Written into the plan with the reason' + (what ? '; ' + what : '') + '. The reason goes into the tailoring section.']; };
@@ -214,26 +214,26 @@
             { type: 'checks', da: ['A8-2'], tools: ['moc'] }),
         Q('sspp.second', 'Scope and purpose', 'How will the other authorities accept the safety work?', [['validation', 'Validation of the first authority\'s approval, under a bilateral agreement', ''], ['concurrent', 'Concurrent certification: every authority reviews the work as it happens', ''], ['each', 'Separately, each authority on its own schedule', '']],
             { validation: 'The first authority certifies the aircraft; the others validate that approval under their bilateral agreements, so the safety work is written once, to the strictest of the bases where they differ.', concurrent: 'Every authority reviews the safety work as it happens (concurrent certification); where their requirements differ, the strictest is applied.', each: 'Each authority reviews the safety work on its own schedule; where their requirements differ, the differences are listed and met separately.' },
-            { da: ['A8-1', 'A8-2'], when: function () { return picked('sspp.authority').filter(function (x) { return x !== 'own'; }).length > 1; } }),
+            { da: ['A8-1', 'A8-2'], parent: 'sspp.authority', when: function () { return picked('sspp.authority').filter(function (x) { return x !== 'own'; }).length > 1; } }),
         // Certification basis
         Q('basis.reg', 'Certification basis and safety objectives', 'Which certification basis will the safety assessment be done to?', REGS.map(function (r) { return [r[0], r[1], '']; }),
             function (v) { return 'The safety assessment will be done to ' + (REG_SHORT[v] || v) + '. The basis sets the failure condition classifications, the probability target for each, and the development assurance level each one calls for, as Table {T:targets} shows.' + (v === 'Custom' ? ' The special conditions are defined on the certification basis page and agreed with the authority.' : ''); },
             { own: false, da: ['A8-1', 'A3-1'], tools: ['defs'], set: [BASIS('regulation', 'Certification basis', function (x) { return REG_SHORT[canonReg(x)] || x; })] }),
         Q('basis.p23level', 'Certification basis and safety objectives', 'What is the Part 23 certification level?', (safe(function () { return p23().CERT_LEVELS; }, []) || []).map(function (l) { return [l.v, l.label, '']; }),
-            function (v) { return 'The airplane is Part 23 certification level ' + v + '.'; }, { own: false, when: function () { return reg() === 'Part 23'; }, set: [BASIS('part23Class', 'Part 23 class', function (x, c) { return c && c.part23Class ? 'Class ' + c.part23Class : ''; })] }),
+            function (v) { return 'The airplane is Part 23 certification level ' + v + '.'; }, { own: false, parent: 'basis.reg', when: function () { return reg() === 'Part 23'; }, set: [BASIS('part23Class', 'Part 23 class', function (x, c) { return c && c.part23Class ? 'Class ' + c.part23Class : ''; })] }),
         Q('basis.p23prop', 'Certification basis and safety objectives', 'What propulsion will the airplane have?', (safe(function () { return p23().PROPULSION; }, []) || []).map(function (l) { return [l.v, l.label, '']; }),
-            function (v, q) { return 'Its propulsion: ' + lcFirst(optLabel(q, v)) + '. With the certification level, this sets the assessment level of ASTM F3230 and so the targets.'; }, { own: false, when: function () { return reg() === 'Part 23'; }, set: [BASIS('part23Class', 'Part 23 class', function (x, c) { return c && c.part23Class ? 'Class ' + c.part23Class : ''; })] }),
+            function (v, q) { return 'Its propulsion: ' + lcFirst(optLabel(q, v)) + '. With the certification level, this sets the assessment level of ASTM F3230 and so the targets.'; }, { own: false, parent: 'basis.reg', when: function () { return reg() === 'Part 23'; }, set: [BASIS('part23Class', 'Part 23 class', function (x, c) { return c && c.part23Class ? 'Class ' + c.part23Class : ''; })] }),
         Q('basis.p23manual', 'Certification basis and safety objectives', 'Which assessment level has been agreed with the authority?', [['I', 'Assessment Level I', ''], ['II', 'Assessment Level II', ''], ['III', 'Assessment Level III', ''], ['IV', 'Assessment Level IV', '']],
-            function (v) { return 'The propulsion falls outside ASTM F3230 Table 3, so assessment level ' + v + ' will be agreed with the authority.'; }, { own: false, when: function () { return reg() === 'Part 23' && A('basis.p23prop') === 'other'; }, set: [BASIS('part23Class', 'Part 23 class', function (x, c) { return c && c.part23Class ? 'Class ' + c.part23Class : ''; })] }),
+            function (v) { return 'The propulsion falls outside ASTM F3230 Table 3, so assessment level ' + v + ' will be agreed with the authority.'; }, { own: false, parent: 'basis.p23prop', when: function () { return reg() === 'Part 23' && A('basis.p23prop') === 'other'; }, set: [BASIS('part23Class', 'Part 23 class', function (x, c) { return c && c.part23Class ? 'Class ' + c.part23Class : ''; })] }),
         Q('basis.p23dal', 'Certification basis and safety objectives', 'How will software and hardware DALs be set (ASTM F3061 4.2.5)?', [['f3061', 'ASTM F3061 Table 1: a primary and a secondary DAL', ''], ['arp4754', 'The ARP4754 method: A, B, C or D from the severity', '']],
-            { f3061: 'Software and electronic hardware DALs will be set from ASTM F3061 Table 1.', arp4754: 'Software and electronic hardware DALs will be set by the ARP4754 method, from the severity of the failure conditions they contribute to.' }, { own: false, when: function () { return reg() === 'Part 23'; }, set: [BASIS('part23DalMethod', 'Part 23 DAL method', function (x) { return x === 'arp4754' ? 'ARP4754 method' : x ? 'F3061 Table 1' : ''; })] }),
+            { f3061: 'Software and electronic hardware DALs will be set from ASTM F3061 Table 1.', arp4754: 'Software and electronic hardware DALs will be set by the ARP4754 method, from the severity of the failure conditions they contribute to.' }, { own: false, parent: 'basis.reg', when: function () { return reg() === 'Part 23'; }, set: [BASIS('part23DalMethod', 'Part 23 DAL method', function (x) { return x === 'arp4754' ? 'ARP4754 method' : x ? 'F3061 Table 1' : ''; })] }),
         Q('basis.p27', 'Certification basis and safety objectives', 'What class is the rotorcraft (PS-ASW-27-15)?', [['I', 'Class I: reciprocating, up to 5 occupants', ''], ['II', 'Class II: single turbine, up to 5 occupants, up to 4,000 lb', ''], ['III', 'Class III: single turbine, 6 or more occupants, 4,001 to 7,000 lb', ''], ['IV', 'Class IV: twin turbine', '']],
-            function (v) { return 'The rotorcraft is Part 27 class ' + v + ', which sets its targets.'; }, { own: false, when: function () { return reg() === 'Part 27'; }, set: [BASIS('part27Class', 'Part 27 class', function (x) { return x ? 'Class ' + x : ''; })] }),
+            function (v) { return 'The rotorcraft is Part 27 class ' + v + ', which sets its targets.'; }, { own: false, parent: 'basis.reg', when: function () { return reg() === 'Part 27'; }, set: [BASIS('part27Class', 'Part 27 class', function (x) { return x ? 'Class ' + x : ''; })] }),
         Q('basis.scvtol', 'Certification basis and safety objectives', 'Which SC-VTOL category will the aircraft be certified in?', [['Basic 1', 'Basic 1: 0 to 1 passengers', ''], ['Basic 2', 'Basic 2: 2 to 6 passengers', ''], ['Basic 3', 'Basic 3: 7 to 9 passengers', ''], ['Enhanced', 'Enhanced: commercial passenger and congested-area operations', '']],
-            function (v) { return 'The aircraft will be certified in SC-VTOL category ' + v + '.'; }, { own: false, when: function () { return reg() === 'SC-VTOL'; }, set: [BASIS('scvtolCategory', 'SC-VTOL category', function (x) { return x || ''; })] }),
+            function (v) { return 'The aircraft will be certified in SC-VTOL category ' + v + '.'; }, { own: false, parent: 'basis.reg', when: function () { return reg() === 'SC-VTOL'; }, set: [BASIS('scvtolCategory', 'SC-VTOL category', function (x) { return x || ''; })] }),
         Q('basis.mission', 'Certification basis and safety objectives', 'What flight duration will turn per-flight risk into per-hour targets?', [['auto', 'The sum of the flight phases', ''], ['1', '1 hour', ''], ['2', '2 hours', ''], ['3', '3 hours', ''], ['5', '5 hours', ''], ['10', '10 hours', '']],
             function (v) { return v === 'auto' ? 'The certification flight duration will be the sum of the flight phases; a failure condition that can only happen in some phases has its target adjusted for the time spent in them.' : 'The certification flight duration will be ' + v + ' hour' + (v === '1' ? '' : 's') + '; a failure condition that can only happen in some phases has its target adjusted for the time spent in them.'; },
-            { own: false, when: isFixedOrRotor, set: [BASIS('missionDuration', 'Flight duration for the targets', function (x) { return x ? x + ' h' : 'Sum of the flight phases'; })] }),
+            { own: false, parent: 'basis.reg', when: isFixedOrRotor, set: [BASIS('missionDuration', 'Flight duration for the targets', function (x) { return x ? x + ' h' : 'Sum of the flight phases'; })] }),
         Q('basis.special', 'Certification basis and safety objectives', 'Will the basis include special conditions or equivalent safety findings?', [['none0', 'No, the published rules only', ''], ['sc', 'Special conditions', 'Listed in the certification plan; each one\'s safety objectives come into this plan.'], ['esf', 'Equivalent safety findings', ''], ['elos', 'Exemptions', '']],
             function (v) { if (v === 'none0') return 'The basis is the published rules only.'; var m = { sc: 'special conditions', esf: 'equivalent safety findings', elos: 'exemptions' }; return 'The basis will include ' + listJoin(String(v).split('|').filter(function (x) { return m[x]; }).map(function (x) { return m[x]; })) + ', listed in the certification plan. Where one sets its own safety objectives, they are added to the classifications below and assessed the same way.'; },
             { type: 'checks', da: ['A8-1'], reasonFor: [], need: function (v) { return v.indexOf('none0') >= 0 && v.split('|').length > 1 ? 'Published rules only cannot go with special conditions or findings: pick one or the other.' : ''; } }),
@@ -246,7 +246,7 @@
             { da: ['A1-1', 'A7-2'] }),
         Q('sspp.suppliers', 'How the safety program is organized', 'How will the suppliers\' safety work be held to this plan?', [['this', 'They work to this plan', ''], ['theirs', 'They work to their own plans, reviewed and accepted against this one', ''], ['each', 'Supplier by supplier, set in each contract', '']],
             { this: 'Suppliers will work to this plan; it is part of each supply contract.', theirs: 'Each supplier will work to its own safety plan, which the program reviews and accepts against this one before the supplier\'s work starts.', each: 'How each supplier is held to this plan will be set in its contract: this plan, or its own plan accepted against this one.' },
-            { da: ['A1-3'], when: function () { return ['supplier', 'mixed'].indexOf(A('sspp.org')) >= 0 || A('sspp.kind') === 'supplier'; } }),
+            { da: ['A1-3'], parent: 'sspp.org', when: function () { return ['supplier', 'mixed'].indexOf(A('sspp.org')) >= 0 || A('sspp.kind') === 'supplier'; } }),
         Q('sspp.deleg', 'How the safety program is organized', 'Will the program use delegated authority?', [['none0', 'No: the authority reviews directly', ''], ['der', 'Designated engineering representatives (DERs)', ''], ['oda', 'An organization designation authorization (ODA)', ''], ['doa', 'An EASA design organization approval (DOA)', '']],
             function (v) { if (v === 'none0') return 'The authority will review the safety work directly; no delegation is used.'; var m = { der: 'designated engineering representatives', oda: 'the company\'s organization designation authorization', doa: 'the company\'s design organization approval' }; return 'Findings of compliance on the safety work will be made through ' + listJoin(String(v).split('|').filter(function (x) { return m[x]; }).map(function (x) { return m[x]; })) + ', within the limits the authority has delegated.'; },
             { type: 'checks', da: ['A8-1'], reasonFor: [], need: function (v) { return v.indexOf('none0') >= 0 && v.split('|').length > 1 ? '"No delegation" cannot go with a delegation: pick one or the other.' : ''; } }),
@@ -407,7 +407,7 @@
             { type: 'checks', da: ['A5-1', 'A4-1'], tools: ['hfa-results', 'vv-status'], when: hfOn }),
         Q('hfp.pilots', 'Evaluations and who does them', 'Who will fly the evaluations?', [['line', 'Line pilots from operators, not from the design team', ''], ['test', 'The company\'s test pilots', ''], ['both', 'Both', ''], ['authority', 'Both, with the authority\'s pilots', '']],
             { line: 'The evaluations will be flown by line pilots from operators, who were not part of the design.', test: 'The evaluations will be flown by the company\'s test pilots.', both: 'The evaluations will be flown by the company\'s test pilots and by line pilots from operators who were not part of the design.', authority: 'The evaluations will be flown by the company\'s test pilots, line pilots from operators, and the authority\'s pilots.' },
-            { da: ['A4-3', 'A5-3'], tools: ['hfa-results'], when: function () { return hfOn() && picked('hfp.eval').some(function (x) { return ['sim', 'flight', 'mock'].indexOf(x) >= 0; }); } }),
+            { da: ['A4-3', 'A5-3'], tools: ['hfa-results'], parent: 'hfp.eval', when: function () { return hfOn() && picked('hfp.eval').some(function (x) { return ['sim', 'flight', 'mock'].indexOf(x) >= 0; }); } }),
         Q('hfp.mfc', 'Minimum flight crew', 'How will the minimum crew be decided?', [['appd', 'The workload functions and factors of Appendix D, then the simulator', ''], ['similar', 'By comparison with a certified aircraft, with the differences analyzed', '']],
             { appd: 'The minimum flight crew will be decided from the workload functions and factors of Appendix D, worked through for each flight phase, and confirmed in the simulator.', similar: 'The minimum flight crew will be decided by comparison with a certified aircraft of the same crew, with each difference in workload analyzed.' },
             { da: ['A8-1'], tools: ['hfa-auto'], when: function () { return hfOn() && A('hfp.crew') !== 'none'; } }),
@@ -866,64 +866,176 @@
     function fpOf(x) { var s = ''; try { s = JSON.stringify(x == null ? null : x); } catch (_) { s = String(x); } var h = 5381; for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
     function hasPasa() { return A('sspp.pasa') !== 'none'; }
     function isSup() { return A('sspp.kind') === 'supplier'; }
+    function hfNow() { return !!A('hfp.need') && A('hfp.need') !== 'none'; }
+    function mfsPicks() { return picked('sspp.combined').filter(function (x) { return ['interdep', 'mac', 'coffe'].indexOf(x) >= 0; }); }
+    function ccaIds() { return ['zsa', 'pra', 'cma'].filter(function (x) { return planned(x); }); }
+    function fmeaOn() { return planned('ffmea') || planned('ppfmea'); }
+    function ramPredOn() { return planned('ram-reliability') !== false; }
+    function msg3On() { return !!A('ramp.msg3') && A('ramp.msg3') !== 'none'; }
+    // 7 Nov 2026 (Waqas: "we need to define inputs and outputs of each assessment in all the plans both in diagrams and
+    // prose"): every assessment the three plans run, each with what it does, what it needs and from where, and what it
+    // must produce and for whom. Built from the answers; an assessment that is not planned is left out, and whoever
+    // would have fed it or used it takes the input from where the plan says instead.
     function assessments() {
-        var aft = isSup() ? 'aircraft maker' : 'afha';
-        var L = [
-            { id: 'spp', name: 'System Safety Program Plan', plan: 'sspp', tab: 'plan-auto', on: function () { return true; },
-              inputs: [['The certification basis and any special conditions', 'basis'], ['The program\'s scope, organization and schedule', 'program'], ['The development process (ARP4754B) and its plans', 'program']],
-              outputs: [{ id: 'spp.plan', what: 'This plan, approved and issued', to: ['afha', 'sfha', 'pssa', 'cca', 'ssa', 'asa'], accept: 'Every decision made, signed by the approver, submitted to the authority', fp: function () { return fpOf(store().answers); } },
-                        { id: 'spp.obj', what: 'The safety objectives: classifications, probability targets and DALs for the basis', to: ['afha', 'sfha', 'dal'], accept: 'Match the certification basis exactly (taken from Safety Lab\'s engine)', fp: function () { return fpOf(targetsFor(plannedCfg())); } },
-                        { id: 'spp.tailor', what: 'The tailoring decisions, each with its reason', to: ['afha', 'pssa', 'cca'], accept: 'Each expected analysis left out has a written reason the authority accepts', fp: function () { return fpOf(store().why); } }] },
-            { id: 'afha', name: 'Aircraft FHA', plan: 'sspp', tab: 'ac-fha', on: function () { return !isSup(); },
-              inputs: [['The aircraft functions', 'design'], ['The flight phases', 'design'], ['The safety objectives for the basis', 'spp']],
-              outputs: [{ id: 'afha.fc', what: 'Aircraft failure conditions, each with its effects, classification and safety objective', to: [hasPasa() ? 'pasa' : 'pssa', 'sfha', 'dal'], accept: 'Every function, in every flight phase, assessed for loss and malfunction; each classification has its reason; reviewed and signed', fp: function () { return fpOf(arr('acFhaData').map(function (f) { return [f.fcId, f.severity, f.fcDesc]; })); } }] },
-            { id: 'pasa', name: 'PASA', plan: 'sspp', tab: 'pasa', on: function () { return !isSup() && hasPasa(); },
-              inputs: [['Aircraft failure conditions and classifications', aft], ['The proposed aircraft architecture', 'design']].concat(has('sspp.combined', 'interdep') ? [['Which systems contribute to each failure condition (interdependence)', 'design']] : []),
-              outputs: [{ id: 'pasa.req', what: 'Aircraft safety requirements and the independence the architecture needs', to: ['sfha', 'pssa'], accept: 'Each aircraft failure condition shown achievable by the architecture; requirements traced to it', fp: function () { return fpOf(arr('acReqData').length); } },
-                        { id: 'pasa.fdal', what: 'FDALs for the aircraft functions', to: ['dal', 'pssa'], accept: 'Each FDAL from its worst failure condition, any lowering backed by an independence claim', fp: function () { return fpOf(arr('acFunctionsData').map(function (f) { return f.fdal || f.dal || ''; })); } }]
-                .concat(has('sspp.combined', 'mac') ? [{ id: 'pasa.mfms', what: 'The multi-system fault trees built by MAC', to: ['asa'], accept: 'Each multi-system failure condition has its tree; the model and the trees agree', fp: function () { return fpOf(arr('ftaPages').filter(function (p) { return p.generatedFrom === 'mac'; }).length); } }] : [])
-                .concat(has('sspp.combined', 'coffe') ? [{ id: 'pasa.coffe', what: 'The CoFFE cases, each decided and signed', to: ['asa'], accept: 'Every case the model cannot answer is decided by an engineer', fp: function () { return fpOf(safe(function () { return pc().coffe; }, null)); } }] : []) },
-            { id: 'sfha', name: 'System FHAs', plan: 'sspp', tab: 'sys-dir', on: function () { return true; },
-              inputs: [['The system functions', 'design'], [isSup() ? 'Aircraft failure conditions from the aircraft maker' : 'The aircraft failure conditions each system takes part in', hasPasa() && !isSup() ? 'pasa' : aft]],
-              outputs: [{ id: 'sfha.fc', what: 'System failure conditions, each with its classification and safety objective', to: ['pssa', 'dal'], accept: 'Every system function assessed; each traced to the aircraft failure condition it feeds; signed', fp: function () { return fpOf(arr('systemsData').map(function (s) { return (s.fha || []).length; })); } }] },
-            { id: 'pssa', name: 'PSSAs', plan: 'sspp', tab: 'fta', on: function () { return true; },
-              inputs: [['System failure conditions and objectives', 'sfha'], ['The proposed system architecture', 'design'], ['Failure rates', planned('ram-reliability') ? 'ram' : 'design']].concat(planned('ffmea') || planned('ppfmea') ? [['Failure modes from the FMEAs', 'fmea']] : []),
-              outputs: [{ id: 'pssa.trees', what: 'Fault trees' + (planned('markov') ? ' with Markov models' : '') + ' showing each architecture can meet its targets', to: ['ssa', 'cca'], accept: (A('sspp.quant') === 'all' ? 'Every' : A('sspp.quant') === 'catmaj' ? 'Catastrophic, hazardous and major' : 'Catastrophic and hazardous') + ' failure conditions shown with numbers to meet their targets', fp: function () { return fpOf(arr('ftaPages').length); } },
-                        { id: 'pssa.req', what: 'System and item safety requirements, and the independence each architecture needs', to: ['cca', 'items'], accept: 'Every requirement traced to its tree or finding, and validated', fp: function () { return fpOf(arr('systemsData').map(function (s) { return (s.req || []).length; })); } }] },
-            { id: 'dal', name: 'DAL assignment', plan: 'sspp', tab: 'dal-ref', on: function () { return true; },
-              inputs: [['Failure conditions and their classifications', isSup() ? 'sfha' : aft], ['The architecture and its independence claims', 'pssa']],
-              outputs: [{ id: 'dal.levels', what: 'An FDAL for each function and an IDAL for each item', to: ['items', 'cca'], accept: A('sspp.dal') === 'indep' ? 'Each level from its worst failure condition; every lowered level confirmed by the CMA' : 'Each level from its worst failure condition', fp: function () { return fpOf(arr('itemsData').map(function (i) { return i.dal || i.idal || ''; })); } }] }
-        ];
-        if (planned('cma') || planned('pra') || planned('zsa')) L.push({ id: 'cca', name: 'Common cause analyses', plan: 'sspp', tab: planned('cma') ? 'cma' : planned('zsa') ? 'zsa' : 'pra', on: function () { return true; },
-            inputs: [['The independence the trees and DALs rely on', 'pssa'], ['The installation and the zones', 'design']].concat(planned('pra') ? [['The particular risks to analyze', 'spp']] : []),
-            outputs: [planned('cma') ? { id: 'cca.cma', what: 'Common mode findings, each closed', to: ['ssa', 'dal'], accept: 'Every independence claim checked; each finding closed by a change, a requirement or a justification', fp: function () { return fpOf(arr('cmaData').length); } } : null,
-                      planned('pra') ? { id: 'cca.pra', what: 'Particular risk findings, each closed', to: ['ssa'], accept: 'Every planned particular risk analyzed in every zone it reaches', fp: function () { return fpOf(arr('praData').length); } } : null,
-                      planned('zsa') ? { id: 'cca.zsa', what: 'Zonal findings, each closed', to: ['ssa'], accept: 'Every zone inspected; installation and maintenance errors addressed', fp: function () { return fpOf(arr('zsaData').length); } } : null].filter(Boolean) });
-        if (planned('ffmea') || planned('ppfmea')) L.push({ id: 'fmea', name: 'FMEA', plan: 'sspp', tab: 'fmea', on: function () { return true; },
-            inputs: [['The design (functions or parts)', 'design'], ['Failure rates', planned('ram-reliability') ? 'ram' : 'design']],
-            outputs: [{ id: 'fmea.modes', what: 'Failure modes, effects and rates' + (planned('fmes') ? ', summarized in an FMES' : ''), to: ['pssa', 'ssa'], accept: 'Every function or part covered; each mode\'s effect traced to the trees', fp: function () { return fpOf(arr('fmeaData').length); } }] });
-        L.push({ id: 'ssa', name: 'SSAs', plan: 'sspp', tab: 'asa', on: function () { return true; },
-            inputs: [['The as-built design and failure rates', 'design'], ['The PSSA fault trees', 'pssa'], ['Verification results', 'verification']].concat(L.some(function (x) { return x.id === 'cca'; }) ? [['Closed common cause findings', 'cca']] : []),
-            outputs: [{ id: 'ssa.met', what: 'Each system failure condition shown to meet its target, and the safety requirements verified', to: isSup() ? ['aircraft maker'] : ['asa'], accept: 'Every target met with as-built data; every safety requirement verified; signed', fp: function () { return fpOf(arr('ftaPages').length); } }] });
-        if (!isSup()) L.push({ id: 'asa', name: 'ASA', plan: 'sspp', tab: 'asa', on: function () { return true; },
-            inputs: [['Signed SSAs', 'ssa']].concat(has('sspp.combined', 'mac') ? [['Multi-system fault trees', 'pasa']] : []),
-            outputs: [{ id: 'asa.case', what: 'Each aircraft failure condition shown to meet its target: the safety case for certification', to: ['authority'], accept: 'Every aircraft failure condition met; aircraft-level trees ' + (A('sspp.asa') === 'both' ? 'compiled and written by hand agree' : 'complete') + '; signed', fp: function () { return fpOf(arr('ftaPages').length + ':' + arr('acFhaData').length); } }] });
-        if (planned('ccmr')) L.push({ id: 'ccmr', name: 'Latent failures (CCMR)', plan: 'sspp', tab: 'ccmr', on: function () { return true; },
-            inputs: [['Fault trees with their latent failures', 'pssa']],
-            outputs: [{ id: 'ccmr.list', what: 'Candidate certification maintenance requirements with their intervals', to: has('sspp.maint', 'msg3') ? ['msg3'] : ['authority'], accept: 'Every latent failure in a catastrophic or hazardous tree has its interval', fp: function () { return fpOf(safe(function () { return pc().ccmr; }, null)); } }] });
-        if (A('hfp.need') !== 'none' && A('hfp.need')) L.push({ id: 'hf', name: 'Human factors', plan: 'hfp', tab: 'hfa-auto', on: function () { return true; },
-            inputs: [['The aircraft functions and flight phases', 'design'], ['Failure conditions with a crew effect', aft]],
-            outputs: [{ id: 'hf.alloc', what: 'Who does what in every flight phase, and the crew tasks', to: ['hf'], accept: 'Every function given to the crew, automation or both, phase by phase', fp: function () { return fpOf(safe(function () { return pc().hf.alloc; }, null)); } },
-                      { id: 'hf.workload', what: 'Each pilot\'s workload in every phase, with the worst failure on top', to: ['authority'], accept: 'No pilot over the limit in any phase', fp: function () { return fpOf(safe(function () { return pc().hf.tasks; }, null)); } },
-                      { id: 'hf.credit', what: 'Crew actions the safety case counts on, as validated assumptions', to: [aft, 'pssa'], accept: 'Each validated in the evaluations before it counts', fp: function () { return fpOf(arr('acAssumptionsData').length); } },
-                      { id: 'hf.mfc', what: 'The minimum flight crew decision', to: ['authority'], accept: 'Decided with its reasons and confirmed in the evaluations', fp: function () { return fpOf(safe(function () { return pc().hf.mfc; }, null)); } }] });
-        L.push({ id: 'ram', name: 'Reliability', plan: 'ramp', tab: 'ram-hub', on: function () { return true; },
-            inputs: [['The parts and where they are installed', 'design'], ['Failures in test and service', 'verification']],
-            outputs: [{ id: 'ram.rates', what: 'A failure rate for every item the fault trees use, with its source', to: ['pssa', 'fmea'], accept: 'Each rate names its source and environment', fp: function () { return fpOf(safe(function () { return pc().ram; }, null)); } }]
-              .concat(planned('ram-msg3') ? [{ id: 'ram.msg3', what: 'The scheduled maintenance tasks, with the CMRs kept apart', to: ['authority'], accept: 'Every CMR included and never escalated without the safety group', fp: function () { return fpOf(safe(function () { return pc().msg3x; }, null)); } }] : []) });
-        return L.filter(function (x) { return safe(function () { return x.on(); }, true); });   // an assessment not planned is left out: no inputs, outputs or exchanges
+        return memo('ass', function () {
+            var aft = isSup() ? 'aircraft maker' : 'afha', cca = ccaIds(), hf = hfNow(), mfs = mfsPicks(), rates = ramPredOn() ? 'ram-pred' : 'design';
+            var feedEvents = A('hfp.feed') === 'events', mfcOn = hf && A('hfp.crew') !== 'none';
+            var L = [];
+            var add = function (a) { L.push(a); };
+            // ---- the System Safety Program Plan ----
+            add({ id: 'spp', name: 'System Safety Program Plan', plan: 'sspp', tab: 'plan-auto', due: 'At the start of the program; revised when a decision changes',
+                does: 'It sets how the aircraft will be shown safe: the objectives, the assessments, their methods and the records.',
+                inputs: [['The certification basis and any special conditions', 'basis'], ['The program\'s scope, organization and schedule', 'program'], ['The development process (ARP4754B) and its plans', 'program']],
+                outputs: [{ id: 'spp.plan', what: 'This plan, approved and issued', to: ['all'], accept: 'Every decision made, signed by the approver, submitted to the authority', fp: function () { return fpOf(store().answers); } },
+                          { id: 'spp.obj', what: 'The safety objectives: classifications, probability targets and DALs for the basis', to: [aft === 'afha' ? 'afha' : 'sfha', 'sfha', 'dal'].filter(function (x, i, a) { return a.indexOf(x) === i; }), accept: 'Match the certification basis exactly (taken from Safety Lab\'s engine)', fp: function () { return fpOf(targetsFor(plannedCfg())); } },
+                          { id: 'spp.tailor', what: 'The tailoring decisions, each with its reason', to: ['all'], accept: 'Each expected analysis left out has a written reason the authority accepts', fp: function () { return fpOf(store().why); } }]
+                    .concat(planned('pra') ? [{ id: 'spp.risks', what: 'The particular risks the program will analyze', to: ['pra'], accept: 'Every particular risk the basis and the installation call for is on the list, or left out with a reason', fp: function () { return fpOf(A('sspp.pra')); } }] : []) });
+            if (!isSup()) add({ id: 'afha', name: 'Aircraft FHA', plan: 'sspp', tab: 'ac-fha',
+                does: 'It finds how each aircraft function can fail, in each flight phase, and how bad each failure would be.',
+                inputs: [['The aircraft functions', 'design'], ['The flight phases', 'design'], ['The safety objectives for the basis', 'spp']],
+                outputs: [{ id: 'afha.fc', what: 'Aircraft failure conditions, each with its effects, classification and safety objective', to: [hasPasa() ? 'pasa' : 'pssa', 'sfha', 'dal'].concat(mfs.length ? ['mfs'] : [], hf ? ['hf-tasks', 'hf-alerts', 'hf-credit'] : []), accept: 'Every function, in every flight phase, assessed for loss and malfunction; each classification has its reason; reviewed and signed', fp: function () { return fpOf(arr('acFhaData').map(function (f) { return [f.fcId, f.severity, f.fcDesc]; })); } },
+                          { id: 'afha.req', what: 'Aircraft safety requirements: the objective of each failure condition, written as a requirement', to: ['design', hasPasa() ? 'pasa' : 'sfha'], accept: 'Every classified failure condition has its requirement, traced back to it', fp: function () { return fpOf(arr('acReqData').length); } }] });
+            if (mfs.length) add({ id: 'mfs', name: 'Multi-system failure conditions', plan: 'sspp', tab: has('sspp.combined', 'mac') ? 'mac' : 'pasa', due: when('pasa'),
+                does: 'It handles the aircraft failure conditions that more than one system contributes to, by ' + listJoin(mfs.map(function (x) { return { interdep: 'interdependence analysis', mac: 'MAC', coffe: 'CoFFE' }[x]; })) + '.',
+                inputs: [['Aircraft failure conditions that involve more than one system', aft], ['The system architecture and the interfaces between systems', 'design'], ['System failure conditions', 'sfha']],
+                outputs: [].concat(has('sspp.combined', 'interdep') ? [{ id: 'mfs.interdep', what: 'The interdependence table: which systems each aircraft failure condition depends on', to: [hasPasa() ? 'pasa' : 'pssa', 'asa'], accept: 'Every multi-system failure condition lists every system that can contribute', fp: function () { return fpOf(safe(function () { return pc().interdep; }, null)); } }] : [])
+                    .concat(has('sspp.combined', 'mac') ? [{ id: 'mfs.mac', what: 'The multi-system fault trees built by MAC', to: ['asa'], accept: 'Each multi-system failure condition has its tree; the model and the trees agree', fp: function () { return fpOf(arr('ftaPages').filter(function (p) { return p.generatedFrom === 'mac'; }).length); } }] : [])
+                    .concat(has('sspp.combined', 'coffe') ? [{ id: 'mfs.coffe', what: 'The CoFFE cases, each decided and signed', to: ['asa'], accept: 'Every case the model cannot answer is decided by an engineer', fp: function () { return fpOf(safe(function () { return pc().coffe; }, null)); } }] : []) });
+            if (!isSup() && hasPasa()) add({ id: 'pasa', name: 'PASA', plan: 'sspp', tab: 'pasa',
+                does: 'It checks that the proposed aircraft architecture can meet the aircraft failure condition objectives.',
+                inputs: [['Aircraft failure conditions and classifications', aft], ['Aircraft safety requirements', aft], ['The proposed aircraft architecture', 'design']].concat(has('sspp.combined', 'interdep') ? [['Which systems contribute to each failure condition', 'mfs']] : []),
+                outputs: [{ id: 'pasa.req', what: 'Aircraft safety requirements and the independence the architecture needs', to: ['sfha', 'pssa'], accept: 'Each aircraft failure condition shown achievable by the architecture; requirements traced to it', fp: function () { return fpOf(arr('acReqData').length); } },
+                          { id: 'pasa.fdal', what: 'FDALs for the aircraft functions', to: ['dal', 'pssa'], accept: 'Each FDAL from its worst failure condition, any lowering backed by an independence claim', fp: function () { return fpOf(arr('acFunctionsData').map(function (f) { return f.fdal || f.dal || ''; })); } }] });
+            add({ id: 'sfha', name: 'System FHAs', plan: 'sspp', tab: 'sys-dir',
+                does: 'It finds how each system function can fail and how bad each failure would be, tied to the aircraft failure conditions.',
+                inputs: [['The system functions', 'design'], [isSup() ? 'Aircraft failure conditions from the aircraft maker' : 'The aircraft failure conditions each system takes part in', hasPasa() && !isSup() ? 'pasa' : aft]],
+                outputs: [{ id: 'sfha.fc', what: 'System failure conditions, each with its classification and safety objective', to: ['pssa', 'dal'].concat(mfs.length ? ['mfs'] : []), accept: 'Every system function assessed; each traced to the aircraft failure condition it feeds; signed', fp: function () { return fpOf(arr('systemsData').map(function (s) { return (s.fha || []).length; })); } }] });
+            add({ id: 'pssa', name: 'PSSAs', plan: 'sspp', tab: 'fta',
+                does: 'It shows, with fault trees, that each proposed system architecture can meet its failure condition objectives, and writes the safety requirements that follow.',
+                inputs: [['System failure conditions and objectives', 'sfha'], ['The proposed system architecture', 'design'], ['Failure rates', rates]].concat(fmeaOn() ? [['Failure modes from the FMEAs', 'fmea']] : [], hf && feedEvents ? [['Crew actions counted on, and crew errors, as basic events', 'hf-credit']] : []),
+                outputs: [{ id: 'pssa.trees', what: 'Fault trees' + (planned('markov') ? ' with Markov models' : '') + ' showing each architecture can meet its targets', to: ['ssa'].concat(cca, planned('ccmr') ? ['ccmr'] : [], planned('ram-mmel') ? ['mmel'] : []), accept: (A('sspp.quant') === 'all' ? 'Every' : A('sspp.quant') === 'catmaj' ? 'Catastrophic, hazardous and major' : 'Catastrophic and hazardous') + ' failure conditions shown with numbers to meet their targets', fp: function () { return fpOf(arr('ftaPages').length); } },
+                          { id: 'pssa.req', what: 'System and item safety requirements, and the independence each architecture needs', to: cca.concat(['items', 'design']), accept: 'Every requirement traced to its tree or finding, and validated', fp: function () { return fpOf(arr('systemsData').map(function (s) { return (s.req || []).length; })); } }] });
+            add({ id: 'dal', name: 'DAL assignment', plan: 'sspp', tab: 'dal-ref', due: when('pssa'),
+                does: 'It gives each function and item the development assurance level its worst failure condition calls for.',
+                inputs: [['Failure conditions and their classifications', isSup() ? 'sfha' : aft], ['The architecture and its independence claims', 'pssa']],
+                outputs: [{ id: 'dal.levels', what: 'An FDAL for each function and an IDAL for each item', to: ['items'].concat(planned('cma') ? ['cma'] : []), accept: A('sspp.dal') === 'indep' ? 'Each level from its worst failure condition; every lowered level confirmed by the CMA' : 'Each level from its worst failure condition', fp: function () { return fpOf(arr('itemsData').map(function (i) { return i.dal || i.idal || ''; })); } }] });
+            if (planned('zsa')) add({ id: 'zsa', name: 'Zonal safety analysis', plan: 'sspp', tab: 'zsa', due: when('cca'),
+                does: 'It checks each zone of the aircraft for installation and maintenance errors and for systems that could harm each other there.',
+                inputs: [['The installation: the zones, the routing and the equipment in each' + (A('sspp.zsa') === 'cad' ? ', from the CAD model' : ''), 'design'], ['The separation the safety requirements call for', 'pssa']],
+                outputs: [{ id: 'cca.zsa', what: 'Zonal findings, each closed', to: ['ssa'], accept: 'Every zone inspected; installation and maintenance errors addressed', fp: function () { return fpOf(arr('zsaData').length); } },
+                          { id: 'zsa.req', what: 'Installation requirements for separation and segregation', to: ['design'], accept: 'Each finding closed by a change, a requirement or a justification', fp: function () { return fpOf(arr('zsaData').length); } }] });
+            if (planned('pra')) add({ id: 'pra', name: 'Particular risk analysis', plan: 'sspp', tab: 'pra', due: when('cca'),
+                does: 'It checks that events outside the systems, such as ' + (listJoin(picked('sspp.pra').filter(function (x) { return x !== 'own' && x !== 'none'; }).slice(0, 3).map(function (x) { return lcFirst(optLabelK('sspp.pra', x)); })) || 'the risks on the plan\'s list') + ', cannot defeat the independence the architecture relies on.',
+                inputs: [['The particular risks to analyze', 'spp'], ['The installation and the zones each risk reaches', 'design'], ['The independence the architecture relies on', 'pssa']],
+                outputs: [{ id: 'cca.pra', what: 'Particular risk findings, each closed', to: ['ssa'], accept: 'Every planned particular risk analyzed in every zone it reaches', fp: function () { return fpOf(arr('praData').length); } },
+                          { id: 'pra.req', what: 'Protection and segregation requirements', to: ['design'], accept: 'Each finding closed by a change, a requirement or a justification', fp: function () { return fpOf(arr('praData').length); } }] });
+            if (planned('cma')) add({ id: 'cma', name: 'Common mode analysis', plan: 'sspp', tab: 'cma', due: when('cca'),
+                does: 'It checks that the parts the fault trees and the DALs treat as independent really are, in design, manufacture and maintenance.',
+                inputs: [['The independence claims behind the fault trees' + (A('sspp.indep') === 'ledger' ? ', from the independence ledger' : ''), 'pssa'], ['The DALs and how each item will be developed', 'dal']],
+                outputs: [{ id: 'cca.cma', what: 'Common mode findings, each closed', to: ['ssa', 'dal'], accept: 'Every independence claim checked; each finding closed by a change, a requirement or a justification', fp: function () { return fpOf(arr('cmaData').length); } }] });
+            if (fmeaOn()) add({ id: 'fmea', name: 'FMEA', plan: 'sspp', tab: 'fmea', due: when('pssa'),
+                does: 'It lists how each ' + (planned('ppfmea') && !planned('ffmea') ? 'part' : planned('ffmea') && !planned('ppfmea') ? 'function' : 'function and part') + ' can fail and what each failure does.',
+                inputs: [['The design (' + (planned('ppfmea') && !planned('ffmea') ? 'parts' : planned('ffmea') && !planned('ppfmea') ? 'functions' : 'functions and parts') + ')', 'design'], ['Failure rates', rates]],
+                outputs: [{ id: 'fmea.modes', what: 'Failure modes, effects and rates' + (planned('fmes') ? ', summarized in an FMES' : ''), to: ['pssa', 'ssa'].concat(A('ramp.mx') && A('ramp.mx') !== 'none' ? ['ram-mx'] : []), accept: 'Every function or part covered; each mode\'s effect traced to the trees', fp: function () { return fpOf(arr('fmeaData').length); } }] });
+            add({ id: 'ssa', name: 'SSAs', plan: 'sspp', tab: 'asa',
+                does: 'It shows, with the design as built and the verification results, that each system meets its objectives.',
+                inputs: [['The as-built design', 'design'], ['Failure rates', rates], ['The PSSA fault trees', 'pssa'], ['Verification results', 'verification']].concat(cca.map(function (c) { return ['Closed ' + { zsa: 'zonal', pra: 'particular risk', cma: 'common mode' }[c] + ' findings', c]; }), hf ? [['Crew actions counted on, validated', 'hf-credit']] : [], A('ramp.fracas') ? [['Failures the fault trees did not expect', 'ram-fracas']] : []),
+                outputs: [{ id: 'ssa.met', what: 'Each system failure condition shown to meet its target, and the safety requirements verified', to: isSup() ? ['aircraft maker'] : ['asa'], accept: 'Every target met with as-built data; every safety requirement verified; signed', fp: function () { return fpOf(arr('ftaPages').length); } }] });
+            if (!isSup()) add({ id: 'asa', name: 'ASA', plan: 'sspp', tab: 'asa',
+                does: 'It brings the system results together to show each aircraft failure condition meets its objective: the safety case.',
+                inputs: [['Signed SSAs', 'ssa']].concat(mfs.length ? [['The multi-system results', 'mfs']] : []),
+                outputs: [{ id: 'asa.case', what: 'Each aircraft failure condition shown to meet its target: the safety case for certification', to: ['authority'], accept: 'Every aircraft failure condition met; aircraft-level trees ' + (A('sspp.asa') === 'both' ? 'compiled and written by hand agree' : 'complete') + '; signed', fp: function () { return fpOf(arr('ftaPages').length + ':' + arr('acFhaData').length); } }] });
+            if (planned('ccmr')) add({ id: 'ccmr', name: 'Latent failures (CCMR)', plan: 'sspp', tab: 'ccmr', due: when('ssa'),
+                does: 'It finds the failures that stay hidden until something else fails and sets how often each must be checked.',
+                inputs: [['Fault trees with their latent failures and exposure times', 'pssa']],
+                outputs: [{ id: 'ccmr.list', what: 'Candidate certification maintenance requirements with their intervals', to: msg3On() ? ['ram-msg3'] : has('sspp.maint', 'msg3') ? ['msg3'] : ['authority'], accept: 'Every latent failure in a catastrophic or hazardous tree has its interval', fp: function () { return fpOf(safe(function () { return pc().ccmr; }, null)); } }] });
+            if (planned('ram-mmel')) add({ id: 'mmel', name: 'Dispatch (MMEL)', plan: 'sspp', tab: 'mmel', due: 'Before entry into service',
+                does: 'It decides which items the aircraft may fly without, and on what conditions, with the fault trees as the proof.',
+                inputs: [['The fault trees and the failure conditions', 'pssa']],
+                outputs: [{ id: 'mmel.list', what: 'The items the aircraft may be dispatched without, each with its conditions', to: ['authority'], accept: 'Every item backed by its tree with the item already failed', fp: function () { return fpOf(safe(function () { return pc().mmel; }, null)); } }] });
+            // ---- the Human Factors Plan ----
+            if (hf) {
+                var hfFp = function (k) { return function () { return fpOf(safe(function () { return pc().hf[k]; }, null)); }; };
+                add({ id: 'hf-alloc', name: 'Function allocation', plan: 'hfp', tab: 'hfa-auto', due: 'At concept',
+                    does: 'It decides who does each aircraft function: the crew, the automation or both' + (A('hfp.alloc') === 'phase' ? ', phase by phase' : '') + '.',
+                    inputs: [['The aircraft functions and the flight phases', 'design']],
+                    outputs: [{ id: 'hf.alloc', what: 'Who does what in every flight phase: crew, automation or both', to: ['hf-tasks'], accept: 'Every function given to the crew, automation or both, phase by phase', fp: hfFp('alloc') }] });
+                add({ id: 'hf-tasks', name: 'Crew tasks and procedures', plan: 'hfp', tab: 'hfa-auto', due: 'During preliminary design',
+                    does: 'It turns the allocation into the crew\'s tasks, and writes a procedure for each failure the crew responds to.',
+                    inputs: [['Who does what', 'hf-alloc'], ['Failure conditions with a crew effect', aft]],
+                    outputs: [{ id: 'hf.tasks', what: 'The crew task list and a procedure for each failure the crew responds to', to: ['hf-workload', 'hf-error', 'hf-eval'], accept: 'Each failure the crew responds to has its procedure', fp: hfFp('tasks') }] });
+                add({ id: 'hf-workload', name: 'Workload', plan: 'hfp', tab: 'hfa-auto', due: 'During preliminary design; confirmed in the evaluations',
+                    does: 'It measures each pilot\'s workload in every phase, with the worst failure on top' + (picked('hfp.workload').length ? ', by ' + listJoin(picked('hfp.workload').filter(function (x) { return x !== 'own'; }).map(function (x) { return lcFirst(optLabelK('hfp.workload', x).split(':')[0]); })) : '') + '.',
+                    inputs: [['The crew tasks and their times', 'hf-tasks'], ['The time available in each flight phase', 'design']],
+                    outputs: [{ id: 'hf.workload', what: 'Each pilot\'s workload in every phase, with the worst failure on top', to: (mfcOn ? ['hf-mfc'] : []).concat(['hf-eval']), accept: 'No pilot over the limit in any phase', fp: hfFp('tasks') }] });
+                add({ id: 'hf-error', name: 'Crew error', plan: 'hfp', tab: 'hfa-auto', due: 'During preliminary design',
+                    does: 'It finds the credible crew errors in each task and procedure, and how each is noticed and put right.',
+                    inputs: [['The crew tasks and procedures', 'hf-tasks']],
+                    outputs: [{ id: 'hf.error', what: 'The credible crew errors' + (A('hfp.error') === 'quant' ? ' with their probabilities' : '') + ', how each is noticed and put right', to: ['design'].concat(feedEvents ? ['hf-credit'] : []), accept: 'No error left that nobody notices and nobody can put right', fp: hfFp('errors') }] });
+                add({ id: 'hf-alerts', name: 'Alerts', plan: 'hfp', tab: 'hfa-auto', due: 'During preliminary and detailed design',
+                    does: 'It gives each failure the crew must know about an alert at the right level' + (A('hfp.alerts') === '1322' ? ', to the warning, caution and advisory rules' : '') + '.',
+                    inputs: [['The failure conditions the crew must know about', aft]],
+                    outputs: [{ id: 'hf.alerts', what: 'An alert for each, at its level, by sight, sound or touch', to: ['design', 'hf-eval'], accept: 'Each alert linked to its failure condition', fp: hfFp('alerts') }] });
+                add({ id: 'hf-eval', name: 'Evaluations', plan: 'hfp', tab: 'hfa-results', due: 'From mock-ups to the simulator and flight test',
+                    does: 'It puts the flight deck in front of pilots' + (picked('hfp.eval').length ? ' through ' + listJoin(picked('hfp.eval').filter(function (x) { return x !== 'own'; }).map(function (x) { return lcFirst(optLabelK('hfp.eval', x)); })) : '') + ' and records what they find.',
+                    inputs: [['The flight deck design', 'design'], ['The crew tasks and the scenarios for each phase and failure', 'hf-tasks'], ['The workload results', 'hf-workload'], ['The alerts', 'hf-alerts']],
+                    outputs: [{ id: 'hf.eval', what: 'The findings, each closed by a design change or a justification', to: ['design'], accept: 'Every finding closed', fp: hfFp('evals') },
+                              { id: 'hf.valid', what: 'The evaluation results that confirm the crew actions counted on', to: ['hf-credit'], accept: 'Each crew action counted on was flown or tested', fp: hfFp('evals') }] });
+                if (mfcOn) add({ id: 'hf-mfc', name: 'Minimum flight crew', plan: 'hfp', tab: 'hfa-results', due: 'Before certification',
+                    does: 'It decides the minimum crew the aircraft can be flown by safely, with its reasons.',
+                    inputs: [['The workload results', 'hf-workload'], [A('hfp.mfc') === 'similar' ? 'A comparable certified aircraft and its crew' : 'The workload functions and factors of the basis (Appendix D)', 'basis']],
+                    outputs: [{ id: 'hf.mfc', what: 'The minimum flight crew decision, with its reasons', to: ['authority'], accept: 'Decided with its reasons and confirmed in the evaluations', fp: hfFp('mfc') }] });
+                add({ id: 'hf-credit', name: 'Crew actions the safety analysis counts on', plan: 'hfp', tab: 'assumptions', due: 'As the failure conditions are classified',
+                    does: 'It lists every crew action the safety analysis counts on and checks each before it is given credit.',
+                    inputs: [['The crew actions each failure condition counts on', aft], ['The evaluation results', 'hf-eval']].concat(feedEvents ? [['The credible crew errors', 'hf-error']] : []),
+                    outputs: [{ id: 'hf.credit', what: 'Crew actions the safety case counts on, as validated human factors assumptions' + (feedEvents ? ', with crew errors as basic events' : ''), to: feedEvents ? ['pssa', 'ssa'] : [aft, 'pssa', 'ssa'], accept: 'Each validated in the evaluations before it counts', fp: function () { return fpOf(arr('acAssumptionsData').length); } }] });
+            }
+            // ---- the Reliability and Maintainability Plan ----
+            var rf = ramFull();
+            if (ramPredOn()) add({ id: 'ram-pred', name: 'Reliability prediction', plan: 'ramp', tab: 'ram-hub', due: 'As the design matures; before the PSSAs need the rates',
+                does: 'It gives every item the fault trees use a failure rate' + (picked('ramp.rates').length ? ', from ' + listJoin(picked('ramp.rates').filter(function (x) { return x !== 'own'; }).map(function (x) { return optLabelK('ramp.rates', x).split(',')[0]; })) : '') + '.',
+                inputs: [['The parts and where they are installed' + (A('ramp.env') ? ' (' + lcFirst(optLabelK('ramp.env', A('ramp.env'))) + ')' : ''), 'design'], ['Failure data from suppliers, handbooks or service', 'sources']].concat(A('ramp.fracas') ? [['Failure data from test and service', 'ram-fracas']] : []),
+                outputs: [{ id: 'ram.rates', what: 'A failure rate for every item the fault trees use, with its source', to: ['pssa'].concat(fmeaOn() ? ['fmea'] : [], ['ssa'], msg3On() ? ['ram-msg3'] : []), accept: 'Each rate names its source and environment', fp: function () { return fpOf(safe(function () { return pc().ram; }, null)); } }] });
+            if (rf && A('ramp.alloc') === 'yes') add({ id: 'ram-alloc', name: 'Reliability allocation', plan: 'ramp', tab: 'ram-alloc', due: 'At preliminary design',
+                does: 'It shares the aircraft reliability target out to the systems.',
+                inputs: [['The aircraft reliability target', 'program'], ['The system architecture', 'design']],
+                outputs: [{ id: 'ram.alloc', what: 'A reliability target for each system', to: ['design', 'ram-pred'], accept: 'Each prediction checked against its share', fp: function () { return fpOf(safe(function () { return pc().ramAlloc; }, null)); } }] });
+            if (A('ramp.fracas')) add({ id: 'ram-fracas', name: 'Failure reporting (FRACAS)', plan: 'ramp', tab: 'ram-fracas', due: 'From the first test',
+                does: 'It records every failure in test and service, finds its cause and tracks the fix.',
+                inputs: [['Every failure in test and service', 'verification']],
+                outputs: [{ id: 'ram.fracas', what: 'The cause and the corrective action for each failure', to: ['design'], accept: 'Every failure has its cause and its fix', fp: function () { return fpOf(safe(function () { return pc().fracas; }, null)); } },
+                          { id: 'ram.surprise', what: 'Failures the fault trees did not expect', to: ['ssa'], accept: 'Each sent back to the safety assessment', fp: function () { return fpOf(safe(function () { return pc().fracas; }, null)); } },
+                          { id: 'ram.field', what: 'Failure data from test and service', to: (ramPredOn() ? ['ram-pred'] : []).concat(rf && A('ramp.growth') && A('ramp.growth') !== 'no' ? ['ram-growth'] : [], rf && A('ramp.life') === 'yes' ? ['ram-life'] : []), accept: 'Every failure counted once, with its operating time', fp: function () { return fpOf(safe(function () { return pc().fracas; }, null)); } }] });
+            if (rf && A('ramp.growth') && A('ramp.growth') !== 'no') add({ id: 'ram-growth', name: 'Reliability growth', plan: 'ramp', tab: 'ram-growth', due: 'Through test',
+                does: 'It tracks how reliability improves through test against the planned curve' + (A('ramp.growth') === 'crow' ? ' (Crow-AMSAA)' : A('ramp.growth') === 'duane' ? ' (Duane)' : '') + '.',
+                inputs: [['Failures in test', A('ramp.fracas') ? 'ram-fracas' : 'verification'], ['The planned growth curve', 'program']],
+                outputs: [{ id: 'ram.growth', what: 'The growth achieved against the plan, with shortfalls raised', to: ['program'], accept: 'Shortfalls raised to the program', fp: function () { return fpOf(safe(function () { return pc().ramGrowth; }, null)); } }] });
+            if (rf && A('ramp.life') === 'yes') add({ id: 'ram-life', name: 'Life data (Weibull)', plan: 'ramp', tab: 'ram-weibull', due: 'As failure and removal data builds up',
+                does: 'It finds which items wear out, and when, from their failure and removal times.',
+                inputs: [['Failure and removal times', A('ramp.fracas') ? 'ram-fracas' : 'verification']],
+                outputs: [{ id: 'ram.life', what: 'Wear-out behavior and life limits for the items that age', to: msg3On() ? ['ram-msg3', 'design'] : ['design'], accept: 'Each ageing item has its life limit or inspection', fp: function () { return fpOf(safe(function () { return pc().weibull; }, null)); } }] });
+            var mx = picked('ramp.mx').filter(function (x) { return x !== 'none' && x !== 'own'; });
+            if (mx.length || has('ramp.mx', 'own')) add({ id: 'ram-mx', name: 'Maintainability and testability', plan: 'ramp', tab: 'ram-mx', due: 'During detailed design',
+                does: 'It works out ' + (listJoin(mx.map(function (x) { return { mttr: 'how long each repair takes and the downtime', test: 'how well each failure is detected and isolated', lora: 'where each repair is done' }[x]; })) || 'the program\'s maintainability measures') + '.',
+                inputs: [['The replaceable units and their failure modes', fmeaOn() ? 'fmea' : 'design']],
+                outputs: [{ id: 'ram.mx', what: listJoin(mx.map(function (x) { return { mttr: 'Repair times and downtime', test: 'Fault detection and isolation figures', lora: 'The level of repair for each unit' }[x]; })) || 'The maintainability results', to: ['design'].concat(msg3On() ? ['ram-msg3'] : []), accept: 'Reviewed with maintenance', fp: function () { return fpOf(safe(function () { return pc().ramMx; }, null)); } }] });
+            if (msg3On()) add({ id: 'ram-msg3', name: 'Scheduled maintenance', plan: 'ramp', tab: 'ram-msg3', due: 'Before entry into service',
+                does: 'It sets the scheduled maintenance tasks and intervals' + (A('ramp.msg3') === 'msg3' ? ' with MSG-3' : '') + ', keeping the CMRs from the safety assessment apart.',
+                inputs: [['The systems, structures and zones', 'design']].concat(planned('ccmr') ? [['The candidate CMRs', 'ccmr']] : [], ramPredOn() ? [['Failure rates', 'ram-pred']] : []),
+                outputs: [{ id: 'ram.msg3', what: 'The scheduled maintenance tasks and intervals, with the CMRs kept apart', to: ['authority'], accept: 'Every CMR included and never escalated without the safety group', fp: function () { return fpOf(safe(function () { return pc().msg3x; }, null)); } }] });
+            if (A('ramp.lcc') === 'yes') add({ id: 'ram-lcc', name: 'Life-cycle cost', plan: 'ramp', tab: 'ram-hub', due: 'At each design review',
+                does: 'It works out what reliability and maintenance will cost over the aircraft\'s life.',
+                inputs: [['Failure rates', ramPredOn() ? 'ram-pred' : 'design'], ['Repair times and the maintenance tasks', mx.length ? 'ram-mx' : 'design']],
+                outputs: [{ id: 'ram.lcc', what: 'The life-cycle cost of reliability and maintenance', to: ['program'], accept: 'Updated at each design review', fp: function () { return fpOf(safe(function () { return pc().lcc; }, null)); } }] });
+            return L;
+        });
     }
-    var NODE_NAMES = { basis: 'Certification basis', program: 'The program', design: 'Design and development', verification: 'Verification', authority: 'The authority', 'aircraft maker': 'The aircraft maker', items: 'Item development (software and hardware)', msg3: 'MSG-3 scheduled maintenance' };
+    var NODE_NAMES = { basis: 'Certification basis', program: 'The program', design: 'Design and development', verification: 'Verification', authority: 'The authority', 'aircraft maker': 'The aircraft maker', items: 'Item development (software and hardware)', msg3: 'MSG-3 scheduled maintenance', sources: 'Failure data sources', all: 'Every assessment in this plan', cca: 'Common cause analyses', hf: 'Human factors', ram: 'Reliability and maintainability' };
+    // the older diagrams draw some work as one box: clicking it shows each assessment inside
+    var GROUPS = { cca: ['zsa', 'pra', 'cma'], hf: ['hf-alloc', 'hf-tasks', 'hf-workload', 'hf-error', 'hf-alerts', 'hf-eval', 'hf-mfc', 'hf-credit'], ram: ['ram-pred', 'ram-alloc', 'ram-fracas', 'ram-growth', 'ram-life', 'ram-mx', 'ram-msg3', 'ram-lcc'] };
+    function assessmentOf(id) { return assessments().filter(function (x) { return x.id === id; })[0] || null; }
+    function membersOf(id) { return (GROUPS[id] || [id]).map(assessmentOf).filter(Boolean); }
+    var PLAN_OF_WORD = { sspp: 'SSPP', hfp: 'HF plan', ramp: 'RAM plan' };
     function nodeName(id) { var a = assessments().filter(function (x) { return x.id === id; })[0]; return a ? a.name : (NODE_NAMES[id] || id); }
     // every exchange: from, to, what passes, when (when the output is due)
     function exchanges() {
@@ -931,10 +1043,12 @@
         assessments().forEach(function (a) { a.outputs.forEach(function (o) { o.to.forEach(function (t) { out.push({ from: a.id, to: t, what: o.what, when: dueOf(a.id) }); }); }); });
         return out;
     }
-    function dueOf(id) { var w = { afha: when('afha'), pasa: when('pasa'), sfha: when('sfha'), pssa: when('pssa'), dal: when('pssa'), cca: when('cca'), fmea: when('pssa'), ssa: when('ssa'), asa: when('asa'), ccmr: when('ssa'), spp: 'At the start of the program; revised when a decision changes' }[id]; return w || 'As the plan sets out'; }
+    function dueOf(id) { var a = assessmentOf(id); if (a && a.due) return a.due; var w = { afha: when('afha'), pasa: when('pasa'), sfha: when('sfha'), pssa: when('pssa'), ssa: when('ssa'), asa: when('asa') }[id]; return w || 'As the plan sets out'; }
+    // a name as seen from one plan: work that belongs to another plan says which
+    function nameIn(id, key) { var a = assessmentOf(id); return a && key && a.plan !== key ? a.name + ' (' + PLAN_OF_WORD[a.plan] + ')' : nodeName(id); }
     function ioRows(key) {
-        return assessments().filter(function (a) { return a.plan === key || (key === 'sspp' && ['spp'].indexOf(a.id) >= 0); }).map(function (a) {
-            return { Assessment: a.name, 'Inputs required (from)': a.inputs.map(function (i) { return i[0] + ' (' + nodeName(i[1]) + ')'; }).join('; '), 'Outputs expected (to)': a.outputs.map(function (o) { return o.what + ' (to ' + listJoin(o.to.map(nodeName)) + ')'; }).join('; ') };
+        return assessments().filter(function (a) { return a.plan === key; }).map(function (a) {
+            return { Assessment: a.name, 'Inputs required (from)': a.inputs.map(function (i) { return i[0] + ' (' + nameIn(i[1], key) + ')'; }).join('; '), 'Outputs expected (to)': a.outputs.map(function (o) { return o.what + ' (to ' + listJoin(o.to.map(function (t) { return nameIn(t, key); })) + ')'; }).join('; ') };
         });
     }
     // the outputs each plan commits to, with how each is accepted; the ticks are kept in the project, never in the plan
@@ -964,9 +1078,80 @@
             ram: laneItems('ram-reliability') + ' items', ccmr: laneItems('ccmr') + ' latent failures', spp: PLANS.map(function (p) { return p.code + ' rev ' + rev(p.key); }).join(', '),
             'dev-func': c.functions + ' functions', 'dev-sys': c.systems + ' systems', 'dev-req': c.reqs + ' requirements', 'dev-items': c.items + ' items'
         };
-        return m[id] || '';
+        if (GROUPS[id]) return m[id] || '';
+        return m[id] || (/^hf-/.test(id) ? m.hf : /^ram-/.test(id) ? m.ram : id === 'mfs' ? m.pasa : '');
     }
 
+    // ---- inputs and outputs, in words and in pictures (7 Nov 2026) ----------------------------------------------------
+    // One short paragraph per assessment: what it does, what it needs and from where, what it must produce and for whom.
+    // a name inside a sentence: "the PSSAs", "design and development", "the human factors plan's crew tasks"
+    var PROSE_NAMES = { basis: 'the certification basis', program: 'the program', design: 'design and development', verification: 'verification', authority: 'the authority', 'aircraft maker': 'the aircraft maker', items: 'item development (software and hardware)', msg3: 'MSG-3 scheduled maintenance', sources: 'failure data sources', all: 'every assessment in this plan' };
+    function inText(id, key) {
+        if (PROSE_NAMES[id]) return PROSE_NAMES[id];
+        var a = assessmentOf(id); if (!a) return nodeName(id);
+        var nm = /^[A-Z]{2,}/.test(a.name) || /^Aircraft FHA$|^System FHAs$/.test(a.name) ? a.name.replace(/^System FHAs$/, 'system FHAs') : lcFirst(a.name);
+        return 'the ' + nm + (a.plan !== key ? ' (' + PLAN_OF_WORD[a.plan] + ')' : '');
+    }
+    function ioProse(key) {
+        return assessments().filter(function (a) { return a.plan === key; }).map(function (a) {
+            var ins = a.inputs.map(function (i) { return lcFirst(i[0]) + ' (from ' + inText(i[1], key) + ')'; });
+            var outs = a.outputs.map(function (o) { return lcFirst(o.what) + ', for ' + listJoin(o.to.map(function (t) { return inText(t, key); })); });
+            return { k: 'p', text: a.name + '. ' + a.does + ' It needs ' + listJoin(ins) + '. It must produce ' + (outs.length > 1 ? outs.slice(0, -1).join('; ') + '; and ' + outs[outs.length - 1] : outs[0]) + '.', io: a.id };
+        });
+    }
+    // The pictures: one row per assessment, its inputs on the left with where each comes from, its outputs on the right
+    // with who uses each. Straight arrows, one per input and output, so every exchange is drawn and none cross.
+    function ioBox(x, y, w, title, sub, dashed) {
+        var tl = wrapText(title, Math.floor(w / 6.3)), sl = sub ? wrapText(sub, Math.floor(w / 5.6)) : [], h = 12 + tl.length * 13 + sl.length * 12;
+        var s = '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" rx="6" fill="' + C.panel + '" stroke="' + C.line + '" stroke-width="1"' + (dashed ? ' stroke-dasharray="4 3"' : '') + '/>';
+        tl.forEach(function (l, i) { s += '<text x="' + (x + 8) + '" y="' + (y + 17 + i * 13) + '" font-size="11" fill="' + C.ink + '">' + sx(l) + '</text>'; });
+        sl.forEach(function (l, i) { s += '<text x="' + (x + 8) + '" y="' + (y + 17 + tl.length * 13 + i * 12) + '" font-size="9.5" font-style="italic" fill="' + C.sub + '">' + sx(l) + '</text>'; });
+        return { svg: s, h: h };
+    }
+    function figIO(key) {
+        var L = assessments().filter(function (a) { return a.plan === key; }); if (!L.length) return [];
+        var W = 900, LX = 16, LW = 262, CX = 336, CW = 228, RX = 622, RW = 262, GAP = 8, per = 5, figs = [], parts = Math.ceil(L.length / per);
+        var external = function (id) { var a = assessmentOf(id); return !a || a.plan !== key; };
+        for (var p = 0; p < parts; p++) {
+            var rows = L.slice(p * per, p * per + per), y = 72, body = '';
+            rows.forEach(function (a, ri) {
+                var lefts = a.inputs.map(function (i) { return ioBox(0, 0, LW, i[0], 'From ' + nameIn(i[1], key), external(i[1])); });
+                var rights = a.outputs.map(function (o) { return ioBox(0, 0, RW, o.what, 'To ' + listJoin(o.to.map(function (t) { return nameIn(t, key); })), false); });
+                var lT = lefts.reduce(function (t, b) { return t + b.h; }, 0) + GAP * Math.max(0, lefts.length - 1), rT = rights.reduce(function (t, b) { return t + b.h; }, 0) + GAP * Math.max(0, rights.length - 1);
+                var nl = wrapText(a.name, Math.floor(CW / 7.6)), dl = wrapText(a.does, Math.floor(CW / 5.7)), cH = 20 + nl.length * 15 + dl.length * 12;
+                var rowH = Math.max(lT, rT, cH);
+                if (ri) { body += '<line x1="16" y1="' + (y - 11) + '" x2="884" y2="' + (y - 11) + '" stroke="' + C.panelS + '" stroke-width="1"/>'; }
+                // the assessment: full row height so every arrow meets it straight on
+                var c = '<rect x="' + CX + '" y="' + y + '" width="' + CW + '" height="' + rowH + '" rx="8" fill="' + C.onF + '" stroke="' + C.on + '" stroke-width="1.4"/>', cy0 = y + rowH / 2 - cH / 2 + 22;
+                nl.forEach(function (l, i) { c += '<text x="' + (CX + CW / 2) + '" y="' + (cy0 + i * 15) + '" font-size="12.5" font-weight="700" fill="' + C.ink + '" text-anchor="middle">' + sx(l) + '</text>'; });
+                dl.forEach(function (l, i) { c += '<text x="' + (CX + CW / 2) + '" y="' + (cy0 + nl.length * 15 + 2 + i * 12) + '" font-size="9.5" fill="' + C.sub + '" text-anchor="middle">' + sx(l) + '</text>'; });
+                body += nodeWrapId(a.id, c, CX, y, CW);
+                var ly = y + (rowH - lT) / 2;
+                lefts.forEach(function (b, i) { body += '<g transform="translate(' + LX + ',' + ly + ')">' + b.svg + '</g>'; var my = ly + b.h / 2; body += '<line x1="' + (LX + LW) + '" y1="' + my + '" x2="' + (CX - 1) + '" y2="' + my + '" stroke="' + C.line + '" stroke-width="1.3" marker-end="url(#pla-ah)" data-io="in"/>'; ly += b.h + GAP; });
+                var ry = y + (rowH - rT) / 2;
+                rights.forEach(function (b, i) { body += '<g transform="translate(' + RX + ',' + ry + ')">' + b.svg + '</g>'; var my = ry + b.h / 2; body += '<line x1="' + (CX + CW) + '" y1="' + my + '" x2="' + (RX - 1) + '" y2="' + my + '" stroke="' + C.line + '" stroke-width="1.3" marker-end="url(#pla-ah)" data-io="out"/>'; ry += b.h + GAP; });
+                y += rowH + 22;
+            });
+            var H0 = y + 4, title = (key === 'sspp' ? 'Inputs and outputs of the safety assessments' : key === 'hfp' ? 'Inputs and outputs of the human factors work' : 'Inputs and outputs of the reliability and maintainability work') + (parts > 1 ? ', part ' + (p + 1) : '');
+            var hd = head(title, 'Left: what each needs and where it comes from (dashed: from outside this plan). Right: what it must produce and who uses it.');
+            hd += '<text x="' + (LX + LW / 2) + '" y="' + 62 + '" font-size="10" font-weight="700" fill="' + C.sub + '" text-anchor="middle">INPUTS</text><text x="' + (CX + CW / 2) + '" y="62" font-size="10" font-weight="700" fill="' + C.sub + '" text-anchor="middle">ASSESSMENT</text><text x="' + (RX + RW / 2) + '" y="62" font-size="10" font-weight="700" fill="' + C.sub + '" text-anchor="middle">OUTPUTS</text>';
+            var r = svgWrap(W, H0 + 6, hd + body.replace(/^/, ''), title);
+            figs.push({ k: 'fig', name: 'io' + (p + 1), title: title, svg: r.svg.replace('<rect width="100%"', '<rect width="100%"'), w: r.w, h: r.h, lead: (p ? '{N} continues them.' : '{N} draws the inputs and outputs of each assessment' + (parts > 1 ? ', in ' + parts + ' parts' : '') + '.') });
+        }
+        return figs;
+    }
+    // the inputs and outputs part of a plan: the words first, then the pictures, then the two reference tables
+    function ioSet(key) {
+        var L = assessments().filter(function (a) { return a.plan === key; }); if (!L.length) return [];
+        var what = { sspp: 'assessment', hfp: 'part of the human factors work', ramp: 'part of the reliability and maintainability work' }[key];
+        return [P('Each ' + what + ' is defined here by what it does, the inputs it needs and where each comes from, and the outputs it must produce and who uses each. Work that belongs to another plan is named with that plan.')]
+            .concat(ioProse(key), figIO(key), [TBL('io', 'Inputs and outputs of each ' + what, ioRows(key), '{N} lists the same inputs and outputs for reference.'),
+                TBL('exchanges', 'Data passed between the work', exchangeRows(key), '{N} lists each exchange: who passes what to whom, and when it is due.')]);
+    }
+    // the exchanges as one table per plan: who passes what to whom, and when it is due
+    function exchangeRows(key) {
+        return exchanges().filter(function (x) { var a = assessmentOf(x.from); return a && a.plan === key; }).map(function (x) { return { From: nodeName(x.from), To: nameIn(x.to, key), 'What passes': x.what, When: x.when }; });
+    }
     // ---- the documents ----------------------------------------------------------------------------------------------
     // blocks: { k:'h', level, text } | { k:'p', text } | { k:'table', name, title, rows, lead } | { k:'fig', name, title, svg, w, h, lead }
     // A table or figure's lead sentence names it by number ({N}) and comes right before it, so each is referred to first.
@@ -1068,7 +1253,7 @@
                 var st = sevTable(cfg);
                 if (st && st.headers && st.rows) out.push(TBL('sevdefs', 'The classifications as the basis defines them', st.rows.map(function (r) { var o = {}; st.headers.forEach(function (h, i) { o[h] = r[i]; }); return o; }), '{N} gives each classification as the basis defines it, with its source.'));
             }
-            if (sec === 'The safety assessment process and its methods') { out.push(procTable()); out.push(TBL('io', 'Inputs and outputs of each assessment', ioRows('sspp'), '{N} defines what each assessment needs, where each input comes from, and what it must produce and for whom.')); out.push(TBL('exchanges', 'Data exchanged between the assessments', exchanges().filter(function (x) { var a = assessments().filter(function (y) { return y.id === x.from; })[0]; return a && a.plan === 'sspp'; }).map(function (x) { return { From: nodeName(x.from), To: nodeName(x.to), 'What passes': x.what, When: x.when }; }), '{N} lists every exchange of data between the assessments: what passes, from which to which, and when. The arrows in the diagrams show the same exchanges.')); }
+            if (sec === 'The safety assessment process and its methods') { out.push(procTable()); ioSet(key).forEach(function (b) { out.push(b); }); }
             if (sec === 'Development assurance') out.push(objTable());
             if (sec === 'Tools') out.push(TBL('tools', 'The program\'s tools', [{ Work: 'Safety and reliability analyses', Tool: 'Safety Lab Aero', 'Trusted by': A('sspp.toolq') ? optLabelK('sspp.toolq', A('sspp.toolq')) : 'To be decided' }, { Work: 'Requirements management', Tool: A('sspp.rmtool') ? (RM_NAMES[A('sspp.rmtool')] || optLabelK('sspp.rmtool', A('sspp.rmtool'))) : 'To be decided', 'Trusted by': 'Exchange checked at each baseline' }, { Work: 'System architecture', Tool: A('sspp.mbse') ? (MBSE_NAMES[A('sspp.mbse')] || optLabelK('sspp.mbse', A('sspp.mbse'))) : 'To be decided', 'Trusted by': 'Import checked at each baseline' }], '{N} lists the tools the program will use and how their output will be trusted.'));
             if (sec === 'Tailoring' && PP()) {
@@ -1079,11 +1264,11 @@
             }
         }
         if (key === 'hfp' && A('hfp.need') !== 'none') {
-            if (sec === 'The human factors work through the design cycle') { out.push(procTable()); out.push(TBL('io', 'Inputs and outputs of the human factors work', ioRows('hfp'), '{N} defines what the human factors work needs and what it must produce, and for whom.')); }
+            if (sec === 'The human factors work through the design cycle') { out.push(procTable()); ioSet(key).forEach(function (b) { out.push(b); }); }
             if (sec === 'Development assurance') out.push(objTable());
         }
         if (key === 'ramp') {
-            if (sec === 'Scope and purpose') { out.push(procTable()); out.push(TBL('io', 'Inputs and outputs of the reliability work', ioRows('ramp'), '{N} defines what the reliability work needs and what it must produce, and for whom.')); }
+            if (sec === 'Scope and purpose') { out.push(procTable()); ioSet(key).forEach(function (b) { out.push(b); }); }
             if (sec === 'Development assurance') out.push(objTable());
         }
         return out;
@@ -1188,9 +1373,15 @@
     // ---- the diagrams (6 Nov 2026, Waqas: "for program planing I dont want just data flow choices, I want development
     // assurance choices and diagrams"): each drawn from the answers and the project, so it changes when they do. Plain
     // standalone svg (white background, no scripts): the same picture in the preview, in print and in Word.
-    var C = { ink: '#101216', sub: '#5b6270', line: '#6b7280', on: '#1A6EF2', onF: '#EAF2FE', ok: '#1F7A33', okF: '#E8F4EA', warn: '#B26A00', warnF: '#FDF1DE', off: '#9aa1ad', offF: '#F3F4F6', tbd: '#9A3412', tbdF: '#FFF4ED' };
+    // two palettes (7 Nov 2026, "it looks so weird in dark mode" -> a dark page): the figures read C at draw time; the page
+    // swaps in DARK only while it draws the preview in dark mode. Print and Word always get LIGHT.
+    var LIGHT = { ink: '#101216', sub: '#5b6270', line: '#6b7280', on: '#1A6EF2', onF: '#EAF2FE', ok: '#1F7A33', okF: '#E8F4EA', warn: '#B26A00', warnF: '#FDF1DE', off: '#9aa1ad', offF: '#F3F4F6', tbd: '#9A3412', tbdF: '#FFF4ED',
+        paper: '#ffffff', dev: '#E5E7EB', yel: '#FFF7C2', panel: '#F8FAFC', panelS: '#e3e5e8', funnel: '#D5D9E0', funnelT: '#4b5563', side: '#EEF0F3', sideS: '#c7cbd1', barT: '#ffffff', badge: '#101216', badgeT: '#ffffff' };
+    var DARK = { ink: '#E8EAED', sub: '#B4BAC4', line: '#9AA1AD', on: '#6AA6FF', onF: '#172840', ok: '#5CC97A', okF: '#15301E', warn: '#E9A94A', warnF: '#33270F', off: '#7C8490', offF: '#1E2229', tbd: '#F2925F', tbdF: '#3A2015',
+        paper: '#15181E', dev: '#2A2F38', yel: '#3A3416', panel: '#1B1F26', panelS: '#2E333C', funnel: '#252A32', funnelT: '#C2C8D1', side: '#1C2027', sideS: '#3A404A', barT: '#0B0D10', badge: '#E8EAED', badgeT: '#101216' };
+    var C = LIGHT;
     function sx(s) { return E(s); }
-    function svgWrap(w, h, body, title) { return { svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '" font-family="Arial, Helvetica, sans-serif" role="img" aria-label="' + sx(title) + '"><defs><marker id="pla-ah" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,1 L10,5 L0,9 z" fill="' + C.line + '"/></marker><style>.pla-l{paint-order:stroke;stroke:#ffffff;stroke-width:3.5px;stroke-linejoin:round}</style></defs><rect width="100%" height="100%" fill="#ffffff"/>' + body + '</svg>', w: w, h: h }; }
+    function svgWrap(w, h, body, title) { return { svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '" font-family="Arial, Helvetica, sans-serif" role="img" aria-label="' + sx(title) + '"><defs><marker id="pla-ah" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,1 L10,5 L0,9 z" fill="' + C.line + '"/></marker><style>.pla-l{paint-order:stroke;stroke:' + C.paper + ';stroke-width:3.5px;stroke-linejoin:round}</style></defs><rect width="100%" height="100%" fill="' + C.paper + '"/>' + body + '</svg>', w: w, h: h }; }
     function wrapText(t, n) { var words = String(t || '').split(/\s+/), lines = [], cur = ''; words.forEach(function (w0) { if ((cur + ' ' + w0).trim().length > n && cur) { lines.push(cur); cur = w0; } else cur = (cur + ' ' + w0).trim(); }); if (cur) lines.push(cur); return lines; }
     // a box: kind 'on' (in the program, with work), 'ok', 'warn', 'off' (out of the program: dashed), 'tbd' (not decided)
     // which assessment or part of the program each diagram box stands for (by its title)
@@ -1199,11 +1390,12 @@
         'System architecture, requirements given to items': 'dev-items', 'Implementation': 'items', 'HF Autopilot analysis': 'hf', 'Failure rates': 'ram', 'Fault trees': 'pssa', 'Latent failures': 'ccmr', 'Reliability program': 'ram', 'CMRs': 'ccmr', 'Scheduled maintenance': 'ram-msg3', 'Maintainability': 'ram-mx', 'Dispatch relief': 'mmel', 'Test and service': 'ram',
         'Identification and baselines': 'cm', 'Archive and retrieval': 'cm', 'Interim configurations': 'cm', 'Design complete': 'cm', 'Configuration management of the safety data': 'cm', 'Write the plans': 'spp', 'Review the plans': 'spp', 'Development': 'dev-func', 'Correct and complete checks': 'validation', 'Approach by DAL': 'validation', 'Tests, analyses, reviews': 'vv-status', 'Results': 'vv-status', 'Verification plan': 'vv-status', 'Validation summary': 'validation', 'Verification summary': 'vv-status' };
     var NODE_TAB = { 'dev-func': 'ac-func', 'dev-sys': 'sys-dir', 'dev-req': 'ac-req', 'dev-items': 'items', cm: 'cm', spp: 'plan-auto', cma: 'cma', pra: 'pra', zsa: 'zsa', ipledger: 'ipledger', 'ram-msg3': 'ram-msg3', 'ram-mx': 'ram-mx', mmel: 'mmel', validation: 'validation', 'vv-status': 'vv-status', items: 'items' };
+    function isDark() { return typeof document !== 'undefined' && !!document.body && document.body.classList.contains('theme-dark'); }
     var LIVE = false;   // set only while the page draws the preview with "show where the program stands" on: never in the plan, print or Word
-    function nodeWrap(title, inner, x, y, w) {
-        var id = NODE_OF[String(title).replace(/:.*$/, '')]; if (!id) return inner;
+    function nodeWrap(title, inner, x, y, w) { var id = NODE_OF[String(title).replace(/:.*$/, '')]; return id ? nodeWrapId(id, inner, x, y, w) : inner; }
+    function nodeWrapId(id, inner, x, y, w) {
         var badge = '';
-        if (LIVE) { var lv = safe(function () { return liveOf(id); }, ''); if (lv) { lv = String(lv).split(/ in |, /)[0]; if (lv.length * 5.6 + 10 > w - 8) lv = lv.replace(/ (aircraft|system) failure conditions$/, ' failure conditions').replace(/ failure conditions$/, ' FCs'); var bw = Math.min(w - 8, 10 + lv.length * 5.6); badge = '<rect x="' + (x + w - bw - 4) + '" y="' + (y - 9) + '" width="' + bw + '" height="17" rx="8.5" fill="#101216"/><text x="' + (x + w - bw / 2 - 4) + '" y="' + (y + 3) + '" font-size="10" fill="#fff" text-anchor="middle">' + sx(lv) + '</text>'; } }
+        if (LIVE) { var lv = safe(function () { return liveOf(id); }, ''); if (lv) { lv = String(lv).split(/ in |, /)[0]; if (lv.length * 5.6 + 10 > w - 8) lv = lv.replace(/ (aircraft|system) failure conditions$/, ' failure conditions').replace(/ failure conditions$/, ' FCs'); var bw = Math.min(w - 8, 10 + lv.length * 5.6); badge = '<rect x="' + (x + w - bw - 4) + '" y="' + (y - 9) + '" width="' + bw + '" height="17" rx="8.5" fill="' + C.badge + '"/><text x="' + (x + w - bw / 2 - 4) + '" y="' + (y + 3) + '" font-size="10" fill="' + C.paper + '" text-anchor="middle">' + sx(lv) + '</text>'; } }
         return '<g class="pla-node" data-node="' + id + '" style="cursor:pointer" onclick="SLPlanAuto.ui.node(\'' + id + '\')"><title>' + sx(nodeName(id)) + ': click for its inputs, outputs and where it stands</title>' + inner + badge + '</g>';
     }
     function box(x, y, w, h, title, sub, kind) {
@@ -1255,7 +1447,7 @@
             var y = 62 + i * 34, W = 470, x = 230, wm = W * gx.met / gx.n, wp = W * gx.part / gx.n;
             s += '<text x="16" y="' + (y + 14) + '" font-size="12" fill="' + C.ink + '">' + sx(gx.g) + '</text>';
             s += '<rect x="' + x + '" y="' + y + '" width="' + W + '" height="20" rx="4" fill="' + C.offF + '" stroke="' + C.off + '" stroke-width=".6"/>' + (wm ? '<rect x="' + x + '" y="' + y + '" width="' + wm + '" height="20" rx="4" fill="' + C.ok + '"/>' : '') + (wp ? '<rect x="' + (x + wm) + '" y="' + y + '" width="' + wp + '" height="20" fill="' + C.warn + '"/>' : '');
-            s += '<text x="' + (x + 6) + '" y="' + (y + 14) + '" font-size="10.5" fill="' + (wm > 60 ? '#fff' : C.ink) + '">' + gx.met + ' met, ' + gx.part + ' partly, ' + gx.open + ' not yet</text>';
+            s += '<text x="' + (x + 6) + '" y="' + (y + 14) + '" font-size="10.5" fill="' + (wm > 60 ? C.barT : C.ink) + '">' + gx.met + ' met, ' + gx.part + ' partly, ' + gx.open + ' not yet</text>';
             s += '<text x="' + (x + W + 16) + '" y="' + (y + 14) + '" font-size="11.5" fill="' + (gx.dec === gx.n ? C.ok : C.tbd) + '" font-weight="700">' + gx.dec + ' of ' + gx.n + ' decided</text>';
         });
         var h = 62 + grp.length * 34 + 30;
@@ -1292,7 +1484,7 @@
         var colW = 860 / Math.max(1, phases.length), bh = progress ? 52 : 70;
         phases.forEach(function (ph, pi) {
             var x = 20 + pi * colW, inPh = cov.filter(function (c0) { return c0.phase === ph; });
-            s += '<rect x="' + x + '" y="56" width="' + (colW - 10) + '" height="' + (40 + inPh.length * (bh + 10)) + '" rx="10" fill="#F8FAFC" stroke="#e3e5e8"/><text x="' + (x + 10) + '" y="76" font-size="12" font-weight="700" fill="' + C.sub + '">' + sx(ph) + '</text>';
+            s += '<rect x="' + x + '" y="56" width="' + (colW - 10) + '" height="' + (40 + inPh.length * (bh + 10)) + '" rx="10" fill="' + C.panel + '" stroke="' + C.panelS + '"/><text x="' + (x + 10) + '" y="76" font-size="12" font-weight="700" fill="' + C.sub + '">' + sx(ph) + '</text>';
             inPh.forEach(function (c0, i) {
                 var kind = !progress ? 'on' : c0.state === 'done' ? 'ok' : c0.open ? 'warn' : c0.answered ? 'on' : 'off';
                 var sub = progress ? ((c0.questions ? c0.answered + ' of ' + c0.questions + ' answered' : 'Nothing to ask yet') + (c0.open ? ', ' + c0.open + ' open' : '')) : (c0.what || '');
@@ -1347,7 +1539,7 @@
     function dot(x, y) { return '<circle cx="' + x + '" cy="' + y + '" r="2.6" fill="' + C.line + '"/>'; }
     // a white box with a black edge (a safety assessment step), a grey one (development), or dashed (left out)
     function sbox(x, y, w, h, title, sub, kind, stack) {
-        var fill = kind === 'dev' ? '#E5E7EB' : kind === 'yel' ? '#FFF7C2' : '#ffffff', st = kind === 'off' ? C.off : C.ink, dash = kind === 'off' || kind === 'tbd' ? ' stroke-dasharray="5 4"' : '';
+        var fill = kind === 'dev' ? C.dev : kind === 'yel' ? C.yel : C.paper, st = kind === 'off' ? C.off : C.ink, dash = kind === 'off' || kind === 'tbd' ? ' stroke-dasharray="5 4"' : '';
         var s = '';
         if (stack) for (var i = 2; i >= 1; i--) s += '<rect x="' + (x + i * 5) + '" y="' + (y - i * 5) + '" width="' + w + '" height="' + h + '" fill="' + fill + '" stroke="' + st + '" stroke-width="1"' + dash + '/>';
         s += '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" fill="' + (kind === 'off' ? C.offF : kind === 'tbd' ? C.tbdF : fill) + '" stroke="' + (kind === 'tbd' ? C.tbd : st) + '" stroke-width="1.2"' + dash + '/>';
@@ -1363,9 +1555,9 @@
     function figFunnel() {
         var pasaNo = A('sspp.pasa') === 'none';
         var s = head('The safety assessment through the development phases', 'Down the left: aircraft, then systems, then items. Up the right: the results shown. Each box lists the methods this program uses there.');
-        [['Concept', 20, 180], ['Preliminary and detailed design', 210, 350], ['Integration and verification', 570, 310]].forEach(function (p) { s += '<rect x="' + p[1] + '" y="54" width="' + p[2] + '" height="30" fill="#E5E7EB" stroke="' + C.ink + '"/><text x="' + (p[1] + p[2] / 2) + '" y="74" font-size="12" font-weight="700" font-style="italic" fill="' + C.ink + '" text-anchor="middle">' + sx(p[0]) + '</text>'; });
-        s += '<polygon points="20,96 880,96 560,450 340,450" fill="#D5D9E0"/>';
-        s += '<text x="450" y="114" font-size="12.5" font-weight="700" fill="#4b5563" text-anchor="middle">SAFETY ASSESSMENT</text><text x="450" y="132" font-size="11.5" font-style="italic" fill="#4b5563" text-anchor="middle">Aircraft level</text><text x="560" y="300" font-size="11.5" font-style="italic" fill="#4b5563" text-anchor="middle">System level</text><text x="450" y="430" font-size="11.5" font-style="italic" fill="#4b5563" text-anchor="middle">Item level</text>';
+        [['Concept', 20, 180], ['Preliminary and detailed design', 210, 350], ['Integration and verification', 570, 310]].forEach(function (p) { s += '<rect x="' + p[1] + '" y="54" width="' + p[2] + '" height="30" fill="' + C.dev + '" stroke="' + C.ink + '"/><text x="' + (p[1] + p[2] / 2) + '" y="74" font-size="12" font-weight="700" font-style="italic" fill="' + C.ink + '" text-anchor="middle">' + sx(p[0]) + '</text>'; });
+        s += '<polygon points="20,96 880,96 560,450 340,450" fill="' + C.funnel + '"/>';
+        s += '<text x="450" y="114" font-size="12.5" font-weight="700" fill="' + C.funnelT + '" text-anchor="middle">SAFETY ASSESSMENT</text><text x="450" y="132" font-size="11.5" font-style="italic" fill="' + C.funnelT + '" text-anchor="middle">Aircraft level</text><text x="560" y="300" font-size="11.5" font-style="italic" fill="' + C.funnelT + '" text-anchor="middle">System level</text><text x="450" y="430" font-size="11.5" font-style="italic" fill="' + C.funnelT + '" text-anchor="middle">Item level</text>';
         s += sbox(30, 140, 160, 44, 'AFHA', A('sspp.afha') ? ({ functions: 'From the function list', workshop: 'In workshops', both: 'Function list, then workshops', ai: 'AI draft, engineer review', own: 'The program\'s own way' }[A('sspp.afha')] || '') : 'How: to be decided', A('sspp.afha') ? 'w' : 'tbd');
         s += sbox(100, 208, 320, 46, 'PASA', pasaNo ? 'Not planned: tailored out' : methods([['cma', 'CMA'], ['pra', 'PRA'], ['zsa', 'ZSA'], ['fta', 'FTA'], ['cea', 'CEA']]) + combinedWords(), pasaNo ? 'off' : 'w');
         s += sbox(190, 282, 150, 44, 'System FHAs', A('sspp.sfha') ? ({ teams: 'By each system team', safety: 'By the safety group', supplier: 'By the suppliers', mixed: 'Set system by system', own: 'The program\'s own way' }[A('sspp.sfha')] || '') : 'Who: to be decided', A('sspp.sfha') ? 'w' : 'tbd', true);
@@ -1380,7 +1572,7 @@
         s += poly([[300, 398], [300, 477], [350, 477]], 'IDALs, independence and item safety requirements', { lx: 120, ly: 432, wrap: 26 });
         s += poly([[550, 477], [620, 477], [620, 346]], 'Item results', { lx: 628, ly: 430 });
         s += poly([[740, 323], [800, 323], [800, 212]], 'DAL results, probabilities, independence shown', { lx: 806, ly: 270, wrap: 14 });
-        s += '<rect x="20" y="508" width="14" height="11" fill="#E5E7EB" stroke="' + C.ink + '"/><text x="40" y="518" font-size="10.5" fill="' + C.sub + '">Development</text><rect x="140" y="508" width="14" height="11" fill="#fff" stroke="' + C.ink + '"/><text x="160" y="518" font-size="10.5" fill="' + C.sub + '">Safety assessment</text><rect x="290" y="508" width="14" height="11" fill="' + C.offF + '" stroke="' + C.off + '" stroke-dasharray="3 2"/><text x="310" y="518" font-size="10.5" fill="' + C.sub + '">Left out of the program</text>';
+        s += '<rect x="20" y="508" width="14" height="11" fill="' + C.dev + '" stroke="' + C.ink + '"/><text x="40" y="518" font-size="10.5" fill="' + C.sub + '">Development</text><rect x="140" y="508" width="14" height="11" fill="' + C.paper + '" stroke="' + C.ink + '"/><text x="160" y="518" font-size="10.5" fill="' + C.sub + '">Safety assessment</text><rect x="290" y="508" width="14" height="11" fill="' + C.offF + '" stroke="' + C.off + '" stroke-dasharray="3 2"/><text x="310" y="518" font-size="10.5" fill="' + C.sub + '">Left out of the program</text>';
         return Object.assign(svgWrap(900, 530, s, 'Safety assessment funnel'), { title: 'The safety assessment through the development phases' });
     }
     // the safety assessment beside the development process (the layout of ARP4754B Figure 6)
@@ -1389,9 +1581,9 @@
         var s = head('The safety assessment beside the development process', 'Left: safety assessment, with the common cause analyses. Right: development. The arrows are what passes between them.');
         s += '<line x1="440" y1="50" x2="440" y2="650" stroke="' + C.line + '" stroke-dasharray="10 6"/>';
         s += '<text x="250" y="666" font-size="11" font-style="italic" fill="' + C.sub + '" text-anchor="middle">Safety assessment</text><text x="680" y="666" font-size="11" font-style="italic" fill="' + C.sub + '" text-anchor="middle">Development</text>';
-        s += '<rect x="500" y="56" width="380" height="580" fill="#EEF0F3" stroke="#c7cbd1"/>';
+        s += '<rect x="500" y="56" width="380" height="580" fill="' + C.side + '" stroke="' + C.sideS + '"/>';
         // common cause panel
-        s += '<rect x="20" y="150" width="120" height="400" fill="#fff" stroke="' + C.ink + '"/><text x="80" y="174" font-size="11.5" font-style="italic" fill="' + C.ink + '" text-anchor="middle">Common cause</text><text x="80" y="188" font-size="11.5" font-style="italic" fill="' + C.ink + '" text-anchor="middle">analyses</text>';
+        s += '<rect x="20" y="150" width="120" height="400" fill="' + C.paper + '" stroke="' + C.ink + '"/><text x="80" y="174" font-size="11.5" font-style="italic" fill="' + C.ink + '" text-anchor="middle">Common cause</text><text x="80" y="188" font-size="11.5" font-style="italic" fill="' + C.ink + '" text-anchor="middle">analyses</text>';
         s += sbox(32, 210, 96, 60, 'Zonal safety', planned('zsa') ? 'Planned' : 'Not planned', planned('zsa') ? 'w' : 'off') + sbox(32, 300, 96, 60, 'Particular risks', planned('pra') ? 'Planned' : 'Not planned', planned('pra') ? 'w' : 'off') + sbox(32, 390, 96, 60, 'Common mode', planned('cma') ? 'Planned' : 'Not planned', planned('cma') ? 'w' : 'off');
         if (planned('ipledger')) s += sbox(32, 470, 96, 50, 'Independence ledger', '', 'w');
         // safety column
@@ -1437,7 +1629,7 @@
         s += sbox(20, 200, 120, 60, 'Write the plans', 'In the Plan Autopilot') + poly([[140, 230], [170, 230]]) + sbox(170, 200, 140, 60, 'Review the plans', 'Accurate, consistent, complete') + poly([[310, 230], [340, 230]]);
         s += '<polygon points="400,190 460,230 400,270 340,230" fill="' + (open ? C.tbdF : C.okF) + '" stroke="' + (open ? C.tbd : C.ok) + '"/><text x="400" y="226" font-size="11" font-weight="700" fill="' + C.ink + '" text-anchor="middle">Every</text><text x="400" y="239" font-size="11" font-weight="700" fill="' + C.ink + '" text-anchor="middle">decision made?</text>';
         s += poly([[400, 270], [400, 290], [80, 290], [80, 260]], 'No: back to the decisions still open', { lx: 250, ly: 304, anchor: 'middle' });
-        s += poly([[460, 230], [500, 230]], 'Yes', { lx: 466, ly: 224 }) + '<path d="M500,202 h150 v48 q-37,14 -75,0 t-75,0 z" fill="#fff" stroke="' + C.ink + '"/><text x="575" y="222" font-size="11.5" font-weight="700" fill="' + C.ink + '" text-anchor="middle">Plans issued</text><text x="575" y="236" font-size="9.5" fill="' + C.sub + '" text-anchor="middle">Word, signed</text>';
+        s += poly([[460, 230], [500, 230]], 'Yes', { lx: 466, ly: 224 }) + '<path d="M500,202 h150 v48 q-37,14 -75,0 t-75,0 z" fill="' + C.paper + '" stroke="' + C.ink + '"/><text x="575" y="222" font-size="11.5" font-weight="700" fill="' + C.ink + '" text-anchor="middle">Plans issued</text><text x="575" y="236" font-size="9.5" fill="' + C.sub + '" text-anchor="middle">Word, signed</text>';
         s += '<line x1="690" y1="185" x2="690" y2="285" stroke="' + C.line + '" stroke-dasharray="6 4"/>' + poly([[650, 228], [720, 228]]) + sbox(720, 200, 160, 60, 'Development', 'The work, held to the plans', 'dev', true);
         return Object.assign(svgWrap(900, 320, s, 'Planning process'), { title: 'How the plans are made' });
     }
@@ -1531,28 +1723,38 @@
             + '.pla-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}.pla-card{border:1px solid var(--color-border,#e3e5e8);border-radius:12px;padding:14px 16px;background:var(--color-surface-1,#fff);display:flex;flex-direction:column;gap:8px}'
             + '.pla-ch{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.pla-ch b{font-size:14.5px}.pla-ch .slap-pill{white-space:nowrap;flex:none}.pla-g{font-size:12px}.pla-meta{display:flex;gap:6px;flex-wrap:wrap}.pla-chip{font-size:11.5px;padding:2px 8px;border-radius:10px;background:#ECECEA;color:#101216}'
             + '.pla-cols{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:18px;align-items:start}@media (max-width:1100px){.pla-cols{grid-template-columns:1fr}}'
-            + '.pla-right{position:sticky;top:8px}.pla-prev{max-height:80vh;overflow:auto;border:1px solid var(--color-border,#e3e5e8);border-radius:10px;padding:16px 20px;background:#fff;color:#101216;font-size:12.5px;line-height:1.5}'
-            + '.pla-prev h3{font-size:15px;margin:16px 0 6px}.pla-prev p{margin:0 0 8px}.pla-tbd{color:#9A3412;font-style:italic}.pla-cap{font-weight:700;font-size:11.5px;margin:10px 0 4px}'
-            + '.pla-cover{border-bottom:2px solid #101216;padding-bottom:14px;margin-bottom:14px}.pla-ct{font-size:22px;font-weight:700;margin-top:6px}.pla-cs{font-size:14px;margin:2px 0 10px}.pla-front{border-bottom:2px solid #101216;padding-bottom:12px;margin-bottom:12px}.pla-tl{font-size:12px;margin:1px 0}.pla-tl a{color:#0A4FB8;text-decoration:none}'
-            + '.pla-dt{width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:10px}.pla-dt th,.pla-dt td{border:1px solid #c7cbd1;padding:4px 6px;text-align:left;vertical-align:top}.pla-dt th{background:#EAF2F8;color:#101216}'
-            + '.pla-fig{margin:10px 0 2px;overflow-x:auto}.pla-fig svg{max-width:100%;height:auto;border:1px solid #e3e5e8;border-radius:8px}'
+            + '.pla-right{position:sticky;top:8px}'
+            // the plan page: its own colors, set here for both themes so the app's dark rules cannot reach in (7 Nov 2026)
+            + '.pla .pla-prev{--pp-bg:#ffffff;--pp-ink:#101216;--pp-sub:#4b5563;--pp-line:#c7cbd1;--pp-hair:#e3e5e8;--pp-th:#EAF2F8;--pp-link:#0A4FB8;--pp-tbd:#9A3412;--pp-rule:#101216;--pp-flash:#FFF1A8}'
+            + 'body.theme-dark .pla .pla-prev{--pp-bg:#15181E;--pp-ink:#E8EAED;--pp-sub:#B4BAC4;--pp-line:#3A404A;--pp-hair:#2E333C;--pp-th:#1F2A3A;--pp-link:#8DBBFF;--pp-tbd:#F2925F;--pp-rule:#9AA1AD;--pp-flash:#5A4A12}'
+            + '.pla .pla-prev{max-height:80vh;overflow:auto;border:1px solid var(--pp-hair);border-radius:10px;padding:16px 20px;background:var(--pp-bg);color:var(--pp-ink);font-size:12.5px;line-height:1.5}'
+            + '.pla .pla-prev h3,.pla .pla-prev h4,.pla .pla-prev p,.pla .pla-prev li,.pla .pla-prev b,.pla .pla-prev div{color:var(--pp-ink)}'
+            + '.pla .pla-prev h3{font-size:15px;margin:16px 0 6px;background:none}.pla .pla-prev p{margin:0 0 8px}.pla .pla-prev .pla-tbd{color:var(--pp-tbd);font-style:italic}.pla .pla-prev .pla-cap{font-weight:700;font-size:11.5px;margin:10px 0 4px;color:var(--pp-ink)}'
+            + '.pla-cover{border-bottom:2px solid var(--pp-rule);padding-bottom:14px;margin-bottom:14px}.pla-ct{font-size:22px;font-weight:700;margin-top:6px}.pla-cs{font-size:14px;margin:2px 0 10px}.pla-front{border-bottom:2px solid var(--pp-rule);padding-bottom:12px;margin-bottom:12px}.pla-tl{font-size:12px;margin:1px 0}.pla .pla-prev .pla-tl a,.pla .pla-prev a{color:var(--pp-link);text-decoration:none}'
+            + '.pla-dt{width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:10px}.pla .pla-prev .pla-dt tr,.pla .pla-prev .pla-dt td{background:var(--pp-bg);color:var(--pp-ink)}.pla .pla-prev .pla-dt th,.pla .pla-prev .pla-dt td{border:1px solid var(--pp-line);padding:4px 6px;text-align:left;vertical-align:top;font-family:inherit;text-transform:none;letter-spacing:normal}.pla .pla-prev .pla-dt th{background:var(--pp-th);color:var(--pp-ink);font-weight:700}'
+            // the app's house rule paints every thead black with !important; the plan page is a document, so it wins back here
+            + '.pla .pla-prev .pla-dt thead th,.pla .pla-prev .pla-dt th{background:var(--pp-th) !important;color:var(--pp-ink) !important;border:1px solid var(--pp-line) !important;font-family:inherit !important;text-transform:none !important;letter-spacing:normal !important;font-size:11.5px !important}'
+            + '.pla-fig{margin:10px 0 2px;overflow-x:auto}.pla-fig svg{max-width:100%;height:auto;border:1px solid var(--pp-hair,#e3e5e8);border-radius:8px}'
             + '.pla-sech{font-weight:700;font-size:13px;margin:18px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--color-border,#e3e5e8)}'
-            + '.pla-q{border:1px solid var(--color-border,#e3e5e8);border-radius:10px;padding:10px 12px;margin:0 0 8px;background:var(--color-surface-1,#fff)}.pla-q.gap{border-left:3px solid #B26A00}.pla-q.bad{border-left:3px solid #B42318}'
-            + '.pla-qt{font-weight:600;margin-bottom:6px}.pla-q select,.pla-doc select,.pla-doc input,.pla-q textarea,.pla-q input[type=text]{font:inherit;font-size:13px;padding:6px 8px;border-radius:7px;border:1px solid var(--color-border-strong,#c7cbd1);max-width:100%;width:100%;background:var(--color-surface-1,#fff);color:inherit;box-sizing:border-box}'
+            + '.pla-q{border:1px solid var(--color-border,#e3e5e8);border-left-width:3px;border-radius:10px;padding:10px 12px;margin:0 0 8px;background:var(--color-surface-1,#fff)}.pla-q.sub{position:relative}.pla-q.sub::before{content:"";position:absolute;left:-16px;top:-9px;width:12px;height:30px;border-left:2px solid var(--color-border-strong,#c7cbd1);border-bottom:2px solid var(--color-border-strong,#c7cbd1);border-bottom-left-radius:7px}.pla-q.gap{border-left:3px solid #B26A00}.pla-q.bad{border-left:3px solid #B42318}'
+            + '.pla-qt{font-weight:600;margin-bottom:6px}.pla-q select,.pla-doc select,.pla-doc input,.pla-q textarea,.pla-q input[type=text]{font:inherit;font-size:13px;padding:6px 8px;border-radius:7px;border:1px solid var(--color-border-strong,#c7cbd1);max-width:100%;width:100%;background-color:var(--color-surface-1,#fff);color:inherit;box-sizing:border-box}.pla-q select,.pla-doc select{background-repeat:no-repeat;background-position:right 10px center;padding-right:28px}'
             + '.pla-q textarea{margin-top:6px;min-height:52px}.pla-chk{display:flex;flex-direction:column;gap:4px}.pla-chk label{display:flex;gap:6px;align-items:flex-start;font-size:13px}.pla-chk input{width:auto;margin-top:3px}.pla-chk label,.pla-chk label span{text-transform:none;letter-spacing:normal;font-weight:400;font-size:13px}'
             + '.pla-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px;align-items:center}.pla-t{font-size:11px;padding:1px 7px;border-radius:9px;border:1px solid var(--color-border,#e3e5e8);white-space:nowrap}'
             + '.pla-t.set{background:rgba(26,110,242,.08);border-color:rgba(26,110,242,.3);color:#0A4FB8}.pla-t.da{background:rgba(31,122,51,.08);border-color:rgba(31,122,51,.3);color:#1F6B30;cursor:help}'
             + '.pla-t.tool{cursor:pointer;color:inherit;text-decoration:none}.pla-t.tool:hover{border-color:#1A6EF2}.pla-imp{font-size:12px;margin-top:5px}.pla-bad{font-size:12px;margin-top:6px;color:#B42318;font-weight:600}'
             + '.pla-box{border:1px solid var(--color-border,#e3e5e8);border-radius:10px;padding:10px 12px;margin:12px 0;background:var(--color-surface-1,#fff)}.pla-box h4{margin:0 0 6px;font-size:13px}'
             + '.pla-wt{width:100%;border-collapse:collapse;font-size:12.5px}.pla-wt th,.pla-wt td{border-top:1px solid var(--color-border,#e3e5e8);padding:5px 6px;text-align:left;vertical-align:top}.pla-wt th{font-size:11px;text-transform:uppercase;letter-spacing:.04em}'
+            + 'body.theme-dark .pla-chip{background:#2A2F38;color:#E8EAED}body.theme-dark .pla-t.set{color:#8DBBFF;background:rgba(106,166,255,.12);border-color:rgba(106,166,255,.35)}body.theme-dark .pla-t.da{color:#7EDB98;background:rgba(92,201,122,.12);border-color:rgba(92,201,122,.35)}'
+            + 'body.theme-dark .pla-chg{color:#8DBBFF}body.theme-dark .pla-bad{color:#FF8A80}body.theme-dark .pla-crumb{color:#8DBBFF}body.theme-dark .pla-opt.on{background:rgba(106,166,255,.10);border-color:#6AA6FF}body.theme-dark .pla-opt.on .pla-mk{border-color:#6AA6FF;background:#6AA6FF;box-shadow:inset 0 0 0 2.5px #15181E}body.theme-dark .pla-mk{border-color:#9AA1AD}'
+            + 'body.theme-dark .pla-vt button.on{background:#E8EAED;color:#101216;border-color:#E8EAED}body.theme-dark .pla-msg{background:rgba(92,201,122,.12)}body.theme-dark .pla-msg.err{background:rgba(255,138,128,.12)}'
             + '.pla-chg{font-weight:600;color:#0A4FB8}.pla-acts{display:flex;gap:8px;flex-wrap:wrap}.pla-msg{font-size:12.5px;margin:8px 0;padding:8px 10px;border-radius:8px;background:rgba(31,122,51,.08)}.pla-msg.err{background:rgba(180,35,24,.08)}'
             + '.pla-crumb{font:inherit;font-size:12px;border:none;background:none;color:#1A6EF2;cursor:pointer;padding:0;margin-bottom:4px}'
             + '.pla-doc{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;align-items:end}.pla-doc label{font-size:11.5px;font-weight:600;display:block;margin-bottom:3px}'
             + '.pla-qx{font-size:12.5px;line-height:1.5;margin:0 0 8px}.pla-hint{font-weight:400;font-size:11.5px;margin-left:6px}.pla-opts{display:flex;flex-direction:column;gap:6px}'
-            + '.pla-opt{font:inherit;text-align:left;display:flex;gap:10px;align-items:flex-start;width:100%;padding:9px 12px;border-radius:10px;border:1.5px solid var(--color-border-strong,#c7cbd1);background:var(--color-surface-1,#fff);color:inherit;cursor:pointer}'
+            + '.pla-opt{font:inherit;text-align:left;display:flex;justify-content:flex-start;gap:10px;align-items:flex-start;width:100%;padding:9px 12px;border-radius:10px;border:1.5px solid var(--color-border-strong,#c7cbd1);background:var(--color-surface-1,#fff);color:inherit;cursor:pointer}'
             + '.pla-opt:hover{border-color:#1A6EF2}.pla-opt.on{border-color:#1A6EF2;background:rgba(26,110,242,.06)}.pla-mk{flex:none;width:16px;height:16px;border-radius:50%;border:2px solid #6b7280;margin-top:2px;box-sizing:border-box}.pla-mk.sq{border-radius:4px}.pla-opt.on .pla-mk{border-color:#1A6EF2;background:#1A6EF2;box-shadow:inset 0 0 0 2.5px #fff}'
-            + '.pla-ob{display:flex;flex-direction:column;gap:3px;min-width:0}.pla-ol{font-weight:600;font-size:13.5px}.pla-oe{font-size:12.5px;line-height:1.45}.pla-oc{font-size:12px}'
-            + '.pla-prev{position:relative}.pla-flash{animation:plaFlash 2.2s ease-out}@keyframes plaFlash{0%,35%{background:#FFF1A8;box-shadow:0 0 0 4px #FFF1A8}100%{background:transparent;box-shadow:none}}'
+            + '.pla-ob{flex:1 1 auto;display:flex;flex-direction:column;gap:3px;min-width:0}.pla-ol{font-weight:600;font-size:13.5px}.pla-oe{font-size:12.5px;line-height:1.45}.pla-oc{font-size:12px}'
+            + '.pla-prev{position:relative}.pla-flash{animation:plaFlash 2.2s ease-out}@keyframes plaFlash{0%,35%{background:var(--pp-flash,#FFF1A8);box-shadow:0 0 0 4px var(--pp-flash,#FFF1A8)}100%{background:transparent;box-shadow:none}}'
             + '.pla-node-panel{border-left:4px solid #1A6EF2}.pla-fig .pla-node:hover rect{stroke-width:2.4}'
             + '.pla-vt{display:flex;gap:4px;margin-bottom:6px}.pla-vt button{font:inherit;font-size:12.5px;padding:6px 12px;border:1px solid var(--color-border-strong,#c7cbd1);border-radius:8px;background:none;color:inherit;cursor:pointer}.pla-vt button.on{background:#101216;color:#fff;border-color:#101216}.pla-vt{flex-wrap:wrap}';
         document.head.appendChild(st);
@@ -1568,7 +1770,17 @@
             }).join('') + '</div>'
             + '<div class="pla-box" data-pla-da="1"><h4>Development assurance objectives</h4><div class="pla-g">' + withHow + ' of ' + withQ + ' objectives the plans answer have an answer that says how the program will meet them. The rest of the ' + cov.length + ' are met by the work itself (see the <a href="javascript:void(0)" onclick="switchTab(\'appa\')">Objectives matrix</a>).</div></div>';
     }
-    function _qHtml(q) {
+    // 7 Nov 2026 ("show indentations when needed"): a follow-up sits right under the question it follows from, one step in
+    // per level; every other question stays flush. Only on the page: the plan's own order does not change.
+    function nest(sq) {
+        var keys = sq.map(function (q) { return q.k; }), out = [];
+        function kids(k) { return sq.filter(function (q) { return q.parent === k; }); }
+        function put(q, d) { out.push({ q: q, depth: d }); kids(q.k).forEach(function (c) { put(c, d + 1); }); }
+        sq.forEach(function (q) { if (!q.parent || keys.indexOf(q.parent) < 0) put(q, 0); });
+        return out;
+    }
+    function _qHtml(q, depth) {
+        depth = depth || 0;
         var v = A(q.k), s = store(), multi = q.type === 'checks', daTxt = function (id) { var o = objectives().filter(function (x) { return x.id === id; })[0]; return o ? id + ': ' + o.text : id; };
         var cards = q.opts.map(function (o) {
             var on = has(q.k, o[0]), ex = exO(q, o[0]);
@@ -1578,7 +1790,7 @@
         var ownBox = has(q.k, 'own') ? '<textarea data-plaown="' + E(q.k) + '" placeholder="How the program will do it, in your own words (it goes into the plan as written)" onchange="SLPlanAuto.ui.own(\'' + E(q.k) + '\', this.value)">' + E(s.own[q.k] || '') + '</textarea>' : '';
         var whyBox = picked(q.k).some(function (x) { return (q.reasonFor || []).indexOf(x) >= 0; }) ? '<textarea data-plawhy="' + E(q.k) + '" placeholder="The reason (it goes into the plan and the tailoring section)" onchange="SLPlanAuto.ui.why(\'' + E(q.k) + '\', this.value)">' + E(s.why[q.k] || '') + '</textarea>' : '';
         var bad = v && q.need ? safe(function () { return q.need(v); }, '') : '';
-        return '<div class="pla-q' + (bad ? ' bad' : complete(q) ? '' : ' gap') + '" data-plaqbox="' + E(q.k) + '" id="pla-q-' + E(q.k.replace(/\W/g, '-')) + '"><div class="pla-qt">' + E(q.text) + (multi ? ' <span class="pla-hint">Pick all that apply</span>' : '') + '</div>'
+        return '<div class="pla-q' + (depth ? ' sub' : '') + (bad ? ' bad' : complete(q) ? '' : ' gap') + '" data-plaqbox="' + E(q.k) + '" data-pladepth="' + depth + '"' + (depth ? ' style="margin-left:' + (depth * 26) + 'px"' : '') + ' id="pla-q-' + E(q.k.replace(/\W/g, '-')) + '"><div class="pla-qt">' + E(q.text) + (multi ? ' <span class="pla-hint">Pick all that apply</span>' : '') + '</div>'
             + (exQ(q) ? '<div class="pla-qx">' + E(exQ(q)) + '</div>' : '') + '<div class="pla-opts" role="' + (multi ? 'group' : 'radiogroup') + '">' + cards + '</div>' + ownBox + whyBox
             + (bad ? '<div class="pla-bad" data-plabad="' + E(q.k) + '">' + E(bad) + '</div>' : '')
             + '<div class="pla-tags">' + (q.set ? '<span class="pla-t set">Sets Safety Lab</span>' : '<span class="pla-t">Written into the plan</span>')
@@ -1590,15 +1802,20 @@
     // the box a diagram node opens: what the assessment needs and produces, and (because the user asked) where it stands
     function _nodePanel() {
         var id = ui0.node; if (!id) return '';
-        var a = assessments().filter(function (x) { return x.id === id; })[0], tab = (a && a.tab) || NODE_TAB[id] || '', lv = safe(function () { return liveOf(id); }, '');
-        var ins = a ? a.inputs.map(function (i) { return '<li>' + E(i[0]) + ' <span class="pla-g">(from ' + E(nodeName(i[1])) + ')</span></li>'; }).join('') : '';
-        var outs = a ? a.outputs.map(function (o) { return '<li>' + E(o.what) + ' <span class="pla-g">(to ' + E(listJoin(o.to.map(nodeName))) + ')</span><div class="pla-g">Accepted when: ' + E(o.accept) + '</div></li>'; }).join('') : '';
+        var mem = membersOf(id), a = assessmentOf(id), tab = (a && a.tab) || NODE_TAB[id] || (mem[0] && mem[0].tab) || '', lv = safe(function () { return liveOf(id); }, '');
+        var ioOf = function (x) {
+            var ins = x.inputs.map(function (i) { return '<li>' + E(i[0]) + ' <span class="pla-g">(from ' + E(nameIn(i[1], x.plan)) + ')</span></li>'; }).join('');
+            var outs = x.outputs.map(function (o) { return '<li>' + E(o.what) + ' <span class="pla-g">(to ' + E(listJoin(o.to.map(function (t) { return nameIn(t, x.plan); }))) + ')</span><div class="pla-g">Accepted when: ' + E(o.accept) + '</div></li>'; }).join('');
+            return (mem.length > 1 || !a ? '<div style="margin-top:8px"><b>' + E(x.name) + '</b> <span class="pla-g">' + E(x.does) + '</span></div>' : '<div class="pla-g" style="margin-top:4px">' + E(x.does) + '</div>')
+                + (ins ? '<div style="margin-top:6px"><b>Inputs it needs</b><ul style="margin:2px 0 0;padding-left:18px">' + ins + '</ul></div>' : '')
+                + (outs ? '<div style="margin-top:6px"><b>Outputs it must produce</b><ul style="margin:2px 0 0;padding-left:18px">' + outs + '</ul></div>' : '');
+        };
         var inEx = exchanges().filter(function (x) { return x.to === id; }), outEx = exchanges().filter(function (x) { return x.from === id; });
         return '<div class="pla-box pla-node-panel" data-pla-node="' + E(id) + '"><div class="pla-ch"><h4>' + E(nodeName(id)) + '</h4><span class="pla-acts">' + (tab ? '<button type="button" class="slap-btn p" onclick="switchTab(\'' + E(tab) + '\')">Open ' + E(pageName(tab)) + '</button>' : '') + '<button type="button" class="slap-btn" onclick="SLPlanAuto.ui.node(null)">Close</button></span></div>'
             + '<div class="pla-g" data-pla-nodelive="1"><b>Where it stands now:</b> ' + E(lv || 'Nothing recorded yet') + ' <span class="pla-g">(shown here on request; never written into the plan)</span></div>'
-            + (ins ? '<div style="margin-top:6px"><b>Inputs it needs</b><ul style="margin:2px 0 0;padding-left:18px">' + ins + '</ul></div>' : '')
-            + (outs ? '<div style="margin-top:6px"><b>Outputs it must produce</b><ul style="margin:2px 0 0;padding-left:18px">' + outs + '</ul></div>' : '')
-            + (!a && (inEx.length || outEx.length) ? '<div style="margin-top:6px"><b>Data exchanged</b><ul style="margin:2px 0 0;padding-left:18px">' + inEx.map(function (x) { return '<li>From ' + E(nodeName(x.from)) + ': ' + E(x.what) + '</li>'; }).join('') + outEx.map(function (x) { return '<li>To ' + E(nodeName(x.to)) + ': ' + E(x.what) + '</li>'; }).join('') + '</ul></div>' : '')
+            + mem.map(ioOf).join('')
+            + (!mem.length && (inEx.length || outEx.length) ? '<div style="margin-top:6px"><b>Data exchanged</b><ul style="margin:2px 0 0;padding-left:18px">' + inEx.map(function (x) { return '<li>From ' + E(nodeName(x.from)) + ': ' + E(x.what) + '</li>'; }).join('') + outEx.map(function (x) { return '<li>To ' + E(nodeName(x.to)) + ': ' + E(x.what) + '</li>'; }).join('') + '</ul></div>' : '')
+            + (GROUPS[id] && !mem.length ? '<div class="pla-g" style="margin-top:6px">None of this work is in the program as the plan stands.</div>' : '')
             + '</div>';
     }
     function _acceptBox(key) {
@@ -1627,7 +1844,7 @@
         h += '<div class="pla-sech" style="margin-top:4px">1. Questions <span class="pla-g" style="font-weight:400">' + qs.filter(complete).length + ' of ' + qs.length + ' answered, grouped by the section of the plan each answer is written into</span></div>';
         plan.secs.forEach(function (sec) {
             var sq = qs.filter(function (q) { return q.sec === sec; }); if (!sq.length) return;
-            h += '<div class="pla-sech" data-plasec="' + E(sec) + '">' + E(sec) + '</div>' + sq.map(_qHtml).join('');
+            h += '<div class="pla-sech" data-plasec="' + E(sec) + '">' + E(sec) + '</div>' + nest(sq).map(function (x) { return _qHtml(x.q, x.depth); }).join('');
             if (sec === 'Certification basis and safety objectives') h += '<div class="pla-g" style="margin:-2px 0 8px">The severity definitions, special conditions for a custom basis, and the full target tables stay on the <a href="javascript:void(0)" onclick="switchTab(\'defs\')">certification basis page</a>; the answers here write to the same place.</div>';
         });
         h += '<div class="pla-box" data-pla-wires="1"><div class="pla-ch"><h4>2. What it sets in Safety Lab</h4><button type="button" class="slap-btn p" onclick="SLPlanAuto.ui.apply(\'' + key + '\')"' + (todo.length ? '' : ' disabled') + '>Apply ' + todo.length + ' setting' + (todo.length === 1 ? '' : 's') + '</button></div>'
@@ -1641,7 +1858,7 @@
         h += '</div><div class="pla-right"><div class="pla-vt"><button type="button" class="' + (view === 'plan' ? 'on' : '') + '" data-plaview="plan" onclick="SLPlanAuto.ui.view(\'plan\')">The plan</button><button type="button" class="' + (view === 'status' ? 'on' : '') + '" data-plaview="status" onclick="SLPlanAuto.ui.view(\'status\')">' + E(plan.report) + '</button><span style="flex:1"></span>'
             + (view === 'plan' ? '<button type="button" class="' + (ui0.live ? 'on' : '') + '" data-plalive="1" onclick="SLPlanAuto.ui.live()" title="Show where the program stands on the diagrams. Never written into the plan.">' + (ui0.live ? 'Hide where the program stands' : 'Show where the program stands') + '</button>' : '')
             + '<button type="button" onclick="SLPlanAuto.ui.word(\'' + key + '\',\'' + view + '\')">Word (.docx)</button><button type="button" onclick="SLPlanAuto.print(\'' + key + '\',\'' + view + '\')">Print</button></div>'
-            + _nodePanel() + '<div class="pla-prev" data-pladoc="1" data-plakind="' + view + '">' + (function () { LIVE = !!ui0.live && view === 'plan'; try { return fullHtml(key, view); } finally { LIVE = false; } })() + '</div></div></div>';
+            + _nodePanel() + '<div class="pla-prev" data-pladoc="1" data-plakind="' + view + '">' + (function () { LIVE = !!ui0.live && view === 'plan'; C = isDark() ? DARK : LIGHT; try { return fullHtml(key, view); } finally { LIVE = false; C = LIGHT; } })() + '</div></div></div>';
         return h;
     }
     function render() {
@@ -1688,6 +1905,8 @@
             v._plaObs = new MutationObserver(function () { var nowS = v.style.display !== 'none'; if (nowS && !shown0) { try { render(); } catch (e) { try { console.warn('[plan-autopilot]', e); } catch (_) {} } } shown0 = nowS; });
             v._plaObs.observe(v, { attributes: true, attributeFilter: ['style', 'class'] });
             if (shown0) render();
+            // the theme switch redraws the open preview so its figures take the other palette
+            var dark0 = isDark(); new MutationObserver(function () { var d = isDark(); if (d !== dark0) { dark0 = d; if (v.style.display !== 'none') { try { render(); } catch (_) {} } } }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
         }
         return true;
     }

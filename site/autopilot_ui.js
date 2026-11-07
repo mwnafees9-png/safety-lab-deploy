@@ -10,7 +10,7 @@
 // questions and the answers.
 (function (root) {
     'use strict';
-    var VERSION = '1.0';
+    var VERSION = '1.5';
     function E(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
     var CSS = ''
         + '.slap{font-size:14px;line-height:1.45}'
@@ -50,7 +50,11 @@
         + '.slap-tbl th{font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--color-text-secondary,#5b6270)}'
         + '.slap-note{font-size:12.5px;color:var(--color-text-secondary,#5b6270)}'
         + '.slap-progress{height:8px;border-radius:99px;background:#ECECEA;overflow:hidden;margin:4px 0 2px;min-width:180px;flex:1}'
-        + '.slap-progress>i{display:block;height:100%;background:#1F7A33}';
+        + '.slap-progress>i{display:block;height:100%;background:#1F7A33}'
+        // dark mode (7 Nov 2026): the badges, bars and picture backgrounds take dark colors with readable text
+        + 'body.theme-dark .slap-pill.ok{background:rgba(92,201,122,.16);color:#7EDB98}body.theme-dark .slap-pill.open{background:rgba(233,169,74,.16);color:#F2BE6E}body.theme-dark .slap-pill.todo{background:#2A2F38;color:#D4D8DE}body.theme-dark .slap-pill.info{background:rgba(106,166,255,.16);color:#8DBBFF}'
+        + 'body.theme-dark .slap-progress{background:#2A2F38}body.theme-dark .slap-progress>i{background:#5CC97A}body.theme-dark .slap-pic svg{background:#1B1F26}'
+        + 'body.theme-dark .slap-opt.picked{background:rgba(106,166,255,.10)}body.theme-dark .slap-oi b{color:var(--color-text-primary,#E8EAED)}';
     function style() {
         if (typeof document === 'undefined' || document.getElementById('slap-style')) return;
         var st = document.createElement('style'); st.id = 'slap-style'; st.textContent = CSS; document.head.appendChild(st);

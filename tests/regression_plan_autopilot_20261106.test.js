@@ -12,8 +12,13 @@
  *     probability and DAL table from the same engine the tool uses),
  *   "we are still missing the table of contents, table of tables, table of figures etc. cover page",
  *   and it was slow: 3.4 s per click.
+ * 7 Nov 2026: "why are these not lined up" (the app-wide button style centred each answer card's contents, so the
+ *   shorter the explanation the further the checkbox drifted right).
  * MUTATION PROOFS: SL_PLA_MUTATE=nogate (an answer applies at once), =nosign (a lane off without its signed entry),
- *   =statusleak (a count gets into the plan) must fail.
+ *   =statusleak (a count gets into the plan), =drift (the cards lose their own left alignment), =darkleak (the plan page
+ *   keeps light figures in dark mode), =flat (follow-ups lose their indent), =noio (a plan loses its inputs and outputs) must fail.
+ * 7 Nov 2026, later: "It looks so weird in dark mode" (a dark plan page), "show indentations when needed", "we need to define
+ *   inputs and outputs of each assessment in all the plans both in diagrams and prose".
  * Run: node tests/regression_plan_autopilot_20261106.test.js
  */
 'use strict';
@@ -26,6 +31,10 @@ function mutate(file, body) {
     if (file !== 'plan_autopilot.js') return body;
     if (MUT === 'nogate') return body.replace("s.answers[k] = val; s.who[k] = { by: who(), at: now() };", "s.answers[k] = val; s.who[k] = { by: who(), at: now() }; try { (q.set || []).forEach(function (st) { var af = st.after(val); if (af != null && af !== st.now()) st.apply(val, who(), BY[q.plan], q); }); } catch (_) {}");
     if (MUT === 'nosign') return body.replace("PP().setLane(id, on, on ? {} : { rationale: 'The ' + plan.title + ' says: ' + optLabel(q, v) + '.' + (why ? ' Reason: ' + why : ''), sig: by });", "PP().setLane(id, on, {});");
+    if (MUT === 'drift') return body.replace('display:flex;justify-content:flex-start;gap:10px', 'display:flex;gap:10px').replace('.pla-ob{flex:1 1 auto;', '.pla-ob{');
+    if (MUT === 'darkleak') return body.replace('C = isDark() ? DARK : LIGHT;', 'C = LIGHT;');
+    if (MUT === 'flat') return body.replace("function put(q, d) { out.push({ q: q, depth: d });", "function put(q, d) { d = 0; out.push({ q: q, depth: d });");
+    if (MUT === 'noio') return body.replace("var L = assessments().filter(function (a) { return a.plan === key; }); if (!L.length) return [];\n        var what", "var L = []; if (!L.length) return [];\n        var what");
     if (MUT === 'statusleak') return body.replace("var it = intro(key, sec); if (it) blocks.push(P(it));", "var it = intro(key, sec); if (it) blocks.push(P(it + ' (' + counts().afha + ' failure conditions so far.)'));");
     return body;
 }
@@ -38,9 +47,9 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
     const NAV = fs.readFileSync(path.join(SITE, 'nav_areas.js'), 'utf8');
     const RW = fs.readFileSync(path.join(SITE, 'report_writer.js'), 'utf8');
     let okp = true; try { new Function(SRC); } catch (e) { okp = false; }
-    check('plan_autopilot.js v2 parses; no eval of any kind (the CSP forbids it); the stores are read through SLEnv', okp && /VERSION = '2\.1'/.test(SRC) && !/new Function|\beval\(/.test(SRC) && /SLEnv/.test(SRC));
+    check('plan_autopilot.js v2 parses; no eval of any kind (the CSP forbids it); the stores are read through SLEnv', okp && /VERSION = '2\.2'/.test(SRC) && !/new Function|\beval\(/.test(SRC) && /SLEnv/.test(SRC));
     check('the Plan Autopilot is first under Plan and basis; the certification basis page leaves the menu, its page stays', /items: \['snav-plan-auto', 'snav-arp-process'/.test(NAV) && /id="snav-plan-auto"/.test(HTML) && !/id="snav-defs"/.test(HTML) && /id="view-defs"/.test(HTML) && /id="view-plan-auto"/.test(HTML));
-    check('it loads after the shared look, the objectives and the lanes; the pins moved', (() => { const i = s => HTML.indexOf(s); return i('plan_autopilot.js?v=2.1') > i('autopilot_ui.js?v=') && i('plan_autopilot.js?v=2.1') > i('objectives_matrix.js?v=') && i('plan_autopilot.js?v=2.1') > i('program_plan.js?v=') && /report_writer\.js\?v=1\.3/.test(HTML); })());
+    check('it loads after the shared look, the objectives and the lanes; the pins moved', (() => { const i = s => HTML.indexOf(s); return i('plan_autopilot.js?v=2.2') > i('autopilot_ui.js?v=') && i('plan_autopilot.js?v=2.2') > i('objectives_matrix.js?v=') && i('plan_autopilot.js?v=2.2') > i('program_plan.js?v=') && /report_writer\.js\?v=1\.3/.test(HTML); })());
     check('the plan-auto tab is registered with switchTab', /const tabs = \['plan-auto', /.test(fs.readFileSync(path.join(SITE, 'support_modules.js'), 'utf8')));
     check('the Word writer takes a cover (document control, approvals, revision history) and figures in the run of the text, numbered with the rest', /model\.cover && model\.cover\.tables/.test(RW) && /b\.k === 'img'/.test(RW) && /idx\.figures\.push\(b\)/.test(RW));
 
@@ -161,6 +170,42 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
             out.ex = { noIntro: all.filter(q => !(P.EX[q.k] && P.EX[q.k].q && P.EX[q.k].q.length >= 80)).map(q => q.k), noOpt: all.reduce((a, q) => a.concat(q.opts.filter(o => o[0] !== 'own' && !(P.EX[q.k] && P.EX[q.k].o && P.EX[q.k].o[o[0]])).map(o => q.k + ':' + o[0])), []), cards: 0, shownEx: false };
             P.ui.open('sspp'); await wait(60);
             out.ex.cards = document.querySelectorAll('[data-plaopt]').length; out.ex.shownEx = !!document.querySelector('[data-plaqbox="sspp.kind"] .pla-qx') && /Nothing is carried over/.test((document.querySelector('[data-plaopt="sspp.kind|new"]') || {}).textContent || '');
+            // every answer card in every plan: the box sits at the same place on the left, the text fills the card
+            out.align = { n: 0, offs: [], bad: [] };
+            for (const pk of ['sspp', 'hfp', 'ramp']) { P.ui.open(pk); await wait(60);
+                document.querySelectorAll('[data-plaopt]').forEach(b => { const mk = b.querySelector('.pla-mk'), ob = b.querySelector('.pla-ob'); if (!mk || !ob || !b.offsetWidth) return; const br = b.getBoundingClientRect(), off = Math.round(mk.getBoundingClientRect().left - br.left), gapR = Math.round(br.right - ob.getBoundingClientRect().right); out.align.n++; if (out.align.offs.indexOf(off) < 0) out.align.offs.push(off); if (off > 20 || gapR > 20) out.align.bad.push(b.dataset.plaopt + ' box@' + off + ' right gap ' + gapR); }); }
+            P.ui.open('sspp'); await wait(60);
+            // follow-ups indented under the question they follow from; everything else flush
+            P.ui.open('sspp'); P.ui.pick('basis.reg', 'Part 23'); P.ui.pick('basis.p23prop', 'other'); await wait(80);
+            const dep = k => { const e = document.querySelector('[data-plaqbox="' + k + '"]'); return e ? [+e.dataset.pladepth, Math.round(e.getBoundingClientRect().left)] : null; };
+            out.indent = { reg: dep('basis.reg'), lvl: dep('basis.p23level'), man: dep('basis.p23manual'), spec: dep('basis.special'), kind: dep('sspp.kind') };
+            // dark mode: a dark plan page with dark figures; Word and print stay light; no hatched fields
+            document.body.classList.add('theme-dark'); await wait(150);
+            const pvd = document.querySelector('[data-pladoc]'), thd = pvd.querySelector('.pla-dt th'), svgd = pvd.querySelector('.pla-fig svg');
+            const lum = c => { const m = String(c).match(/\d+/g) || [255, 255, 255]; return (0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]); };
+            out.dark = { bg: lum(getComputedStyle(pvd).backgroundColor), ink: lum(getComputedStyle(pvd).color), th: lum(getComputedStyle(thd).backgroundColor), thInk: lum(getComputedStyle(thd).color), h: lum(getComputedStyle(pvd.querySelector('h3')).color),
+                figDark: !!svgd && /<rect width="100%" height="100%" fill="#15181E"/.test(svgd.outerHTML), wordLight: P.model('sspp', 'plan').blocks.filter(b => b.k === 'img').every(b => /<rect width="100%" height="100%" fill="#ffffff"/.test(b.svg)) && !/#15181E/.test(JSON.stringify(P.model('sspp', 'plan'))),
+                printLight: !/#15181E/.test(P.fullHtml('sspp', 'plan')), sel: [...document.querySelectorAll('.pla-doc select')].every(x => getComputedStyle(x).backgroundRepeat === 'no-repeat') };
+            document.body.classList.remove('theme-dark'); await wait(150);
+            out.dark.backLight = /<rect width="100%" height="100%" fill="#ffffff"/.test(document.querySelector('[data-pladoc] .pla-fig svg').outerHTML);
+            P.ui.pick('basis.reg', 'Part 25'); await wait(60);
+            // inputs and outputs in every plan, in words and pictures, with the HF and RAM work switched on
+            const keep = JSON.parse(JSON.stringify(pc.planAuto.answers));
+            P.answer('hfp.need', 'full'); P.answer('hfp.crew', 'two'); P.answer('hfp.feed', 'events'); P.answer('ramp.need', 'full'); P.answer('ramp.alloc', 'yes'); P.answer('ramp.fracas', 'sl'); P.answer('ramp.msg3', 'msg3'); P.answer('sspp.combined', ['interdep', 'mac']); P.forget();
+            const EXT = ['design', 'program', 'basis', 'verification', 'authority', 'aircraft maker', 'items', 'msg3', 'sources', 'all'], AS = P.assessments(), known = id => EXT.includes(id) || AS.some(a => a.id === id);
+            out.io2 = {};
+            for (const k of ['sspp', 'hfp', 'ramp']) {
+                const L = AS.filter(a => a.plan === k), bl = P.doc(k), prose = bl.filter(b => b.io), figs = bl.filter(b => b.k === 'fig' && /^io\d/.test(b.name)), arrows = figs.reduce((t, f) => t + (f.svg.match(/data-io="(in|out)"/g) || []).length, 0);
+                out.io2[k] = { n: L.length, empty: L.filter(a => !a.inputs.length || !a.outputs.length || !a.does).map(a => a.id), prose: prose.length, proseIds: prose.map(b => b.io).join() === L.map(a => a.id).join(), figs: figs.length, arrows, want: L.reduce((t, a) => t + a.inputs.length + a.outputs.length, 0),
+                    unknown: L.reduce((acc, a) => acc.concat(a.inputs.filter(i => !known(i[1])).map(i => a.id + '<-' + i[1]), a.outputs.reduce((x, o) => x.concat(o.to.filter(t => !known(t)).map(t => a.id + '->' + t)), [])), []),
+                    tables: ['io', 'exchanges'].every(n => bl.some(b => b.k === 'table' && b.name === n)), proseNamesInputs: prose.every((b, i) => L[i].inputs.every(x => b.text.toLowerCase().indexOf(x[0].toLowerCase().slice(0, 18)) >= 0)) };
+            }
+            const pssaIn = JSON.stringify((AS.find(a => a.id === 'pssa') || {}).inputs), ssaIn = JSON.stringify((AS.find(a => a.id === 'ssa') || {}).inputs);
+            out.cross = { hfToPssa: /hf-credit/.test(pssaIn), hfToSsa: /hf-credit/.test(ssaIn), ramToPssa: /ram-pred/.test(pssaIn), fracasToSsa: /ram-fracas/.test(ssaIn), ccmrToMsg3: (AS.find(a => a.id === 'ccmr') || { outputs: [{ to: ['ram-msg3'] }] }).outputs[0].to.includes('ram-msg3'), hfNamed: /\(SSPP\)/.test(JSON.stringify(P.doc('hfp'))) };
+            P.answer('hfp.need', 'none'); P.setWhy('hfp.need', 'no flight deck change'); P.forget();
+            out.cross.hfGone = !P.assessments().some(a => a.plan === 'hfp') && !/hf-credit/.test(JSON.stringify(P.assessments().find(a => a.id === 'pssa').inputs));
+            Object.keys(pc.planAuto.answers).forEach(k => { if (!(k in keep)) delete pc.planAuto.answers[k]; }); Object.assign(pc.planAuto.answers, keep); P.forget();
+            P.ui.open('sspp'); await wait(60);
             P.answer('sspp.fmea', ['ffmea', 'fmes']); P.toggle('sspp.fmea', 'none'); const ex1 = pc.planAuto.answers['sspp.fmea']; P.toggle('sspp.fmea', 'ppfmea'); const ex2 = pc.planAuto.answers['sspp.fmea'];
             let ex3 = false; try { P.answer('sspp.fmea', ['none', 'ffmea']); } catch (e) { ex3 = /cannot be picked with other answers/.test(e.message); }
             out.excl = { ex1, ex2, ex3, noBad: !P.mismatches('sspp').some(m => m.k === 'sspp.fmea') };
@@ -177,7 +222,7 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
             const d1 = P.doc('sspp'), io = d1.find(b => b.k === 'table' && b.name === 'io'), exch = d1.find(b => b.k === 'table' && b.name === 'exchanges'), outsT = d1.find(b => b.k === 'table' && b.name === 'outputs');
             const nodesKnown = P.exchanges().every(x => P.assessments().some(a => a.id === x.from));
             out.io = { io: io && io.rows.length, afhaIn: io && /aircraft functions \(Design and development\)/i.test(JSON.stringify(io.rows)), sppOut: io && /safety objectives/.test(JSON.stringify(io.rows.find(r => /Program Plan/.test(r.Assessment)) || {})), exch: exch && exch.rows.length, nodesKnown, outs: outsT && outsT.rows.length, blank: outsT && outsT.rows.every(r => r.Signature === '' && r.Date === ''), last: d1.filter(b => b.k === 'h').slice(-2).map(b => b.text).join(' | ') };
-            P.answer('sspp.pasa', 'yes'); P.answer('sspp.combined', ['interdep', 'mac']); const withMac = P.outputsOf('sspp').some(o => o.id === 'pasa.mfms'); P.answer('sspp.pasa', 'none'); P.setWhy('sspp.pasa', 'carried over'); const noPasa = !P.outputsOf('sspp').some(o => /^pasa\./.test(o.id)) && JSON.stringify(P.assessments().find(a => a.id === 'sfha').inputs).indexOf('"afha"') >= 0; P.answer('sspp.pasa', 'yes');
+            P.answer('sspp.pasa', 'yes'); P.answer('sspp.combined', ['interdep', 'mac']); const withMac = P.outputsOf('sspp').some(o => o.id === 'mfs.mac'); P.answer('sspp.pasa', 'none'); P.setWhy('sspp.pasa', 'carried over'); const noPasa = !P.outputsOf('sspp').some(o => /^pasa\./.test(o.id)) && JSON.stringify(P.assessments().find(a => a.id === 'sfha').inputs).indexOf('"afha"') >= 0; P.answer('sspp.pasa', 'yes');
             out.io.follows = withMac && noPasa;
             // accepting an output; a change reopens it; the plan never changes
             const planBefore = txtOf(P.doc('sspp'));
@@ -192,6 +237,11 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
             out.saved = JSON.parse(JSON.stringify(pc.planAuto)).answers['sspp.pssa'];
             return out;
         }, demo.data), 300000, 'the Plan Autopilot');
+        check('every answer card lines up: the box at the same spot on the left and the text filling the card, however short the explanation (7 Nov: "why are these not lined up")', r.align.n >= 100 && r.align.offs.length === 1 && !r.align.bad.length, JSON.stringify({ n: r.align.n, offs: r.align.offs, bad: r.align.bad.slice(0, 6) }));
+        check('follow-up questions sit indented under the question they follow from, one step per level; the rest stay flush (7 Nov: "show indentations when needed")', r.indent.reg && r.indent.reg[0] === 0 && r.indent.lvl[0] === 1 && r.indent.man[0] === 2 && r.indent.spec[0] === 0 && r.indent.lvl[1] > r.indent.reg[1] && r.indent.man[1] > r.indent.lvl[1] && r.indent.spec[1] === r.indent.reg[1] && r.indent.kind[1] === r.indent.reg[1], JSON.stringify(r.indent));
+        check('dark mode: a dark plan page (text, headings, table headers) with the figures drawn dark; Word and print stay light; the role fields are plain (7 Nov: "It looks so weird in dark mode")', r.dark.bg < 60 && r.dark.ink > 180 && r.dark.h > 180 && r.dark.th < 80 && r.dark.thInk > 180 && r.dark.figDark && r.dark.wordLight && r.dark.printLight && r.dark.sel && r.dark.backLight, JSON.stringify(r.dark));
+        check('every assessment in all three plans has what it does, its inputs and its outputs, in words (one paragraph each) and in pictures (one arrow for every input and output), with the reference tables; nothing points nowhere', ['sspp', 'hfp', 'ramp'].every(k => { const x = r.io2[k]; return x.n >= (k === 'sspp' ? 12 : 4) && !x.empty.length && x.prose === x.n && x.proseIds && x.figs >= 1 && x.arrows === x.want && !x.unknown.length && x.tables && x.proseNamesInputs; }), JSON.stringify(r.io2));
+        check('the plans feed each other: HF crew actions into the PSSAs and SSAs, RAM rates into the PSSAs, unexpected failures into the SSAs, CMRs into scheduled maintenance; work from another plan says which; no HF program takes it all out', Object.values(r.cross).every(Boolean), JSON.stringify(r.cross));
         check('the page: three plan cards (SSPP, HFP, RAMP), each with its document number', r.cards.shown && r.cards.keys === 'sspp,hfp,ramp' && r.cards.da && r.cards.docNo === 'HL1-SSPP-001', JSON.stringify(r.cards));
         check('fast: opening a plan and picking an answer each redraw in under half a second (3.4 s before)', r.speed.open < 500 && r.speed.pick < 500, JSON.stringify(r.speed));
         check('every question asks what the program will do (the plan comes first), and names real objectives and pages', !r.q.backward.length && !r.q.badDa.length && !r.q.badTool.length && !r.q.fewOpts.length && /^Will a preliminary aircraft safety assessment \(PASA\) be performed\?$/.test(r.q.pasa), JSON.stringify(r.q));
