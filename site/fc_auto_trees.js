@@ -40,7 +40,8 @@
 // ============================================================================
 (function (root) {
     'use strict';
-    var VERSION = '1.5';   // 1.5 30 Oct 2026: makeTree in the API (fc_link.js opens a picked condition's tree).
+    var VERSION = '1.8';   // 1.8 8 Nov 2026: one tree per failure condition, in any state (see "ONE TREE" below).
+    // 1.5 30 Oct 2026: makeTree in the API (fc_link.js opens a picked condition's tree).
     // 1.4 26 Oct 2026: a tree whose failure condition was marked not applicable in the FCIM is asked about in those words
     var MAJOR = 3;
 
@@ -174,13 +175,33 @@
         bad.forEach(function (T) { try { var f = root[T.render]; if (typeof f === 'function') f(); } catch (_) {} });
         return bad.length;
     }
+    // ---- ONE TREE (8 Nov 2026, live student data) -----------------------------------------------------------
+    // A collaborator's screen built the tree pages from their shells before the nodes arrived (crdt_sync.js
+    // _ftaRecompose: root null until then). The old treeFor skipped a page with no root, so the sweep made a second
+    // tree for each of the 11 failure conditions, and make() gave each one a new id with a time suffix
+    // (fc-auto-ac-FC-01-mw88sosh). A tree's identity is its FAILURE CONDITION, not its page id or its state:
+    //   treeFor(g) finds the condition's tree in ANY state: nodes not arrived yet (root null), obsolete, made here
+    //   (autoFcTree scope + system + key) or made by hand and linked to its rows. A copy waiting for review
+    //   (duplicateOf, fta_dedupe.js) is never the tree. Preference: the page with the condition's own id, then one
+    //   made here for it, then one linked to its rows.
+    //   The sweep WAITS on a condition whose tree has no root yet (does nothing for it this tick).
+    //   make() never suffixes an id: the condition's tree, or a page already holding its id, is adopted.
+    function baseId(g) { return 'fc-auto-' + (g.scope === 'ac' ? 'ac' : g.sys.id) + '-' + String(g.fcId || g.gov.internalId).replace(/[^A-Za-z0-9_-]+/g, '_'); }
+    function _atLevel(p, g) { return g.scope === 'ac' ? p.treeLevel === 'aircraft' : (p.treeLevel === 'system' && String(p.systemId) === String(g.sys.id)); }
+    function _madeFor(p, g) {
+        var a = p && p.autoFcTree; if (!a || a.key !== g.key) return false;
+        return g.scope === 'ac' ? a.scope === 'ac' : (a.scope !== 'ac' && String(a.systemId) === String(g.sys.id));
+    }
     function treeFor(g) {
-        var ids = g.rows.map(function (r) { return String(r.internalId); });
-        return _pages().find(function (p) {
-            if (!p || !p.root || p.verifies || (p.mode || 'top-down') !== 'top-down') return false;
-            if (g.scope === 'ac' ? p.treeLevel !== 'aircraft' : (p.treeLevel !== 'system' || String(p.systemId) !== String(g.sys.id))) return false;
-            return _links(p).some(function (l) { return ids.indexOf(l.replace(/^(AC_|SYS_)/, '')) >= 0; });
-        }) || null;
+        if (!g) return null;
+        var ids = g.rows.map(function (r) { return String(r.internalId); }), bid = baseId(g);
+        var cands = _pages().filter(function (p) {
+            if (!p || p.verifies || p.duplicateOf || (p.mode || 'top-down') !== 'top-down') return false;
+            if (_madeFor(p, g)) return true;
+            if (!_atLevel(p, g)) return false;
+            return p.id === bid || _links(p).some(function (l) { return ids.indexOf(l.replace(/^(AC_|SYS_)/, '')) >= 0; });
+        });
+        return cands.find(function (p) { return p.id === bid; }) || cands.find(function (p) { return _madeFor(p, g); }) || cands[0] || null;
     }
 
     // ---- the trees ----------------------------------------------------------------------------------------
@@ -210,25 +231,39 @@
         return _node('basic', (sg.sys.name || sg.sys.id) + ': ' + (sg.gov.fcDesc || sg.fcId || 'failure condition'), { externalSource: { kind: 'fha', targetId: 'SYS_' + sg.gov.internalId } });
     }
     function make(g) {
+        // never a second tree for one failure condition (every caller: the sweep, fc_link.js, the API)
+        var have = treeFor(g);
+        if (have) return have;
+        var bid = baseId(g), taken = _pages().find(function (p) { return p && p.id === bid; });
+        if (taken) return _adopt(taken, g);
         var desc = g.gov.fcDesc || g.fcId || 'Failure condition';
         var rootN = _node('gate', desc, { displayId: g.fcId || undefined });
         if (!rootN.displayId) rootN.displayId = 'G-' + rootN.id;
         var traced = g.scope === 'ac' ? _traced(g) : [];
         if (traced.length) traced.forEach(function (sg) { rootN.children.push(_sysEvent(sg)); });
         else rootN.children.push(_node('undeveloped', 'Decompose: causes of ' + desc));
-        var ids = g.worst.concat(g.rows.filter(function (r) { return g.worst.indexOf(r) < 0; })).map(function (r) { return r.internalId; });
+        var ids = _orderedIds(g);
         var page = {
-            id: 'fc-auto-' + (g.scope === 'ac' ? 'ac' : g.sys.id) + '-' + String(g.fcId || g.gov.internalId).replace(/[^A-Za-z0-9_-]+/g, '_'),
+            id: bid,
             name: (g.scope === 'ac' ? 'PASA' : 'PSSA') + ' · ' + (g.fcId ? g.fcId + ' ' : '') + desc.slice(0, 50),
             treeLevel: g.scope === 'ac' ? 'aircraft' : 'system', systemId: g.scope === 'ac' ? '' : g.sys.id, mode: 'top-down',
             linkedFhaIds: ids, root: rootN,
             autoFcTree: { scope: g.scope, key: g.key, systemId: g.scope === 'ac' ? null : g.sys.id, at: new Date().toISOString() }
         };
-        while (_pages().some(function (p) { return p && p.id === page.id; })) page.id += '-' + Date.now().toString(36);
         page.autoFcTree.fp = shapeFp(rootN);
         _pages().push(page);
         try { if (typeof root.jrnl === 'function') root.jrnl('tree-created', page.name + ' made for the failure condition (1309 chart: ' + (ROUTE_WORDS[g.route] || g.route) + ')'); } catch (_) {}
         return page;
+    }
+    function _orderedIds(g) { return g.worst.concat(g.rows.filter(function (r) { return g.worst.indexOf(r) < 0; })).map(function (r) { return r.internalId; }); }
+    // a page that already holds the condition's id is its tree: it takes the condition's identity and links, keeps its
+    // nodes (a page whose nodes have not arrived keeps waiting for them)
+    function _adopt(p, g) {
+        p.treeLevel = g.scope === 'ac' ? 'aircraft' : 'system'; p.systemId = g.scope === 'ac' ? '' : g.sys.id; p.mode = 'top-down';
+        p.linkedFhaIds = _orderedIds(g);
+        if (!p.autoFcTree) p.autoFcTree = { scope: g.scope, key: g.key, systemId: g.scope === 'ac' ? null : g.sys.id, at: new Date().toISOString(), fp: p.root ? shapeFp(p.root) : '' };
+        try { if (typeof root.jrnl === 'function') root.jrnl('tree-adopted', (p.name || p.id) + ' is the tree for ' + (g.fcId || 'its failure condition') + ' (it already held the condition\'s id)'); } catch (_) {}
+        return p;
     }
 
     // ---- targets ---------------------------------------------------------------------------------------------
@@ -286,7 +321,7 @@
         // open tree is), so a tree nobody has open still answers; per flight, then per flight hour like the class target
         var ids = rows.map(function (r) { return 'SYS_' + r.internalId; }), best = null;
         _pages().forEach(function (p) {
-            if (!p || !p.root || p.verifies || p.treeLevel !== 'aircraft' || (p.mode || 'top-down') !== 'top-down') return;
+            if (!p || !p.root || p.verifies || p.dupReview || p.treeLevel !== 'aircraft' || (p.mode || 'top-down') !== 'top-down') return;
             var has = false; (function w(n) { if (!n || has) return; if (n.externalSource && ids.indexOf(String(n.externalSource.targetId)) >= 0) has = true; _kids(n).forEach(w); })(p.root);
             if (!has) return;
             var alloc = _allocated(p, ids); if (!alloc) return;
@@ -309,7 +344,7 @@
     function _applyTargets() {
         var n = 0;
         _pages().forEach(function (p) {
-            if (!p || !p.root || p.verifies || (p.mode || 'top-down') !== 'top-down' || p.targetManual) return;
+            if (!p || !p.root || p.verifies || p.dupReview || (p.mode || 'top-down') !== 'top-down' || p.targetManual) return;
             if (!_links(p).length) return;
             var e = effectiveTarget(p); if (!e || e.rate == null) return;
             var basis = { used: e.used, classTarget: e.classTarget, severity: e.severity, aircraft: e.aircraft };
@@ -346,12 +381,13 @@
     }
     function _sweepOnce(opts) {
         opts = opts || {};
-        var made = [], added = 0, gone = [], ask = [];
+        var made = [], added = 0, gone = [], ask = [], waiting = 0;
         var all = groups('ac'); _systems().forEach(function (s) { all = all.concat(groups(s)); });
         all.forEach(function (g) {
             if (!g.needsTree) return;
             var t = treeFor(g);
             if (!t) { made.push(make(g)); return; }
+            if (!t.root) { waiting++; return; }   // its nodes have not arrived yet: wait, never make another
             // a PASA tree made here carries every SFHA failure condition that traces to it
             if (g.scope === 'ac' && t.autoFcTree) {
                 var untouched = shapeFp(t.root) === t.autoFcTree.fp;
@@ -365,7 +401,7 @@
         });
         // trees made here whose failure condition no longer needs one
         _pages().slice().forEach(function (p) {
-            if (!p || !p.autoFcTree || p.autoFcTree.kept) return;
+            if (!p || !p.autoFcTree || p.autoFcTree.kept || !p.root || p.duplicateOf) return;   // nodes pending, or a copy under review
             var a = p.autoFcTree, scope = a.scope === 'ac' ? 'ac' : _systems().find(function (s) { return s && String(s.id) === String(a.systemId); });
             var g = scope ? groups(scope).find(function (x) { return x.key === a.key; }) : null;
             if (g && g.needsTree) return;
@@ -384,7 +420,7 @@
                 try { for (var i = 0; i < ask.length; i++) await _askGone(ask[i].p, ask[i].why); } finally { _asking = false; }
             })();
         }
-        return { made: made.map(function (p) { return p.id; }), added: added, gone: gone, ask: ask.map(function (x) { return x.p.id; }), targets: targets };
+        return { made: made.map(function (p) { return p.id; }), added: added, gone: gone, ask: ask.map(function (x) { return x.p.id; }), targets: targets, waiting: waiting };
     }
     async function _askGone(p, why) {
         var choose = root.slChoose; if (typeof choose !== 'function') return;
@@ -409,6 +445,8 @@
             if (CA && typeof CA.status === 'function') { var st = CA.status(); if (st.open || st.timer || st.prompting) return { skipped: 'a change is open' }; }
             if (CA && ((typeof CA.typing === 'function' && CA.typing()) || (typeof CA.busy === 'function' && CA.busy()))) return { skipped: 'the person is typing' };
         } catch (_) {}
+        // copies left from before 8 Nov 2026 whose nodes had not arrived at load are cleaned up first (fta_dedupe.js)
+        try { var DD = root.SLFtaDedupe; if (DD && typeof DD.pending === 'function' && DD.pending()) DD.run({ quiet: true }); } catch (_) {}
         try {
             if (!(CA && typeof CA.system === 'function')) return sweep();
             var res = (typeof CA.background === 'function') ? CA.background(function () { return sweep(); }) : CA.system(function () { return sweep(); });
@@ -458,7 +496,7 @@
 
     var api = { VERSION: VERSION, groups: groups, route: route,
         governingRows: governingRows, governingOf: governingOf, isGoverning: isGoverning, groupOf: groupOf, byFcId: byFcId, copiesNote: copiesNote, ROUTE_WORDS: ROUTE_WORDS, characterized: characterized, needsChart: needsChart, treeFor: treeFor,
-        sweep: sweep, tick: tick, syncFlags: syncFlags, flagsOutOfStep: flagsOutOfStep, effectiveTarget: effectiveTarget, governingPhases: governingPhases, shapeFp: shapeFp,
+        sweep: sweep, tick: tick, baseId: baseId, syncFlags: syncFlags, flagsOutOfStep: flagsOutOfStep, effectiveTarget: effectiveTarget, governingPhases: governingPhases, shapeFp: shapeFp,
         // 30 Oct 2026 (fc_link.js): the tree for a condition picked by hand that has none yet
         makeTree: make };
     try { root.SLFcTrees = api; } catch (_) {}

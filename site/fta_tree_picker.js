@@ -1,4 +1,6 @@
 // ============================================================================
+// fta_tree_picker.js, v1.6 (8 Nov 2026): a duplicate tree left for review is labelled "Duplicate of <name>: holds work the
+// original lacks, review and merge", and when it is on screen a bar offers Merge into original / Keep as its own tree (fta_dedupe.js).
 // fta_tree_picker.js, v1.5 (1 Nov 2026, item 26): an "Import / Export" button (fta_exchange.js).
 // fta_tree_picker.js, v1.4 (1 Nov 2026, item 42): a "+ Integrated Tree" button beside + New, and an integrated tree is listed as "(integrated, read only)".
 // fta_tree_picker.js, v1.3 (24 Oct 2026, tree_homes.js): the picker lists the trees of the home on screen
@@ -87,6 +89,7 @@
     // Every other assignment in the codebase (fta_view_modules, fta_quant_modules,
     // data_ops_modules, ai_assistant) uses the bare identifier. This one didn't.
     // Guarded, because a bare reference to an undeclared binding throws.
+    function _dupLabel(p) { try { var D = (typeof window !== 'undefined') && window.SLFtaDedupe; return (D && typeof D.label === 'function') ? D.label(p) : ''; } catch (_) { return ''; } }
     function _activeId() {
         try { return (typeof activeFTAPageId !== 'undefined') ? activeFTAPageId : null; } catch (_) { return null; }
     }
@@ -96,7 +99,7 @@
 
     function _sig() {
         var H = _homes(), c = H ? H.current() : null;
-        return _roots().map(function (p) { return p.id + ':' + (p.name || '') + ':' + (p.treeLevel || '') + ':' + (p.systemId || '') + ':' + (p.mode || '') + ':' + (p.verifies || '') + ':' + (p.integrated ? 'i' : ''); }).join('|') + '@' +
+        return _roots().map(function (p) { return p.id + ':' + (p.name || '') + ':' + (p.treeLevel || '') + ':' + (p.systemId || '') + ':' + (p.mode || '') + ':' + (p.verifies || '') + ':' + (p.integrated ? 'i' : '') + (p.dupReview ? ':dup' : ''); }).join('|') + '@' +
             String(_activeId() || '') + (c ? '#' + c.home + ':' + (c.systemId || '') : '');
     }
 
@@ -171,9 +174,11 @@
         sel2.innerHTML = '<option value="">' + (_none ? (H ? 'No trees here yet' : '— pick a fault tree —') : '— pick a fault tree —') + '</option>' + _gs.map(function (g) {
             return '<optgroup label="' + _esc(g.label) + '">' + g.pages.map(function (p) {
                 return '<option value="' + _esc(p.id) + '"' + (String(p.id) === String(cur) ? ' selected' : '') + '>' +
-                    _esc((p.name || p.id) + (p.integrated ? ' (integrated, read only)' : '')) + '</option>';
+                    _esc((p.name || p.id) + (p.integrated ? ' (integrated, read only)' : '') + _dupLabel(p)) + '</option>';
             }).join('') + '</optgroup>';
         }).join('');
+        // v1.6: a copy left for review says so, and the tree on screen offers Merge into original / Keep as its own tree
+        try { if (window.SLFtaDedupe && typeof window.SLFtaDedupe.decorate === 'function') window.SLFtaDedupe.decorate(host, cur); } catch (_) {}
     }
 
     if (typeof window !== 'undefined') {

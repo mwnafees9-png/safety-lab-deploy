@@ -1895,11 +1895,14 @@ window.renderSysFunctions = sysFuncCRUD.render;
     // Flag a single row/page obsolete in place. Idempotent: a row already obsolete
     // is left untouched (so re-running never overwrites an earlier reason/timestamp,
     // and the change-count stays honest). Returns true only when it actually flipped.
-    function _markObsolete(row, reason) {
+    // 8 Nov 2026: every mark records the parent it was made for (staleParent), so stale_revive.js can relink the row
+    // when that parent comes back.
+    function _markObsolete(row, reason, parent) {
         if (!row || row.obsolete) return false;
         row.obsolete = true;
         row.obsoleteReason = reason;
         row.obsoletedAt = new Date().toISOString();
+        if (parent) row.staleParent = Object.assign({}, parent);
         return true;
     }
 
@@ -1923,7 +1926,7 @@ window.renderSysFunctions = sysFuncCRUD.render;
     // scope is 'aircraft' | 'system'; sysObj is the active system object for system scope.
     // Returns counts { fcim, fha, req, fta } of rows/pages newly flagged.
     function _cascadeObsoleteForFunction(funcRow, scope, sysObj) {
-        const counts = { fcim: 0, fha: 0, req: 0, fta: 0 };
+        const counts = { fcim: 0, fha: 0, req: 0, fta: 0, nodes: 0 };
         if (!funcRow) return counts;
 
         const isAC = scope === 'aircraft';
@@ -1935,6 +1938,12 @@ window.renderSysFunctions = sysFuncCRUD.render;
             ? (funcRow.subName || funcRow.subId || funcRow.funcName || funcRow.funcId || '')
             : (funcRow.funcName || funcRow.funcId || '');
         const reason = 'Parent function ' + String(label).trim() + ' removed';
+        const parent = {
+            kind: 'function', scope: isAC ? 'aircraft' : 'system', systemId: isAC ? null : (sysObj && sysObj.id != null ? sysObj.id : null),
+            key: String((isAC ? funcRow.subId : funcRow.funcId) || (isAC ? funcRow.funcId : funcRow.subId) || '').trim(),
+            name: String((isAC ? (funcRow.subName || funcRow.funcName) : (funcRow.funcName || funcRow.subName)) || '').trim(),
+            at: new Date().toISOString()
+        };
 
         // Resolve the four downstream stores for this scope, guarding every access.
         let fcimStore = null, fhaStore = null, reqStore = null;
@@ -1954,7 +1963,7 @@ window.renderSysFunctions = sysFuncCRUD.render;
         try {
             if (Array.isArray(fcimStore)) {
                 fcimStore.forEach(r => {
-                    if (r && _linkMatches(r.subId, keys) && _markObsolete(r, reason)) counts.fcim++;
+                    if (r && _linkMatches(r.subId, keys) && _markObsolete(r, reason, parent)) counts.fcim++;
                 });
             }
         } catch (e) { /* skip */ }
@@ -1968,7 +1977,7 @@ window.renderSysFunctions = sysFuncCRUD.render;
                 fhaStore.forEach(r => {
                     if (r && _linkMatches(r.subId, keys)) {
                         if (r.internalId != null) matchedFhaIds.push(r.internalId);
-                        if (_markObsolete(r, reason)) counts.fha++;
+                        if (_markObsolete(r, reason, parent)) counts.fha++;
                     }
                 });
             }
@@ -1985,6 +1994,7 @@ window.renderSysFunctions = sysFuncCRUD.render;
                     r.reqSource = r.reqSource || {};
                     r.reqSource.obsolete = { reason: reason, taggedAt: new Date().toISOString() };
                     r.reqSource.orphan = true;
+                    r.staleParent = Object.assign({}, parent);
                     counts.req++;
                     try {
                         if (typeof window.ReqHistory !== 'undefined' && window.ReqHistory && typeof window.ReqHistory.record === 'function') {
@@ -1995,45 +2005,39 @@ window.renderSysFunctions = sysFuncCRUD.render;
             }
         } catch (e) { /* skip */ }
 
-        // 4. Fault trees — a page is associated with this function when any of its
-        //    linkedFhaIds[] (or legacy scalar linkedFhaId) is one of the FHA internalIds
-        //    we just matched. (Node-level externalSource links use prefixed AC_/SYS_ ids;
-        //    best-effort handled below, but the linkedFhaIds intersection is the required
-        //    path.)
+        // 4. Fault trees (8 Nov 2026, live student data: removing a SYSTEM function flagged AIRCRAFT trees whose
+        //    failure conditions still exist, because a PASA tree's bottom events link to system FHA rows). A change
+        //    in one scope flags, as whole pages, only that scope's own trees hanging off the matched FHA rows by
+        //    linkedFhaIds: a system change flags that system's PSSA trees (treeLevel 'system', its systemId); an
+        //    aircraft change flags the aircraft trees. Any other tree is never flagged as a page: the event(s) in it
+        //    linked to a matched row (externalSource AC_<id> / SYS_<id>) get a node-level stale mark (n.obsolete +
+        //    obsoleteReason, the vocabulary gt_integrity.js renders in Thread Integrity).
         try {
             if (matchedFhaIds.length && typeof ftaPages !== 'undefined' && Array.isArray(ftaPages)) {
                 const fhaIdSet = new Set(matchedFhaIds.map(String));
                 const prefix = isAC ? 'AC_' : 'SYS_';
+                const sysId = sysObj && sysObj.id != null ? String(sysObj.id) : null;
+                const ownScope = page => isAC ? page.treeLevel !== 'system' : (page.treeLevel === 'system' && sysId !== null && String(page.systemId) === sysId);
                 ftaPages.forEach(page => {
                     if (!page) return;
-                    let hit = false;
-                    // Required path: linkedFhaIds[] / linkedFhaId (raw FHA internalIds).
                     const lids = Array.isArray(page.linkedFhaIds)
                         ? page.linkedFhaIds
                         : (page.linkedFhaId != null ? [page.linkedFhaId] : []);
-                    for (let i = 0; i < lids.length; i++) {
-                        if (fhaIdSet.has(String(lids[i]))) { hit = true; break; }
-                    }
-                    // Best-effort: node-level externalSource links to an obsoleted FHA
-                    // (prefixed AC_<id>/SYS_<id>). Walk the page's nodes if present.
-                    if (!hit) {
-                        try {
-                            const stack = [];
-                            if (page.root) stack.push(page.root);
-                            while (stack.length) {
-                                const n = stack.pop();
-                                if (!n) continue;
-                                const es = n.externalSource;
-                                if (es && (es.kind === 'fha') && es.targetId != null) {
-                                    const raw = String(es.targetId).replace(prefix, '');
-                                    if (fhaIdSet.has(raw)) { hit = true; break; }
-                                }
-                                const kids = (n.children || []).concat(n._children || []);
-                                for (let j = 0; j < kids.length; j++) stack.push(kids[j]);
+                    const linked = lids.some(l => fhaIdSet.has(String(l).replace(/^(AC_|SYS_)/, '')));
+                    if (linked && ownScope(page)) { if (_markObsolete(page, reason, parent)) counts.fta++; return; }
+                    try {
+                        const stack = page.root ? [page.root] : [];
+                        while (stack.length) {
+                            const n = stack.pop();
+                            if (!n) continue;
+                            const es = n.externalSource;
+                            if (es && es.kind === 'fha' && es.targetId != null && String(es.targetId).indexOf(prefix) === 0 && fhaIdSet.has(String(es.targetId).slice(prefix.length))) {
+                                if (_markObsolete(n, 'Linked FHA row ' + String(es.targetId) + ' obsolete: ' + reason, Object.assign({}, parent, { via: { kind: 'fha', targetId: String(es.targetId) } }))) counts.nodes++;
                             }
-                        } catch (eWalk) { /* node walk is best-effort */ }
-                    }
-                    if (hit && _markObsolete(page, reason)) counts.fta++;
+                            const kids = (n.children || []).concat(n._children || []);
+                            for (let j = 0; j < kids.length; j++) stack.push(kids[j]);
+                        }
+                    } catch (eWalk) { /* node walk is best-effort */ }
                 });
             }
         } catch (e) { /* skip */ }
@@ -2096,7 +2100,7 @@ window.renderSysFunctions = sysFuncCRUD.render;
         } catch (e) { /* render hooks are best-effort */ }
 
         // Fault trees only need re-rendering / recalc when at least one tree flipped.
-        if (counts.fta > 0) {
+        if (counts.fta > 0 || counts.nodes > 0) {
             try { if (typeof renderFTASidebar === 'function') renderFTASidebar(); } catch (e) {}
             try { if (typeof calculateAllProbabilities === 'function') calculateAllProbabilities(); } catch (e) {}
             try { if (typeof updateD3 === 'function') updateD3(); } catch (e) {}
@@ -2105,12 +2109,13 @@ window.renderSysFunctions = sysFuncCRUD.render;
         try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (e) {}
 
         // Build the toast summary — omit zero categories, pluralize each.
-        const flagged = counts.fcim + counts.fha + counts.req + counts.fta;
+        const flagged = counts.fcim + counts.fha + counts.req + counts.fta + (counts.nodes || 0);
         const parts = [];
         if (counts.fcim) parts.push(_plural(counts.fcim, 'failure condition'));
         if (counts.fha)  parts.push(_plural(counts.fha,  'FHA row'));
         if (counts.req)  parts.push(_plural(counts.req,  'requirement'));
         if (counts.fta)  parts.push(_plural(counts.fta,  'fault tree'));
+        if (counts.nodes) parts.push(_plural(counts.nodes, 'fault tree event'));
         let msg, kind;
         if (flagged > 0) {
             msg = 'Function removed — marked obsolete: ' + parts.join(', ') + '.';

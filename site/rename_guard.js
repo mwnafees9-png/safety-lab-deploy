@@ -1,4 +1,8 @@
 // ============================================================================
+// rename_guard.js, v1.7 (8 Nov 2026): a deletion marks only the rows of its own scope (a system's function or FC ID
+// marks that system's FHA, FCIM and requirements; the aircraft's marks the aircraft's; zones, items and other
+// project-wide lists as before), and every mark records its parent (staleParent: kind, scope, systemId, key, name)
+// so stale_revive.js can relink it when the parent comes back. Live student data, 8 Nov 2026.
 // rename_guard.js — v1.5 — Q4: rename-safe identity + delete-stale cascade.
 //
 // v1.3 (Waqas ruling, 2 Aug 2026): "once deleted, all connected artifacts
@@ -52,13 +56,13 @@
     // owners(): every row that OWNS a key of this kind → { id, key }.
     // refs(value): every live slot holding that key string elsewhere.
     function _reqRefs(value, slots) {
-        const scan = (reqs, where) => (reqs || []).forEach(r => {
+        const scan = (reqs, where, sc) => (reqs || []).forEach(r => {
             if (!r || r.deleted) return;
-            if (r.traceId === value) slots.push({ obj: r, field: 'traceId', where });
-            if (Array.isArray(r.traceIds) && r.traceIds.indexOf(value) >= 0) slots.push({ obj: r, field: 'traceIds', isArray: true, where });
+            if (r.traceId === value) slots.push({ obj: r, field: 'traceId', where, sc });
+            if (Array.isArray(r.traceIds) && r.traceIds.indexOf(value) >= 0) slots.push({ obj: r, field: 'traceIds', isArray: true, where, sc });
         });
-        scan(typeof acReqData !== 'undefined' ? acReqData : [], 'AC requirements');
-        _sysList().forEach(s => scan(s.req, (s.name || s.id) + ' requirements'));
+        scan(typeof acReqData !== 'undefined' ? acReqData : [], 'AC requirements', 'ac');
+        _sysList().forEach(s => scan(s.req, (s.name || s.id) + ' requirements', 'sys:' + s.id));
     }
     // 8 Aug 2026 — physical hazards reference their source CCA finding by id
     // ({kind, ref}); a zone/PRA rename or delete must reach that slot too.
@@ -77,23 +81,23 @@
             label: 'Function ID',
             owners: () => {
                 const out = [];
-                (typeof acFunctionsData !== 'undefined' ? acFunctionsData : []).forEach(f => f && out.push({ id: 'ac:' + f.internalId, key: f.subId, obj: f, field: 'subId' }));
+                (typeof acFunctionsData !== 'undefined' ? acFunctionsData : []).forEach(f => f && out.push({ id: 'ac:' + f.internalId, key: f.subId, obj: f, field: 'subId', desc: f.subName || f.funcName }));
                 // system functions carry their id in funcId (subId is the legacy field)
-                _sysList().forEach(s => (s.functions || []).forEach(f => f && out.push({ id: 'sys-' + s.id + ':' + f.internalId, key: f.subId || f.funcId, obj: f, field: (f.subId != null ? 'subId' : 'funcId') })));
+                _sysList().forEach(s => (s.functions || []).forEach(f => f && out.push({ id: 'sys-' + s.id + ':' + f.internalId, key: f.subId || f.funcId, obj: f, field: (f.subId != null ? 'subId' : 'funcId'), desc: f.funcName || f.subName })));
                 return out;
             },
             refs: value => {
                 const slots = [];
-                const fhaScan = (fha, where) => (fha || []).forEach(r => {
+                const fhaScan = (fha, where, sc) => (fha || []).forEach(r => {
                     if (!r) return;
-                    if (r.subId === value) slots.push({ obj: r, field: 'subId', where: where + ' FHA' });
-                    if (Array.isArray(r.subIds) && r.subIds.indexOf(value) >= 0) slots.push({ obj: r, field: 'subIds', isArray: true, where: where + ' FHA' });
+                    if (r.subId === value) slots.push({ obj: r, field: 'subId', where: where + ' FHA', sc });
+                    if (Array.isArray(r.subIds) && r.subIds.indexOf(value) >= 0) slots.push({ obj: r, field: 'subIds', isArray: true, where: where + ' FHA', sc });
                 });
-                fhaScan(typeof acFhaData !== 'undefined' ? acFhaData : [], 'AC');
-                _sysList().forEach(s => fhaScan(s.fha, s.name || s.id));
-                const fcimScan = (rows, where) => (rows || []).forEach(r => { if (r && r.subId === value) slots.push({ obj: r, field: 'subId', where }); });
-                fcimScan(typeof acFcimData !== 'undefined' ? acFcimData : [], 'AC FCIM');
-                _sysList().forEach(s => fcimScan(s.fcim, (s.name || s.id) + ' FCIM'));
+                fhaScan(typeof acFhaData !== 'undefined' ? acFhaData : [], 'AC', 'ac');
+                _sysList().forEach(s => fhaScan(s.fha, s.name || s.id, 'sys:' + s.id));
+                const fcimScan = (rows, where, sc) => (rows || []).forEach(r => { if (r && r.subId === value) slots.push({ obj: r, field: 'subId', where, sc }); });
+                fcimScan(typeof acFcimData !== 'undefined' ? acFcimData : [], 'AC FCIM', 'ac');
+                _sysList().forEach(s => fcimScan(s.fcim, (s.name || s.id) + ' FCIM', 'sys:' + s.id));
                 (typeof zsaData !== 'undefined' ? zsaData : []).forEach(z => {
                     if (z && Array.isArray(z.housedFunctions) && z.housedFunctions.indexOf(value) >= 0)
                         slots.push({ obj: z, field: 'housedFunctions', isArray: true, where: 'ZSA zone ' + z.zoneId });
@@ -108,7 +112,7 @@
         },
         zoneId: {
             label: 'Zone ID',
-            owners: () => (typeof zsaData !== 'undefined' ? zsaData : []).filter(Boolean).map(z => ({ id: 'zsa:' + (z.internalId != null ? z.internalId : z.zoneId), key: z.zoneId, obj: z, field: 'zoneId' })),
+            owners: () => (typeof zsaData !== 'undefined' ? zsaData : []).filter(Boolean).map(z => ({ id: 'zsa:' + (z.internalId != null ? z.internalId : z.zoneId), key: z.zoneId, obj: z, field: 'zoneId', desc: z.zoneName || z.name || z.description })),
             refs: value => {
                 const slots = [];
                 (typeof praData !== 'undefined' ? praData : []).forEach(p => {
@@ -122,7 +126,7 @@
         },
         itemId: {
             label: 'Item / LRU ID',
-            owners: () => (typeof itemsData !== 'undefined' ? itemsData : []).filter(Boolean).map(i => ({ id: 'item:' + i.internalId, key: i.itemId, obj: i, field: 'itemId' })),
+            owners: () => (typeof itemsData !== 'undefined' ? itemsData : []).filter(Boolean).map(i => ({ id: 'item:' + i.internalId, key: i.itemId, obj: i, field: 'itemId', desc: i.itemName || i.name || i.description })),
             refs: value => {
                 const slots = [];
                 const pc = _pc();
@@ -142,25 +146,25 @@
             label: 'Failure condition ID',
             owners: () => {
                 const out = [];
-                (typeof acFhaData !== 'undefined' ? acFhaData : []).forEach(f => f && out.push({ id: 'acfha:' + f.internalId, key: f.fcId, obj: f, field: 'fcId' }));
-                _sysList().forEach(s => (s.fha || []).forEach(f => f && out.push({ id: 'sysfha-' + s.id + ':' + f.internalId, key: f.fcId, obj: f, field: 'fcId' })));
+                (typeof acFhaData !== 'undefined' ? acFhaData : []).forEach(f => f && out.push({ id: 'acfha:' + f.internalId, key: f.fcId, obj: f, field: 'fcId', desc: f.fcDesc }));
+                _sysList().forEach(s => (s.fha || []).forEach(f => f && out.push({ id: 'sysfha-' + s.id + ':' + f.internalId, key: f.fcId, obj: f, field: 'fcId', desc: f.fcDesc })));
                 return out;
             },
             refs: value => {
                 const slots = [];
-                const fcimScan = (rows, where) => (rows || []).forEach(r => {
+                const fcimScan = (rows, where, sc) => (rows || []).forEach(r => {
                     if (!r) return;
-                    ['tlId', 'plId', 'mId'].forEach(f => { if (r[f] === value) slots.push({ obj: r, field: f, where }); });
+                    ['tlId', 'plId', 'mId'].forEach(f => { if (r[f] === value) slots.push({ obj: r, field: f, where, sc }); });
                 });
-                fcimScan(typeof acFcimData !== 'undefined' ? acFcimData : [], 'AC FCIM');
-                _sysList().forEach(s => fcimScan(s.fcim, (s.name || s.id) + ' FCIM'));
+                fcimScan(typeof acFcimData !== 'undefined' ? acFcimData : [], 'AC FCIM', 'ac');
+                _sysList().forEach(s => fcimScan(s.fcim, (s.name || s.id) + ' FCIM', 'sys:' + s.id));
                 _reqRefs(value, slots);
                 return slots;
             }
         },
         praId: {
             label: 'PRA ID',
-            owners: () => (typeof praData !== 'undefined' ? praData : []).filter(Boolean).map(p => ({ id: 'pra:' + (p.internalId != null ? p.internalId : p.praId), key: p.praId, obj: p, field: 'praId' })),
+            owners: () => (typeof praData !== 'undefined' ? praData : []).filter(Boolean).map(p => ({ id: 'pra:' + (p.internalId != null ? p.internalId : p.praId), key: p.praId, obj: p, field: 'praId', desc: p.title || p.name || p.description })),
             refs: value => { const slots = []; _phSourceRefs('pra', value, slots); _reqRefs(value, slots); return slots; }
         },
         // 8 Aug 2026 — physical hazards (phys_hazards.js) are identity owners:
@@ -169,7 +173,7 @@
         phId: {
             label: 'Physical hazard ID',
             owners: () => (((typeof projectConfig !== 'undefined' && projectConfig.physHazards) || [])).filter(Boolean)
-                .map(p => ({ id: 'ph:' + p.internalId, key: p.phId, obj: p, field: 'phId' })),
+                .map(p => ({ id: 'ph:' + p.internalId, key: p.phId, obj: p, field: 'phId', desc: p.title || p.hazard || p.description })),
             refs: value => { const slots = []; _reqRefs(value, slots); return slots; }
         },
         // v1.4 (2 Aug) — tree PAGES are owners too: transfer gates reference
@@ -181,7 +185,7 @@
             label: 'Fault tree page',
             // Page ids are STRUCTURAL and internal — never renamed by a user, so no
             // owner-write slot is offered here (only the delete path uses this kind).
-            owners: () => ((typeof ftaPages !== 'undefined' ? ftaPages : []) || []).filter(Boolean).map(p => ({ id: 'ftap:' + p.id, key: String(p.id) })),
+            owners: () => ((typeof ftaPages !== 'undefined' ? ftaPages : []) || []).filter(Boolean).map(p => ({ id: 'ftap:' + p.id, key: String(p.id), desc: p.name })),
             refs: value => {
                 const slots = [];
                 ((typeof ftaPages !== 'undefined' ? ftaPages : []) || []).forEach(p => p && (function walk(n) {
@@ -196,15 +200,23 @@
     };
 
     // ------------------------------------------------------ snapshot + diff
-    let _last = null;
+    let _last = null, _lastDesc = {};
 
-    function _snap() {
+    function _snap(descOut) {
         const m = {};
         Object.keys(KINDS).forEach(kind => {
-            try { KINDS[kind].owners().forEach(o => { if (o.key) m[kind + '|' + o.id] = o.key; }); } catch (_) {}
+            try { KINDS[kind].owners().forEach(o => { if (o.key) { m[kind + '|' + o.id] = o.key; if (descOut) descOut[kind + '|' + o.id] = o.desc == null ? '' : String(o.desc); } }); } catch (_) {}
         });
         return m;
     }
+    // v1.6: the scope an owner id belongs to ('ac', 'sys:<id>'), for the kinds whose rows live per scope; null = project-wide
+    function _ownerScope(kind, ownerId) {
+        const id = String(ownerId || '');
+        if (kind === 'subId') { if (id.indexOf('ac:') === 0) return 'ac'; const m = /^sys-(.*):[^:]*$/.exec(id); return m ? 'sys:' + m[1] : null; }
+        if (kind === 'fcId') { if (id.indexOf('acfha:') === 0) return 'ac'; const m = /^sysfha-(.*):[^:]*$/.exec(id); return m ? 'sys:' + m[1] : null; }
+        return null;
+    }
+    const PARENT_KIND = { subId: 'function', fcId: 'fha', zoneId: 'zone', itemId: 'item', praId: 'pra', phId: 'physHazard', pageId: 'page' };
 
     // Mark every artifact still referencing a DELETED owner's key as stale.
     // Rows take the product's obsolete vocabulary (badge renderers already
@@ -212,11 +224,17 @@
     // the function cascade established; array-slot containers (a zone's
     // housedFunctions, a PRA's affectedZones, traceIds lists) get a
     // staleRefs entry — gt_integrity renders those. Idempotent throughout.
-    function rgMarkStale(kind, oldKey) {
+    // v1.6: info = { ownerId, desc } of the deleted owner (optional): its scope limits the rows marked, and every mark
+    // records staleParent { kind, rgKind, scope, systemId, key, name, at }.
+    function rgMarkStale(kind, oldKey, info) {
+        info = info || {};
         const label = (KINDS[kind] && KINDS[kind].label) || kind;
         const reason = 'STALE — ' + label + ' ' + oldKey + ' deleted';
+        const sc = info.ownerId != null ? _ownerScope(kind, info.ownerId) : null;
+        const parent = { kind: PARENT_KIND[kind] || kind, rgKind: kind, scope: sc ? (sc === 'ac' ? 'aircraft' : 'system') : null, systemId: sc && sc !== 'ac' ? sc.slice(4) : null, key: String(oldKey), name: info.desc == null ? '' : String(info.desc), at: new Date().toISOString() };
         let refs = [];
         try { refs = KINDS[kind].refs(oldKey); } catch (_) {}
+        if (sc) refs = refs.filter(slot => !slot.sc || slot.sc === sc);
         let marked = 0;
         refs.forEach(slot => {
             try {
@@ -224,7 +242,7 @@
                 if (slot.isArray) {
                     o.staleRefs = o.staleRefs || [];
                     if (!o.staleRefs.some(s => s && s.kind === kind && s.ref === oldKey && s.field === slot.field)) {
-                        o.staleRefs.push({ kind, ref: oldKey, field: slot.field, reason, at: new Date().toISOString() });
+                        o.staleRefs.push({ kind, ref: oldKey, field: slot.field, reason, at: new Date().toISOString(), staleParent: Object.assign({}, parent) });
                         marked++;
                     }
                 } else if (slot.field === 'traceId') {
@@ -232,6 +250,7 @@
                     o.reqSource = o.reqSource || {};
                     o.reqSource.obsolete = { reason, taggedAt: new Date().toISOString() };
                     o.reqSource.orphan = true;
+                    o.staleParent = Object.assign({}, parent);
                     marked++;
                 } else {
                     // markObj (8 Aug 2026): when the reference slot is a nested
@@ -242,6 +261,7 @@
                     tgt.obsolete = true;
                     tgt.obsoleteReason = reason;
                     tgt.obsoletedAt = new Date().toISOString();
+                    tgt.staleParent = Object.assign({}, parent, { field: slot.field });
                     marked++;
                 }
             } catch (_) {}
@@ -262,15 +282,18 @@
     // re-owned) and marks the survivors stale automatically — marking is
     // non-destructive, so no modal gate; the toast + gt page carry the news.
     function rgScan() {
-        const cur = _snap();
+        const curDesc = {};
+        const cur = _snap(curDesc);
         const renames = [];
         let staleMarked = 0; const staleKeys = [];
         if (_last) {
             // current keys per kind — the ambiguity + deletion guards need them
-            const liveKeys = {};
+            const liveKeys = {}, liveScoped = {};
             Object.keys(cur).forEach(idk => {
                 const kind = idk.split('|')[0];
                 (liveKeys[kind] = liveKeys[kind] || new Set()).add(cur[idk]);
+                const sc = _ownerScope(kind, idk.slice(kind.length + 1));
+                if (sc) (liveScoped[kind] = liveScoped[kind] || new Set()).add(sc + '|' + cur[idk]);
             });
             Object.keys(cur).forEach(idk => {
                 const prev = _last[idk], next = cur[idk];
@@ -289,12 +312,14 @@
                 const kind = idk.split('|')[0];
                 const oldKey = _last[idk];
                 if (!oldKey) return;
-                if (liveKeys[kind] && liveKeys[kind].has(oldKey)) return;
-                const n = rgMarkStale(kind, oldKey);
+                const ownerId = idk.slice(kind.length + 1), sc = _ownerScope(kind, ownerId);
+                // v1.6: a scoped key is "still owned" only within its own scope (system B's F02 does not keep system A's alive)
+                if (sc ? (liveScoped[kind] && liveScoped[kind].has(sc + '|' + oldKey)) : (liveKeys[kind] && liveKeys[kind].has(oldKey))) return;
+                const n = rgMarkStale(kind, oldKey, { ownerId, desc: _lastDesc[idk] });
                 if (n) { staleMarked += n; staleKeys.push(oldKey); }
             });
         }
-        _last = cur;
+        _last = cur; _lastDesc = curDesc;
         if (staleMarked) {
             try { if (typeof showToast === 'function') showToast(staleMarked + ' connected artifact' + (staleMarked === 1 ? '' : 's') + ' marked STALE (deleted: ' + staleKeys.join(', ') + ') — see Thread Integrity.', 'warning', 6000); } catch (_) {}
             try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
@@ -302,7 +327,7 @@
         return renames;
     }
 
-    function rgBaseline() { _last = _snap(); }
+    function rgBaseline() { const d = {}; _last = _snap(d); _lastDesc = d; }
 
     // ------------------------------------------------------------ propagate
     function rgApply(rename) {

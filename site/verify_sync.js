@@ -35,7 +35,7 @@
 // ============================================================================
 (function (root) {
     'use strict';
-    var VERSION = '1.0';
+    var VERSION = '1.2';   // 1.2 8 Nov 2026: no verification tree for a duplicate under review (fta_dedupe.js)
     // the fields a verification event takes from its twin (what the tree IS); everything else is its own
     var STRUCT = ['name', 'desc', 'description', 'type', 'gateType', 'displayId', 'linkedPageId', 'realizedByItemId', 'externalSource', 'k', 'kOfN', 'voteK', 'voteN', 'transferTo', 'transferFrom', 'isTransfer'];
     // the fields that hold the real design's numbers (never copied over an existing verification event)
@@ -68,7 +68,8 @@
 
     // ---- 1. made ---------------------------------------------------------------------------------------
     function ensureMirror(page) {
-        if (!_topDown(page) || !page.root || !_allowed()) return null;
+        // 8 Nov 2026 (v1.2): a duplicate tree waiting for review (fta_dedupe.js) gets no verification tree of its own
+        if (!_topDown(page) || !page.root || page.duplicateOf || !_allowed()) return null;
         var existing = _pages().find(function (p) { return p && p.verifies === page.id; });
         if (existing) return existing;
         if (typeof root._cloneSubtreeForVerification !== 'function') return null;

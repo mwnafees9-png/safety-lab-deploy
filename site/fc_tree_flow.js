@@ -1,5 +1,7 @@
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
+// fc_tree_flow.js, v1.05 (8 Nov 2026): Create fault tree finds the condition's tree in any state (nodes still arriving
+// included), so it can never make a second one.
 // fc_tree_flow.js — v1.0 — the 1309 chart DRIVES the tree decision (systems).
 //
 // The chart logic existed (decideAnalysisDepth — severity × certification
@@ -50,9 +52,15 @@
         return { route: 'quant', label: 'quantitative analysis demanded (' + (depth.clause ? '§' + depth.clause : 'chart') + ')', depth };
     }
 
+    // 8 Nov 2026 (v1.1): a tree whose nodes have not arrived yet (root null in a shared session) is still the tree,
+    // and so is the tree of any row of the same failure condition (fc_auto_trees.js treeFor): never a second one.
     function _linkedTree(fha) {
+        try {
+            const T = window.SLFcTrees;
+            if (T && typeof T.groupOf === 'function' && typeof T.treeFor === 'function') { const g = T.groupOf(fha); const t = g ? T.treeFor(g) : null; if (t) return t; }
+        } catch (_) {}
         return _pages().find(p => {
-            if (!p || !p.root || p.verifies) return false;
+            if (!p || p.verifies || p.duplicateOf) return false;
             const ids = (Array.isArray(p.linkedFhaIds) ? p.linkedFhaIds : []).concat(p.linkedFhaId != null ? [p.linkedFhaId] : []);
             return ids.map(x => String(x).replace(/^(AC_|SYS_)/, '')).indexOf(String(fha.internalId)) >= 0;
         });

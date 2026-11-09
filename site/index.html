@@ -4270,7 +4270,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- 16 Oct 2026: the shared AI inputs file ("safetylab-ai-inputs" v1, the same in Safety Lab, Sys Lab and Cert Lab); the source document store hashes with it. -->
     <script src="ai_inputs_exchange.js?v=1.0" defer></script>
     <script src="misc_fn_modules.js?v=66.97" defer></script>
-    <script src="safety_lab.js?v=65.78" defer></script>
+    <script src="safety_lab.js?v=65.79" defer></script>
     <!-- Phase 66.34 — read access to the app's top-level lexical globals. MUST load
          after the declarations exist. Top-level `let` is NOT on window; anything that
          reached for window.selectedNodeData got undefined and failed silently. -->
@@ -4407,7 +4407,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="ffs_module.js?v=1.32" defer></script>
     <!-- Phase D gap 1 (§3.5) — ASA working surface: deterministic triage + measured MF&MS re-run (born modular; upgrades the ASA F.4 gate). -->
     <script src="asa_triage.js?v=1.14" defer></script>
-    <script src="idp_seed_trees.js?v=1.5" defer></script>
+    <script src="idp_seed_trees.js?v=1.6" defer></script>
     <!-- Golden Thread integrity sweep + link bindings (born modular). -->
     <script src="gt_integrity.js?v=1.8" defer></script>
     <!-- App Q output-set harness. MUST load after gt_integrity.js: it wraps
@@ -4452,7 +4452,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="ccf_similarity.js?v=1.5" defer></script>
     <!-- AL1 — signed system aliases (user-entered only; feeds the lookalike detector). -->
     <script src="alias_registry.js?v=1.1" defer></script>
-    <script src="rename_guard.js?v=1.6" defer></script>
+    <script src="rename_guard.js?v=1.7" defer></script>
     <!-- Legacy-id renumber migration (slate #12). MUST load after rename_guard:
          it composes rgRenameOwner + rgApply and owns no reference logic itself. -->
     <script src="renumber_migration.js?v=1.1" defer></script>
@@ -4647,12 +4647,12 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- 24 Oct 2026: tree_homes.js (SLTreeHomes) gives every fault tree and diagram one home: PASA, ASA, a system's PSSA or SSA, or Standalone. After helpers_modules.js, fta_view_modules.js and misc_fn_modules.js, before prove_tabs.js and nav_areas.js. -->
     <script src="tree_homes.js?v=1.2" defer></script>
     <!-- 24 Oct 2026: verify_sync.js (SLVerifySync): every top-down tree gets its verification tree, kept in step with it; removed branches and deleted trees are asked about. After tree_homes.js. -->
-    <script src="verify_sync.js?v=1.1" defer></script>
+    <script src="verify_sync.js?v=1.2" defer></script>
     <script src="prove_tabs.js?v=1.8" defer></script>
     <!-- 24 Oct 2026: nav_areas.js (SLNavAreas) lays the left menu out the way Sys Lab does: a Working on picker, sections, and each section's pages as tabs above the page. After support_modules.js, helpers_modules.js, program_plan.js and prove_tabs.js. -->
     <script src="level_view.js?v=1.2" defer></script>
     <script src="nav_areas.js?v=2.0" defer></script>
-    <script src="fta_tree_picker.js?v=1.5" defer></script>
+    <script src="fta_tree_picker.js?v=1.6" defer></script>
     <!-- 25 Aug 2026 — the way back from a golden-thread jump (reviewer: "to go
          back you have to click on the golden thread"). Wraps _gtvShowEco /
          _gtvNavigateTo / switchTab, so it must load AFTER the files that
@@ -4674,11 +4674,14 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          operational/environmental tags, coupling-derived candidates, INV-29/30. -->
     <script src="fc_variants.js?v=2.2" defer></script>
     <script src="fha_phase_cover.js?v=1.0" defer></script>
-    <script src="fc_tree_flow.js?v=1.04" defer></script>
+    <script src="fc_tree_flow.js?v=1.05" defer></script>
     <!-- 24 Oct 2026: fc_auto_trees.js (SLFcTrees): every Major-or-worse failure condition the 1309 chart sends to a quantitative analysis (or whose chart is not answered) gets its PASA or PSSA tree, its top event filled in; a system tree takes the stricter of the aircraft allocation and its class target. After fc_tree_flow.js. -->
-    <script src="fc_auto_trees.js?v=1.7" defer></script>
+    <script src="fc_auto_trees.js?v=1.8" defer></script>
     <!-- 30 Oct 2026: fc_link.js (SLFcLink): a PASA or PSSA tree's link always comes from the failure condition it was made for; picking another condition opens that condition's own tree (no question); hand-built trees live in Standalone; old wrong links are fixed quietly with a change-log note; ANEM gets each condition's FCIM mode and fills the empty tree. After fc_auto_trees.js. -->
     <script src="fc_link.js?v=2.0" defer></script>
+    <!-- 8 Nov 2026 (live student data): fta_dedupe.js (SLFtaDedupe) cleans up duplicate auto trees once per project load, before the first sweep (copies with nothing extra are kept aside in projectConfig.retiredDuplicateTrees, extra events merged into the original, real work left flagged for review). stale_revive.js (SLStaleRevive) relinks rows marked stale when their function or failure condition comes back (asks when the name changed) and clears aircraft trees a system change wrongly flagged obsolete. After fc_auto_trees.js, rename_guard.js and safety_lab.js; fta_dedupe.js before stale_revive.js. -->
+    <script src="fta_dedupe.js?v=1.0" defer></script>
+    <script src="stale_revive.js?v=1.0" defer></script>
     <!-- 31 Oct 2026: comment_kinds.js (SLCommentKinds): review comments on every assessment (fault trees and their nodes, CCMR, MAC, CoFFE, resources, Markov, RBD, ETA, FRACAS, MSG-3, crew credit) and the rows ANEM may change when a comment asks. After assurance_modules.js (Review, Traceability). -->
     <script src="comment_kinds.js?v=1.0" defer></script>
     <!-- 31 Oct 2026: cma_flow.js (SLCmaFlow): the Common Mode Analysis in four steps (gates and claim, the App M questionnaire, concerns and mitigations, close out), a status that means something, and the DAL reduction given back only when it is mitigated. After cma_walkthrough.js, cma_live.js and critical_gates.js. -->

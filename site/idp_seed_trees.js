@@ -1,4 +1,5 @@
 // ============================================================================
+// idp_seed_trees.js, v1.6 (8 Nov 2026): a seed page whose nodes have not arrived yet is left alone (never regenerated or flagged).
 // idp_seed_trees.js — v1.0 — MF&MS tree seeds from the Interdependence table
 // (23 Aug 2026, Waqas's ruling: "Deterministic seed" for aircraft-level
 // skeletons — new pages only, nothing existing touched).
@@ -260,6 +261,7 @@
             if (multi && !_hasForeignMfms(fc)) {
                 if (idx === -1) { pages.push(_seedPage(fc, contribs)); if (_ctx && _ctx.pageIdx) _ctx.pageIdx.set(pid, pages.length - 1); seeded++; return; }
                 var pg = pages[idx];
+                if (!pg.root) { kept++; return; }   // 8 Nov 2026: its nodes have not arrived yet (shared session): wait, judge nothing
                 if (pg._idpFp === _idpFp(fc, contribs)) { delete pg._idpStale; kept++; return; }
                 if (_rootFp(pg.root) === pg._idpRootFp) { pages[idx] = _seedPage(fc, contribs); regenerated++; return; }
                 pg._idpStale = 'interdependence facts changed after this seed was developed — reconcile by hand';
@@ -269,6 +271,7 @@
             // Not multi-system any more (or covered by a real MF&MS page).
             if (idx !== -1) {
                 var p2 = pages[idx];
+                if (!p2.root) return;   // 8 Nov 2026: nodes pending: wait
                 if (_rootFp(p2.root) === p2._idpRootFp) { pages.splice(idx, 1); if (_ctx) _ctx.pageIdx = null; removed++; }
                 else if (!multi) { p2._idpStale = 'condition is no longer multi-system per the interdependence table'; stale++; }
                 else { p2._idpStale = 'a real MF&MS page now covers this condition'; stale++; }
