@@ -1,4 +1,4 @@
-// change_ack.js - v3.6 - 28 Oct 2026 - the AI draft record's own fields (aiSeen, aiEdits, aiOriginal...) are bookkeeping, never a
+// change_ack.js - v3.8 - 9 Nov 2026 - the report settings (ccaReports) told in plain words, report by report; 3.6 28 Oct 2026 - the AI draft record's own fields (aiSeen, aiEdits, aiOriginal...) are bookkeeping, never a
 //   change to confirm (AUDIT_FIELDS). See tests/regression_ai_audit_mirror_20261028.test.js
 // change_ack.js - v3.4 - 27 Oct 2026 - system and background work are measured from where the project really is: a change whose
 //   autosave write is still queued is taken into the "before" first (_freshBeforeSystem), so a sweep in that moment is never handed the
@@ -366,6 +366,58 @@
         }
         return base;
     }
+    // 9 Nov 2026 (Waqas, on the review listing raw text for "cca reports": "these descriptions need to be easy to understand"):
+    // the PRA, ZSA and CMA report settings (cca_report.js) told in plain words, report by report. What the app fills in by
+    // itself (a default document number, a Draft status, an empty revision list, the report last open) is bookkeeping.
+    var CCA_NAME = { pra: 'Particular risk', zsa: 'Zonal safety', cma: 'Common mode' };
+    var CCA_DOC = { no: 'document number', status: 'status', prep: 'prepared by', rev: 'reviewed by', appr: 'approved by' };
+    function _ccaRepName(key, rid) {
+        if (!rid) return CCA_NAME[key] ? CCA_NAME[key] + ' reports' : 'Report';
+        if (rid === 'aircraft') return 'Common mode analysis, aircraft level';
+        if (/^sys:/.test(rid)) { var nm = rid.slice(4); try { var L = _live().systemsData || []; var sy = L.find(function (x) { return x && String(x.id) === nm; }); if (sy && sy.name) nm = sy.name; } catch (_) {} return 'Common mode analysis, ' + nm; }
+        return (key === 'zsa' ? 'Zone ' : '') + rid + ' report';
+    }
+    function _ccaOut(key, id) { try { var R = window.SLCcaReport && window.SLCcaReport.get(key); var o = R && R.outputs().find(function (x) { return x.id === id; }); if (o && o.what) return o.what; } catch (_) {} return String(id).replace(/^[a-z]+\./, '').replace(/[._-]+/g, ' '); }
+    function _ccaShot(key, sid, id) { var v = String(id); try { var R = window.SLCcaReport && window.SLCcaReport.get(key), L = R && R.shotViews ? R.shotViews(sid) : []; var f = (L || []).find(function (x) { return x.id === v; }); if (f && f.label) return '"' + f.label + '"'; } catch (_) {} return /^src:/.test(v) ? 'a danger source picture' : v.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase(); }
+    function _ccaDescribe(a, b) {
+        a = a && typeof a === 'object' ? a : {}; b = b && typeof b === 'object' ? b : {};
+        var fields = [], names = {};
+        Object.keys(a).concat(Object.keys(b)).forEach(function (key) {
+            if (names[key]) return; names[key] = 1;
+            var A = a[key] || {}, B = b[key] || {};
+            var docs = function (o) { var m = {}; if (o.doc) m[''] = o.doc; Object.keys(o.docs || {}).forEach(function (r) { m[r] = o.docs[r]; }); return m; };
+            var DA = docs(A), DB = docs(B);
+            Object.keys(DB).concat(Object.keys(DA)).filter(function (x, i, arr) { return arr.indexOf(x) === i; }).forEach(function (rid) {
+                var x = DA[rid] || {}, y = DB[rid] || {}, who = _ccaRepName(key, rid);
+                Object.keys(CCA_DOC).forEach(function (f) {
+                    var was = x[f], now = y[f];
+                    if (was === now || (was == null && now == null)) return;
+                    if (was == null && (f === 'no' || (f === 'status' && now === 'Draft'))) return;   // filled in by the app
+                    fields.push({ field: f, name: who + ': ' + CCA_DOC[f], was: was == null || was === '' ? (f === 'status' ? 'Draft' : 'not set') : String(was), now: now == null || now === '' ? 'not set' : String(now) });
+                });
+                var ia = (x.issues || []), ib = (y.issues || []);
+                if (ib.length > ia.length) ib.slice(ia.length).forEach(function (it) { fields.push({ field: 'issue', name: who + ': revision issued', was: ia.length ? 'revision ' + ia[ia.length - 1].rev : 'draft', now: 'revision ' + it.rev + (it.note ? ' (' + it.note + ')' : '') }); });
+                else if (ib.length && ia.length === ib.length && JSON.stringify(ia[ia.length - 1]) !== JSON.stringify(ib[ib.length - 1])) fields.push({ field: 'issue', name: who + ': revision note', was: ia[ia.length - 1].note || '', now: ib[ib.length - 1].note || '' });
+            });
+            var accs = function (o) { var m = {}; Object.keys(o.accept || {}).forEach(function (k) { m['|' + k] = o.accept[k]; }); Object.keys(o.accepts || {}).forEach(function (r) { Object.keys(o.accepts[r] || {}).forEach(function (k) { m[r + '|' + k] = o.accepts[r][k]; }); }); return m; };
+            var AA = accs(A), AB = accs(B);
+            Object.keys(AA).concat(Object.keys(AB)).filter(function (x, i, arr) { return arr.indexOf(x) === i; }).forEach(function (k) {
+                var x = AA[k], y = AB[k], rid = k.split('|')[0], oid = k.split('|').slice(1).join('|'), who = _ccaRepName(key, rid || null);
+                if (JSON.stringify(x || null) === JSON.stringify(y || null)) return;
+                fields.push({ field: 'accept', name: who + ': output "' + _ccaOut(key, oid) + '"', was: x ? 'accepted' : 'not accepted', now: y ? 'accepted' + (y.by ? ' by ' + y.by : '') : 'acceptance withdrawn' });
+            });
+            var SA = A.shots || {}, SB = B.shots || {};
+            Object.keys(SA).concat(Object.keys(SB)).filter(function (x, i, arr) { return arr.indexOf(x) === i; }).forEach(function (sid) {
+                var x = SA[sid], y = SB[sid]; if (JSON.stringify(x || null) === JSON.stringify(y || null)) return;
+                if (!x && Array.isArray(y) && y.length && y.every(function (v) { return /^src:/.test(String(v)); })) return;   // the per-source pictures the report ticks by itself the first time
+                var list = function (v) { return !v ? 'not chosen yet' : (v.length ? v.map(function (q) { return _ccaShot(key, sid, q); }).join(', ') : 'no pictures'); };
+                fields.push({ field: 'shots', name: _ccaRepName(key, sid) + ': pictures from the 3D model', was: list(x), now: list(y) });
+            });
+            // the report last open (tab) is where the person was, not a change
+        });
+        var reps = fields.map(function (f) { return f.name.split(':')[0]; }).filter(function (x, i, arr) { return arr.indexOf(x) === i; });
+        return { label: reps.length === 1 ? reps[0] : (reps.length ? reps.slice(0, 2).join(', ') + (reps.length > 2 ? ' and ' + (reps.length - 2) + ' more' : '') : 'Report settings'), fields: fields.map(function (f) { return { field: f.field, name: f.name.split(': ').slice(1).join(': ') || f.name, was: f.was, now: f.now }; }) };
+    }
     function _human(k) { return FIELD[k] || String(k).replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/_/g, ' ').toLowerCase(); }
     function _derivedField(k) { return String(k).charAt(0) === '_'; }
     function _empty(v) {
@@ -517,6 +569,11 @@
                 it.area = 'Project'; it.label = OTHER_LABEL[e.key] || _human(e.key);
                 if (e.op === 'added' && _empty(b)) it.book = true;
                 else if (e.op === 'changed' && _empty(a) && _empty(b)) it.derived = true;
+                items.push(it); return;
+            }
+            if (e.space === 'pc' && e.key === 'ccaReports') {
+                var cc = _ccaDescribe(a, b); it.area = 'Reports'; it.label = cc.label; it.fields = cc.fields.slice(0, 8); it.ref = { kind: 'setting', key: e.key };
+                if (!cc.fields.length) it.book = true;   // only what the app fills in by itself
                 items.push(it); return;
             }
             if (e.space === 'pc') {

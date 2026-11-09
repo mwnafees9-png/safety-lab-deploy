@@ -1,4 +1,4 @@
-// pra_autopilot.js (SLPraAuto v2.3, 9 Nov 2026; v2.2 9 Nov 2026; v2.1 8 Nov 2026): the PRA page.
+// pra_autopilot.js (SLPraAuto v2.7, 9 Nov 2026; v2.6 v2.5 v2.4 v2.3 9 Nov 2026; v2.2 9 Nov 2026; v2.1 8 Nov 2026): the PRA page.
 // v2.3, Waqas, 9 Nov 2026: "I want the PRA reports to explain their methods their basis, the math, where we have multiple
 // impact zones, we should have 1 image per cone like in the rotor burst PRA 1 per engine and the cones be different distinct
 // colors, show the calculations, tell the whole story please"; "yeah needs to look clean and legible". Each risk the CAD model
@@ -51,7 +51,7 @@
 // Answers: projectConfig.praAuto = { v:1, answers: { qid: { pick, by, at } }, signed: { riskKey: { by, at } } }.
 (function (root) {
     'use strict';
-    var VERSION = '2.3';   // 2.3 9 Nov 2026: each section tells the whole story (method, basis, calculations per danger source, one 3D picture per source); 2.2: 3D model pictures per risk
+    var VERSION = '2.7';   // 2.7 9 Nov 2026: the loss figure drawn with squared connectors in their own lanes (SLCcaReport.flow);   // 2.6 9 Nov 2026: proposed mitigations, path to compliance and conclusion are the engineer's (written or AI drafted and accepted); the tool's part is the summary of results;   // 2.5 9 Nov 2026: the burst bands table names each kind of piece's color in the pictures;   // 2.4 9 Nov 2026: every particular risk its own report, picked from a dropdown, with a register;   // 2.3 9 Nov 2026: each section tells the whole story (method, basis, calculations per danger source, one 3D picture per source); 2.2: 3D model pictures per risk
     var D2R = Math.PI / 180;
     function U() { return root.SLAutopilotUI; }
     function C() { return root.SLCadZonal; }
@@ -685,21 +685,21 @@
     function lossFigure(row, dm, C) {
         var F = root.SLCcaReport, zones = _arr(dm && dm.zones), direct = _arr(dm && dm.directSystems), knock = _arr(dm && dm.knockOn), fcs = _arr(dm && dm.tripped);
         if (!zones.length) return null;
-        var W = 900, X = [16, 246, 476, 706], BW = 178, y0 = 64, gap = 8, body = '', pos = {};
-        var col = function (ci, list, mk) { var y = y0; list.forEach(function (x) { var b = mk(x); var bx = F.box(X[ci], y, BW, b.t, b.s, b.k); body += F.nodeG('pra', b.id, bx.svg, b.t); pos[b.id] = { x: X[ci], y: y, h: bx.h }; y += bx.h + gap; }); return y; };
+        var pos = {}, colsN = [[], [], [], []], edges = [], C0 = C;
+        var col = function (ci, list, mk) { list.forEach(function (x) { var b = mk(x); colsN[ci].push({ id: b.id, t: b.t, s: b.s, k: b.k }); pos[b.id] = 1; }); return 0; };
         var sevKind = function (s) { return sevRank(s) >= 4 ? 'bad' : sevRank(s) >= 3 ? 'warn' : 'plain'; };
         var h1 = col(0, zones, function (z) { return { id: 'z:' + z, t: zoneLabel(z), s: 'Zone', k: 'on' }; });
         var h2 = col(1, direct, function (sid) { return { id: 's:' + sid, t: _sysName(sid), s: 'Lost directly', k: 'warn' }; });
         var h3 = col(2, knock, function (k) { return { id: 'k:' + k.id, t: _nd(k.name) || _sysName(k.id), s: 'Lost as a knock-on, through ' + (_nd(k.from) || 'the cascade'), k: 'off' }; });
         var h4 = col(3, fcs, function (f) { return { id: 'fc:' + f.fcId, t: fcLabel(f.fcId), s: (SEV_WORD[f.severity] || f.severity || '') + ' failure condition', k: sevKind(f.severity) }; });
-        var line = function (a, b) { var A = pos[a], B = pos[b]; if (!A || !B) return; body += '<line x1="' + (A.x + BW) + '" y1="' + (A.y + A.h / 2) + '" x2="' + (B.x - 2) + '" y2="' + (B.y + B.h / 2) + '" stroke="' + C.line + '" stroke-width="1.1" marker-end="url(#ccr-ah)"/>'; };
+        var line = function (a, b) { if (pos[a] && pos[b]) edges.push([a, b]); };
         _arr(dm.zoneNotes).forEach(function (zn) { zn.systems.forEach(function (sid) { line('z:' + zn.zone, 's:' + sid); }); });
         knock.forEach(function (k) { var fromId = direct.find(function (sid) { var s0 = _sys(sid); return _sysName(sid) === k.from || (s0 && s0.name === k.from); }); if (fromId) line('s:' + fromId, 'k:' + k.id); });
         _arr(dm.breaches).forEach(function (b) { var rule = _arr((_pc() || {}).macModels).find(function (r) { return r && r.id === b.ruleId; }); var mem = rule ? [].concat.apply([], _arr(rule.clauses).map(function (cl) { return _arr(cl.of); })) : []; b.fcs.forEach(function (f) { mem.forEach(function (sid) { if (pos['s:' + sid]) line('s:' + sid, 'fc:' + f.fcId); else if (pos['k:' + sid]) line('k:' + sid, 'fc:' + f.fcId); }); }); });
-        var Hh = Math.max(h1, h2, h3, h4, y0 + 40) + 10, title = 'What one ' + String(row.threat || 'event').toLowerCase() + ' takes out (' + row.praId + ')';
-        var hd = '<text x="16" y="24" font-size="14" font-weight="700" fill="' + C.ink + '">' + F.E(title) + '</text><text x="16" y="41" font-size="11" fill="' + C.sub + '">Zones it reaches, the systems lost directly and as a knock-on, and the failure conditions that trip. Click a box for more.</text>'
-            + ['ZONES', 'LOST DIRECTLY', 'KNOCK-ON', 'FAILURE CONDITIONS'].map(function (t, i) { return '<text x="' + (X[i] + BW / 2) + '" y="58" font-size="10" font-weight="700" fill="' + C.sub + '" text-anchor="middle">' + t + '</text>'; }).join('');
-        return { k: 'fig', name: 'loss-' + row.praId, title: title, svg: F.svgWrap(W, Hh, hd + body, title), w: W, h: Hh, lead: '{N} draws what one event takes out.' };
+        var title = 'What one ' + String(row.threat || 'event').toLowerCase() + ' takes out (' + row.praId + ')';
+        // v1.x 9 Nov 2026: drawn by the shared column diagram (squared connectors in their own lanes, never through a box)
+        var heads = ['ZONES', 'LOST DIRECTLY', 'KNOCK-ON', 'FAILURE CONDITIONS'], fl = F.flow('pra', { title: title, sub: 'Zones it reaches, the systems lost directly and as a knock-on, and the failure conditions that trip. Click a box for more.', cols: colsN.map(function (n, i) { return { head: heads[i], nodes: n }; }).filter(function (c) { return c.nodes.length; }), edges: edges });
+        return { k: 'fig', name: 'loss-' + row.praId, title: title, svg: fl.svg, w: fl.w, h: fl.h, lead: '{N} draws what one event takes out.' };
     }
     // the danger area on the CAD model (a picture from the Autopilot), dark when the page is
     function areaFigure(r, C) {
@@ -831,9 +831,10 @@
         b.push({ k: 'table', name: 'discs-' + r.key, title: 'Engine ' + r.engine + ': the disc numbers', rows: tbl, lead: '{N} gives the numbers for each disc of engine ' + r.engine + ' and where each comes from.' });
         // the bands: spread, from and to, the piece's path per disc, the units inside
         var D = {}; (ready ? r.calc.discs : []).forEach(function (x) { D[x.id] = x; });
-        var bands = r.frags.map(function (f) {
+        var bands = r.frags.map(function (f, fi) {
             var s = _spreadOf(f.id), inside = r.hits.filter(function (u) { return u.frag && _spreadOf(u.frag.id) <= s + 1e-9; });
-            return { 'Kind of piece': _fragLabel(f), 'Spread (rule)': '±' + s + '° (' + _paraOf(f) + ')', 'Band': '−' + s + '° to +' + s + '° from the disc plane, ' + (2 * s) + '° wide', 'Units inside': String(inside.length), 'Systems inside': String(_bySystem(inside).length) };
+            var fc = root.SLCadShots && root.SLCadShots.fragColor ? root.SLCadShots.fragColor(f.id, fi) : null;   // v2.5: each kind of piece has its own color in the pictures
+            return { 'Kind of piece': _fragLabel(f) + (fc ? ' (' + fc.name + ' in the pictures)' : ''), 'Spread (rule)': '±' + s + '° (' + _paraOf(f) + ')', 'Band': '−' + s + '° to +' + s + '° from the disc plane, ' + (2 * s) + '° wide', 'Units inside': String(inside.length), 'Systems inside': String(_bySystem(inside).length) };
         });
         b.push({ k: 'table', name: 'bands-' + r.key, title: 'Engine ' + r.engine + ': the burst bands', rows: bands, lead: '{N} gives each burst band of engine ' + r.engine + ' and how much lies inside it.' });
         // the path of each piece, per disc (its own table, one column per disc, so it stays legible in Word)
@@ -1042,7 +1043,7 @@
         if (!ret.length) b.push(P('No catastrophic outcome is reached by this risk on the model.'));
         ret.forEach(function (x) { b.push(P(fcLabel(x.fcId) + ': ' + retentionWords(x.state) + '.')); });
         // 9. conclusion
-        b.push({ k: 'part', text: '9. Conclusion' });
+        b.push({ k: 'part', text: '9. Summary of results' });   // v2.6: what the tool works out; the conclusion itself is the engineer's (part 12)
         b = b.concat(conclusionBlocks(row, rs, dm, zones));
         // simulate, scenarios and model links (on the page only)
         if (zones.length) b.push({ k: 'act', label: 'Simulate this risk on the Cascading Effects page', onclick: 'ccaSimulate(' + JSON.stringify(zones.map(function (z) { return 'zone:' + z; })) + ')' });
@@ -1205,9 +1206,16 @@
         try { if (typeof document !== 'undefined' && !document.getElementById('pra-page-style')) { var st = document.createElement('style'); st.id = 'pra-page-style'; st.textContent = '#view-pra > .generic-filter-bar{display:none !important}'; document.head.appendChild(st); } } catch (_) {}
         root.SLCcaReport.define({
             key: 'pra', viewId: 'view-pra', leftId: 'pra-auto-host', title: 'Particular Risk Assessment', code: 'PRA', sectionsTitle: 'The particular risks',
-            lead: 'Each particular risk has its own tab: its Autopilot questions on the left and its section of the report on the right (what it reaches, the equipment and functions there, what is lost and what protects against it). All risks shows the whole document. Edit a section or add a particular risk to change what the report says.',
+            lead: 'Each particular risk has its own report. Pick one in the list below: its Autopilot questions are on the left and its report on the right (what it reaches, the method, the basis, the calculations, what is lost and what protects against it), with its own document number, revisions and Word file. All risks (register) lists every report.',
             front: front, sections: function (ctx) { return sections(ctx); }, renderQuestions: function (R, tab) { return _leftHtml(tab || null); },
-            tabs: { allLabel: 'All risks', noun: 'risk' },
+            // v2.6 (9 Nov 2026): the parts the engineer writes, or drafts with the AI and accepts (not deterministic)
+            authored: [
+                { id: 'mitigations', title: '10. Proposed mitigations', purpose: 'Propose the design or installation changes that would protect against what this risk takes out. For each catastrophic outcome or set of lanes still open, say what would separate, shield, move or qualify it, and what that changes. Use only what this report records.' },
+                { id: 'compliance', title: '11. Path to compliance', purpose: 'Set out how compliance will be shown for this risk: the rule and guidance it is assessed against (see Basis), the analysis, test or inspection that will show each protection works, the evidence still needed, and who reviews it. Never state that anything is compliant.' },
+                { id: 'conclusion', title: '12. Conclusion', purpose: 'State what this assessment concludes: what the risk can take out, whether continued safe flight and landing is shown to survive it with the protections recorded, and what remains open before the risk can be closed.' }
+            ],
+            aiType: 'PRA',
+            tabs: { allLabel: 'All risks (register)', noun: 'risk', nounTitle: 'Particular risk', pickLabel: 'Particular risk', registerTitle: 'Particular risk reports' },
             edit: { addLabel: 'Add a particular risk', fields: editFields, save: saveRisk },
             io: IO, live: live, node: node, onShow: function () { _cache = null; forget(); },
             shots: function (id) { id = String(id || ''); return id.indexOf('ap:') === 0 ? { kind: 'pra', riskKey: id.slice(3) } : { kind: 'pra', praId: id }; }

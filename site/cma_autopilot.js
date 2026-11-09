@@ -1,4 +1,4 @@
-// cma_autopilot.js (SLCmaAuto v1.1, 8 Nov 2026): the CMA Autopilot. The Common Mode Analysis written by answering plain
+// cma_autopilot.js (SLCmaAuto v1.3, 9 Nov 2026; v1.2 v1.1 8 Nov 2026): the CMA Autopilot. The Common Mode Analysis written by answering plain
 // questions, one independence claim at a time, with the CMA report built from the answers.
 //
 // Waqas, 8 Nov 2026: "PRA build and ZSA similar to the planing autopilot, ability to see the reports etc. can we do
@@ -34,7 +34,7 @@
 // frame's "Outputs to accept" and this module read one record; v1.0's projectConfig.cmaAuto.accept is moved there once.
 (function (root) {
     'use strict';
-    var VERSION = '1.1';
+    var VERSION = '1.3';   // 1.3 9 Nov 2026: proposed mitigations, path to compliance and conclusion once per report, written or AI drafted and accepted;   // 1.2 9 Nov 2026: one report per system and one at the aircraft level, picked from a dropdown
 
     // ==== THE SWITCH ================================================================================================
     // Flip to true in phase 2, once the CMA report (cca_report.js) is on the page: the CMA table, its hidden entry form
@@ -548,7 +548,7 @@
         if (!s.accept || typeof s.accept !== 'object') s.accept = {};
         return s;
     }
-    function peekAccept() { var p = pc(); if (!p) return {}; var acc = (p.ccaReports && p.ccaReports.cma && p.ccaReports.cma.accept) || {}; var old = (p.cmaAuto && p.cmaAuto.accept) || {}; return Object.assign({}, old, acc); }
+    function peekAccept() { var p = pc(); if (!p) return {}; var cr = (p.ccaReports && p.ccaReports.cma) || {}, acc = cr.accept || {}, old = (p.cmaAuto && p.cmaAuto.accept) || {}, out = Object.assign({}, old, acc); Object.keys(cr.accepts || {}).forEach(function (rid) { Object.assign(out, cr.accepts[rid] || {}); }); return out; }
     function acceptance() { var acc = peekAccept(); return reportOutputs().map(function (o) { var a = acc[o.id]; return Object.assign({}, o, { state: !a ? 'open' : a.fp === o.fp ? 'accepted' : 'reopened', by: a && a.by, at: a && a.at }); }); }
     function acceptOutput(id) { var o = reportOutputs().find(function (x) { return x.id === id; }); if (!o) return no('No such output: ' + id); store().accept[id] = { by: who(), at: now(), fp: o.fp }; save(); return { ok: true }; }
     function unacceptOutput(id) { var s = store(); delete s.accept[id]; save(); return { ok: true }; }
@@ -695,16 +695,43 @@
     }
     function select(iid) { var r = rowById(iid); if (!r) return false; _ui.sel = r.internalId; var R = frame(); if (R && document.getElementById('ccr-host-cma')) R.answered('sec:' + anchorOf(r)); if (_host) redraw(); return true; }
     var PILL = { closed: 'ok', substantiated: 'ok', progress: 'open', open: 'todo', earlier: 'todo', reopened: 'open' };
-    function leftHtml() {
+    // v1.2 (9 Nov 2026): one CMA report per system and one at the aircraft level (Waqas: "CMAs should be per system and 1 at
+    // the aircraft level"; "they get a drop down on which CMA wanna work on Aircraft or which system, and that only shows the
+    // analysis for that particular system"). A claim belongs where its gates sit: all in one system's trees -> that system;
+    // in the aircraft trees, in several systems, or with no gate yet -> the aircraft level (where the systems meet).
+    function pageOfKey(k) { k = S(k); var pid = k.slice(0, k.lastIndexOf(':')); return arr('ftaPages').find(function (q) { return q && S(q.id) === pid; }) || null; }
+    function levelOfKey(k) { var pg = pageOfKey(k); return pg && pg.treeLevel === 'system' && pg.systemId ? 'sys:' + S(pg.systemId) : 'aircraft'; }
+    function levelOf(r) {
+        var ls = {}; gatesOf(r).forEach(function (k) { ls[levelOfKey(k)] = 1; });
+        var L = Object.keys(ls); return L.length === 1 ? L[0] : 'aircraft';
+    }
+    function sysCode(sy, used) {
+        var c = S(sy.code || sy.abbr || sy.shortName || '').replace(/[^A-Za-z0-9-]/g, '').toUpperCase();
+        if (!c) c = S(sy.name || sy.id).split(/[^A-Za-z0-9]+/).filter(Boolean).map(function (w) { return w.charAt(0); }).join('').toUpperCase() || 'SYS';
+        var c0 = c, n = 2; while (used[c]) c = c0 + n++; used[c] = 1; return c;
+    }
+    function frameReports() {
+        var used = { AC: 1 }, by = { aircraft: [] }, sys = arr('systemsData').filter(function (x) { return x && x.id != null; });
+        sys.forEach(function (sy) { by['sys:' + S(sy.id)] = []; });
+        claims().forEach(function (r) { var l = levelOf(r); (by[l] || by.aircraft).push(anchorOf(r)); });
+        return [{ id: 'aircraft', code: 'AC', label: 'Aircraft level', title: 'Aircraft level', sections: by.aircraft }]
+            .concat(sys.map(function (sy) { var nm = T(sy.name || sy.id); return { id: 'sys:' + S(sy.id), code: sysCode(sy, used), label: nm, title: nm, sections: by['sys:' + S(sy.id)] }; }));
+    }
+    function leftHtml(rep) {
         style();
         var list = claims(), cur = selected(), start = startQuestion();
+        if (rep) {
+            list = list.filter(function (r) { return levelOf(r) === rep; });
+            if (cur && list.indexOf(cur) < 0) cur = list[0] || null;
+            start = Object.assign({}, start, { options: (start.options || []).filter(function (o) { return levelOfKey(o.id) === rep; }) });
+        }
         var picker = '<div class="cmq-gh">Independence claims</div><div class="cmq-gi">Pick a claim to answer its questions; its section of the report lights up on the right. Claims a DAL reduction rests on come first.</div>'
             + '<div class="cmq-claims" role="listbox">' + list.map(function (r) {
                 var st = statusOf(r), on = cur && r === cur;
                 return '<button type="button" class="cmq-claim' + (on ? ' on' : '') + '" role="option" aria-selected="' + on + '" data-cmqclaim="' + E(r.internalId) + '" onclick="SLCmaAuto.ui.select(\'' + jsq(r.internalId) + '\')"><span class="cmq-cid">' + E(r.cmaId || '') + '</span><span class="cmq-cs">' + E(T(r.subject || 'Independence claim')) + '</span><span class="slap-pill ' + (PILL[st.state] || 'todo') + '">' + E(st.word) + '</span></button>';
             }).join('') + '</div>';
         var startHtml = start.options.length ? qHtml(start) : '';
-        var body = cur ? questionsHtml(cur.internalId) : '<div class="cmq-qx">No independence claim yet. Use "Add a CMA" on the report, or start one on a critical gate above.</div>';
+        var body = cur ? questionsHtml(cur.internalId) : '<div class="cmq-qx">No independence claim ' + (rep ? 'at this level' : '') + ' yet. Use "Add a CMA" on the report, or start one on a critical gate above.</div>';
         return '<div class="cmq" data-cmq-left="1">' + picker + startHtml + '</div>' + body;
     }
 
@@ -769,7 +796,7 @@
         return { ok: true, id: anchorOf(res.row) };
     }
     var ROLE_CLAIM = 'Chief safety engineer', ROLE_REQ = 'Aircraft safety lead';
-    function frameOutputs() { return reportOutputs().map(function (o) { var fp = o.fp; return { id: o.id, what: o.what, to: o.to.join(' and '), accept: o.accept, role: o.id === 'cma.reqs' ? ROLE_REQ : ROLE_CLAIM, fp: function () { return fp; } }; }); }
+    function frameOutputs(rep) { return reportOutputs().filter(function (o) { if (!rep || !/^cma\.claim\./.test(o.id)) return true; var r = rowById(o.id.slice(10)); return !r || levelOf(r) === rep; }).map(function (o) { var fp = o.fp; return { id: o.id, what: o.what, to: o.to.join(' and '), accept: o.accept, role: o.id === 'cma.reqs' ? ROLE_REQ : ROLE_CLAIM, fp: function () { return fp; } }; }); }
     function frameIO() {
         var io = reportIO();
         return { does: 'Checks that the inputs of every AND gate the fault trees count on share no single cause that can fail them together',
@@ -782,8 +809,17 @@
         try { var p0 = pc(); if (migrateAccept(p0)) save(); } catch (_) {}
         root.SLCcaReport.define({
             key: 'cma', viewId: 'view-cma', leftId: 'cma-auto-host', title: 'Common Mode Analysis', code: 'CMA', sectionsTitle: 'The independence claims',
-            lead: 'Each independence claim is a section of the report on the right: the AND gates relying on it, the common modes checked, the concerns and how each is closed, and where it stands. The Autopilot on the left asks the questions claim by claim; Edit a section or add a CMA to change what the report says.',
-            front: frameFront, sections: frameSections, renderQuestions: function () { return leftHtml(); },
+            lead: 'There is one Common Mode Analysis for the aircraft level and one for each system. Pick which one to work on in the list below: only that analysis shows, its claims and questions on the left and its report on the right. A claim belongs to the system whose fault trees hold its gates; a claim across systems belongs to the aircraft level.',
+            front: frameFront, sections: frameSections, renderQuestions: function (R, tab) { return leftHtml(tab || null); },
+            // v1.3 (9 Nov 2026): the parts the engineer writes once per CMA report (the aircraft level or one system)
+            authored: [
+                { id: 'mitigations', title: 'Proposed mitigations', purpose: 'Propose what would remove or guard against the common modes still open at this level: for each concern, the design, process or installation change that would break the shared cause, and what that changes. Use only what this report records.' },
+                { id: 'compliance', title: 'Path to compliance', purpose: 'Set out how the independence claims at this level will be substantiated: the evidence each needs (analysis, test, process records, supplier data), what is still missing, and who reviews it. Never state that anything is compliant.' },
+                { id: 'conclusion', title: 'Conclusion', purpose: 'State what this common mode analysis concludes: which independence claims hold with the evidence recorded, which do not yet, and what that means for the development assurance levels and fault tree credit that rest on them.' }
+            ],
+            authoredAt: 'report', aiType: 'CMA',
+            reports: frameReports,
+            tabs: { allLabel: false, noun: 'analysis', pickLabel: 'Common mode analysis for', groupHeading: function (r) { return r.id === 'aircraft' ? 'The independence claims at the aircraft level' : 'The independence claims in the ' + r.label; } },
             edit: { addLabel: 'Add a CMA', fields: frameFields, save: frameSave },
             io: frameIO(), outputs: frameOutputs, node: nodePanel, live: nodeLive, onShow: function () { forget(); }
         });

@@ -1,4 +1,4 @@
-// zsa_autopilot.js (SLZsaAuto v1.5, 9 Nov 2026; v1.4 8 Nov 2026; v1.0 4 Nov 2026): the ZSA Autopilot on the ZSA page.
+// zsa_autopilot.js (SLZsaAuto v1.8, 9 Nov 2026; v1.7 v1.6 v1.5 9 Nov 2026; v1.4 8 Nov 2026; v1.0 4 Nov 2026): the ZSA Autopilot on the ZSA page.
 //
 // Waqas: "Put PRAs in the PRA, ZSAs in the ZSA, with same interface as Sys Lab but make the inputs more intuitive like
 // CMAs in safety lab"; "think about it similarly to how we built the planning auto pilot"; "the interface should be so
@@ -44,7 +44,7 @@
 //     over), and keeps a severity an engineer set in the report's Edit (row.severityBy === 'engineer').
 (function (root) {
     'use strict';
-    var VERSION = '1.5';   // 1.5 9 Nov 2026: 3D model pictures per zone, picked beside its questions (spec.shots)
+    var VERSION = '1.8';   // 1.8 9 Nov 2026: the loss figure drawn with squared connectors in their own lanes (SLCcaReport.flow);   // 1.7 9 Nov 2026: proposed mitigations, path to compliance and conclusion per zone, written or AI drafted and accepted;   // 1.6 9 Nov 2026: every zone its own report, picked from a dropdown, with a register   // 1.5 9 Nov 2026: 3D model pictures per zone, picked beside its questions (spec.shots)
     // PHASE 2 SWITCH (8 Nov 2026): true hides the ZSA table, its entry form and the "Zone models" panel, because the
     // ZSA report (cca_report.js) holds every field with its own Edit and "Add a zone". Flip it when the report frame is wired.
     var TABLE_RETIRED = true;   // 8 Nov 2026 (v1.4): the report frame is wired, the table is retired
@@ -818,7 +818,7 @@
     // after an answer or a move, the frame redraws and lights up what changed (or the page redraws itself without one)
     function _redraw(flashKey) { var F = frame(); if (F) F.answered(flashKey || null); else render(); }
     var ui = {
-        zone: function (code) { state.zone = code || null; state.step = 0; if (code) materialize(code), U().save(); _secMemo = null; _redraw(code ? 'sec:' + code : null); },
+        zone: function (code) { state.zone = code || null; state.step = 0; if (code) materialize(code), U().save(); _secMemo = null; if (!code) { var F0 = frame(); if (F0 && F0.setTab) { F0.setTab(null); return; } } _redraw(code ? 'sec:' + code : null); },
         step: function (n) { state.step = n; _redraw(null); },
         pick: function (qid, opt) { answer(qid, opt); _secMemo = null; _redraw(qid); },
         sign: function (code) { sign(code); _secMemo = null; _redraw('sec:' + code); },
@@ -854,21 +854,21 @@
     // what one event in the zone takes out, drawn: the zone, the systems lost directly, the knock-on, the failure conditions
     function _lossFigure(sec, C) {
         var F = root.SLCcaReport, L = sec.loss; if (!F || !L || (!L.direct.length && !L.fcs.length)) return null;
-        var W = 900, X = [16, 246, 476, 706], BW = 178, y0 = 64, gap = 8, body = '', pos = {};
-        var col = function (ci, list, mk) { var y = y0; list.forEach(function (x) { var b = mk(x); var bx = F.box(X[ci], y, BW, b.t, b.s, b.k); body += F.nodeG('zsa', b.id, bx.svg, b.t); pos[b.id] = { x: X[ci], y: y, h: bx.h }; y += bx.h + gap; }); return y; };
+        var pos = {}, colsN = [[], [], [], []], edges = [], C0 = C;
+        var col = function (ci, list, mk) { list.forEach(function (x) { var b = mk(x); colsN[ci].push({ id: b.id, t: b.t, s: b.s, k: b.k }); pos[b.id] = 1; }); return 0; };
         var h1 = col(0, [sec.code], function (c) { return { id: 'z:' + c, t: sec.title, s: 'The zone', k: 'on' }; });
         var h2 = col(1, L.direct, function (id) { return { id: 's:' + id, t: _sysName(id) || id, s: 'Lost directly', k: 'warn' }; });
         var h3 = col(2, L.knock, function (k) { return { id: 'k:' + k.id, t: k.name || _sysName(k.id) || k.id, s: 'Lost as a knock-on, through ' + (k.from || 'what it depends on'), k: 'off' }; });
         var h4 = col(3, L.fcs, function (f) { return { id: 'fc:' + f.fcId, t: _fcLabel(f.fcId), s: (f.severity || 'Not classified') + ' failure condition', k: _sevKind(f.severity) }; });
-        var line = function (a, b) { var A = pos[a], B = pos[b]; if (!A || !B) return; body += '<line x1="' + (A.x + BW) + '" y1="' + (A.y + A.h / 2) + '" x2="' + (B.x - 2) + '" y2="' + (B.y + B.h / 2) + '" stroke="' + C.line + '" stroke-width="1.1" marker-end="url(#ccr-ah)"/>'; };
+        var line = function (a, b) { if (pos[a] && pos[b]) edges.push([a, b]); };
         L.direct.forEach(function (id) { line('z:' + sec.code, 's:' + id); });
         L.knock.forEach(function (k) { var from = L.direct.find(function (id) { return _sysName(id) === k.from; }); line(from ? 's:' + from : 'z:' + sec.code, 'k:' + k.id); });
         var mac = _arr(_pc().macModels);
         L.breaches.forEach(function (b) { var rule = mac.find(function (r) { return r && r.id === b.ruleId; }); var mem = rule ? [].concat.apply([], _arr(rule.clauses).map(function (c) { return _arr(c.of); })) : []; b.fcs.forEach(function (fc) { mem.forEach(function (id) { if (pos['s:' + id]) line('s:' + id, 'fc:' + fc); else if (pos['k:' + id]) line('k:' + id, 'fc:' + fc); }); }); });
-        var Hh = Math.max(h1, h2, h3, h4, y0 + 40) + 10, title = 'What one event in ' + sec.title + ' takes out';
-        var hd = '<text x="16" y="24" font-size="14" font-weight="700" fill="' + C.ink + '">' + F.E(title) + '</text><text x="16" y="41" font-size="11" fill="' + C.sub + '">The systems lost directly and as a knock-on, and the failure conditions that trip. Click a box for more.</text>'
-            + ['ZONE', 'LOST DIRECTLY', 'KNOCK-ON', 'FAILURE CONDITIONS'].map(function (t, i) { return '<text x="' + (X[i] + BW / 2) + '" y="58" font-size="10" font-weight="700" fill="' + C.sub + '" text-anchor="middle">' + t + '</text>'; }).join('');
-        return { k: 'fig', name: 'loss-' + sec.code, title: title, svg: F.svgWrap(W, Hh, hd + body, title), w: W, h: Hh, lead: '{N} draws what one event in the zone takes out.' };
+        var title = 'What one event in ' + sec.title + ' takes out';
+        // v1.x 9 Nov 2026: drawn by the shared column diagram (squared connectors in their own lanes, never through a box)
+        var heads = ['ZONE', 'LOST DIRECTLY', 'KNOCK-ON', 'FAILURE CONDITIONS'], fl = F.flow('zsa', { title: title, sub: 'The systems lost directly and as a knock-on, and the failure conditions that trip. Click a box for more.', cols: colsN.map(function (n, i) { return { head: heads[i], nodes: n }; }).filter(function (c) { return c.nodes.length; }), edges: edges });
+        return { k: 'fig', name: 'loss-' + sec.code, title: title, svg: fl.svg, w: fl.w, h: fl.h, lead: '{N} draws what one event in the zone takes out.' };
     }
     // reportSections() mapped onto the frame's blocks: sub-headings numbered, tables as rows of named columns, the
     // particular risks as a table with a link into the PRA report for each
@@ -971,8 +971,18 @@
         if (frame()) return true;
         root.SLCcaReport.define({
             key: 'zsa', viewId: 'view-zsa', leftId: 'zsa-auto-host', title: 'Zonal Safety Analysis', code: 'ZSA',
-            lead: 'The ZSA Autopilot on the left works the zonal analysis out from the CAD model and asks only the real choices. The ZSA report on the right is written from it as you answer; edit a zone or add one there.',
-            sectionsTitle: 'The zones', front: frameFront, sections: function (ctx) { return frameSections(ctx); }, renderQuestions: function () { return _leftHtml(); },
+            lead: 'Each zone has its own report. Pick one in the list below: the ZSA Autopilot asks only the real choices for that zone on the left, and its report is written on the right as you answer, with its own document number, revisions and Word file. All zones (register) lists every report.',
+            sectionsTitle: 'The zones', front: frameFront, sections: function (ctx) { return frameSections(ctx); },
+            // v1.6 (9 Nov 2026): every zone its own report, picked from a dropdown; the questions beside it are that zone's
+            renderQuestions: function (R, tab) { if (!tab && state.zone) { state.zone = null; state.step = 0; } if (tab && state.zone !== tab) { state.zone = tab; state.step = 0; _secMemo = null; try { materialize(tab); } catch (_) {} } return _leftHtml(); },
+            // v1.7 (9 Nov 2026): the parts the engineer writes for each zone, or drafts with the AI and accepts
+            authored: [
+                { id: 'mitigations', title: 'Proposed mitigations', purpose: 'Propose the installation changes that would close what is still open in this zone: for each finding, say what would separate, shield, drain, insulate or move the equipment involved, and what that changes. Use only what this report records.' },
+                { id: 'compliance', title: 'Path to compliance', purpose: 'Set out how compliance will be shown for this zone: the rules and guidance it is assessed against, the inspection, analysis or test that will show each protection works, the evidence still needed, and who reviews it. Never state that anything is compliant.' },
+                { id: 'conclusion', title: 'Conclusion', purpose: 'State what the analysis of this zone concludes: what one event in the zone can take out, whether the separation the design relies on holds with the protections recorded, and what remains open before the zone can be closed.' }
+            ],
+            aiType: 'ZSA',
+            tabs: { allLabel: 'All zones (register)', noun: 'zone', nounTitle: 'Zone', pickLabel: 'Zone', registerTitle: 'Zonal safety reports' },
             edit: { addLabel: 'Add a zone', fields: _frameFields, save: _frameSave },
             io: _frameIO(), live: _live, node: _node,
             shots: function (id) { return id ? { kind: 'zsa', zone: String(id) } : null; }, shotsFocus: function () { return state.zone || null; },

@@ -1,4 +1,4 @@
-// cad_shots.js, v1.1: screenshots of the 3D model for the reports (window.SLCadShots, 8 Nov 2026; v1.1 9 Nov 2026).
+// cad_shots.js, v1.2: screenshots of the 3D model for the reports (window.SLCadShots, 8 Nov 2026; v1.1 9 Nov 2026).
 //
 // v1.1, Waqas, 9 Nov 2026: "where we have multiple impact zones, we should have 1 image per cone like in the rotor burst
 // PRA 1 per engine and the cones be different distinct colors"; "yeah needs to look clean and legible".
@@ -32,12 +32,19 @@
 // sources and zone boxes in their own colors, and every other part ghosted in gray so the aircraft still reads around them.
 (function (root) {
     'use strict';
-    var VERSION = '1.1';
+    var VERSION = '1.2';   // 1.2 9 Nov 2026: every rotor fragment type in its own color
     var BG = '#FFFFFF';                // light background, every theme
     var HIGHLIGHT = '#1A6EF2';         // lit parts (ZSA pictures)
     var CHARCOAL = '#262A30';          // lit parts (PRA pictures): solid and dark, a color no danger source uses
     var DANGER = '#E03131';            // particular risk danger areas with no source of their own
     // v1.1: one color per danger source, in this order (the caption names it)
+    // v1.2 (9 Nov 2026): every rotor fragment type in its own color, the same in every picture (Waqas: "for PRA different
+    // colors I need every fragment type to have a different color too"); the engines are told apart by picture and caption
+    var FRAG_COLORS = { oneThirdDisc: ['#CC3311', 'red'], intermediate: ['#0077BB', 'blue'], small: ['#009988', 'teal'], alternate: ['#AA3377', 'purple'] };
+    function fragColor(id, i) { return FRAG_COLORS[id] || PALETTE[(4 + (i || 0)) % PALETTE.length]; }
+    function fragLabel(f) { return String((f && (f.label || f.id)) || 'fragment'); }
+    function fragWords(r) { return _arr(r.frags).map(function (f, i) { var c = fragColor(f.id, i); return 'the ' + fragLabel(f) + ' band in ' + c[1]; }); }
+    function _listWords(a) { return a.length <= 1 ? (a[0] || '') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1]; }
     var PALETTE = [['#CC3311', 'red'], ['#0077BB', 'blue'], ['#009988', 'teal'], ['#AA3377', 'purple'], ['#EE7733', 'orange'], ['#33BBEE', 'sky blue'], ['#228833', 'green'], ['#7A6A00', 'olive']];
     var ZONE = '#0CA678';              // the zone box (ZSA)
     var GHOST = '#7D8794';             // every other part
@@ -99,7 +106,9 @@
             r.discs.forEach(function (d) {
                 var reach = range;
                 if (MB) { var far = 0; for (var i = 0; i < 8; i++) { var q = [i & 1 ? MB.max[0] : MB.min[0], i & 2 ? MB.max[1] : MB.min[1], i & 4 ? MB.max[2] : MB.min[2]], w = [q[0] - d.center[0], q[1] - d.center[1], q[2] - d.center[2]], a = w[0] * d.axis[0] + w[1] * d.axis[1] + w[2] * d.axis[2]; far = Math.max(far, Math.sqrt(Math.max(0, w[0] * w[0] + w[1] * w[1] + w[2] * w[2] - a * a))); } reach = Math.min(range, far * 1.02); }
-                _arr(r.frags).forEach(function (f) { out.push({ kind: 'disk-sector', center: d.center, axis: d.axis, range: reach, spreadDeg: _spreadOf(f), color: color, opacity: Math.max(0.04, 0.3 / Math.sqrt(n)) }); });
+                // the bands nest (the narrowest inside the widest): the widest is drawn first and faint, each narrower one stronger on top
+                var sp0 = _arr(r.frags).map(function (f) { return _spreadOf(f); }), maxS = Math.max.apply(null, sp0.concat([1]));
+                _arr(r.frags).forEach(function (f, fi) { var sd = _spreadOf(f), rank = sp0.filter(function (x) { return x > sd; }).length; out.push({ kind: 'disk-sector', center: d.center, axis: d.axis, range: reach, spreadDeg: sd, color: fragColor(f.id, fi)[0], frag: f.id, opacity: Math.min(0.55, (sd >= maxS ? 0.07 : 0.2 + 0.15 * rank) / Math.sqrt(r.discs.length) * 1.4), order: 8 + rank }); });
             });
             return out;
         }
@@ -111,7 +120,7 @@
     }
     // v1.1: the shapes of one danger source, in its color (a rotor burst source is the engine: its discs' bands)
     function sourceShapes(r, src, MB, color) {
-        if (r.kind === 'ROTOR') return riskShapes(r, MB, color).map(function (x) { return Object.assign(x, { opacity: Math.min(0.2, x.opacity * 1.4) }); });
+        if (r.kind === 'ROTOR') return riskShapes(r, MB, color);   // v1.2: each kind of piece keeps its own strength (riskShapes)
         return riskShapes({ kind: r.kind, shapes: _arr(src.shapes) }, MB, color).map(function (x) { return Object.assign(x, { opacity: 0.32 }); });   // strong enough to read in print
     }
     // the danger sources of a subject, in order, each with its color
@@ -181,9 +190,10 @@
         var lab = s.label, col = x.colorName;
         if (r.kind === 'ROTOR') {
             dir = PLAN; box = _union([_grow(MB, 0.03), sb, hb]);   // the whole aircraft, the same size for every engine
-            cap = r.title + ', seen from above (nose to the left): its burst bands in ' + col + ' (darker where a narrower band lies inside a wider one) and the parts they reach in charcoal';
-            lead = '{N} shows ' + _lc(lab) + ' and the parts its burst bands reach, on the 3D model, in ' + col + '.';
-            why = 'Engine ' + (r.engine || '') + ' alone: its burst bands in ' + col + ' and the parts they reach in charcoal.';
+            var fw = _listWords(fragWords(r));
+            cap = r.title + ', seen from above (nose to the left): ' + fw + ', and the parts they reach in charcoal';
+            lead = '{N} shows ' + _lc(lab) + ' on the 3D model, each kind of piece in its own color, and the parts its bands reach.';
+            why = 'Engine ' + (r.engine || '') + ' alone: ' + fw + '; the parts they reach in charcoal.';
         } else if (r.kind === 'BIRD') {
             dir = PLAN; box = _union([_grow(MB, 0.03), sb, hb]);   // the whole aircraft: the surfaces of a group spread over it
             cap = r.title + ', ' + _lc(lab) + ', seen from above (nose to the left): the slabs behind the struck surfaces in ' + col + ' and the parts a bird can reach in charcoal';
@@ -208,6 +218,7 @@
         }
         var v = _view(x.id, lab, dir, box || _grow(MB, 0.02), lit, why); if (dir === PLAN) _plan(v);
         v.default = true; v.source = { risk: r.key, id: s.id, label: lab }; v.color = x.color; v.colorName = col; v.caption = cap; v.lead = lead;
+        if (r.kind === 'ROTOR') { v.colors = _arr(r.frags).map(function (f, i) { var c = fragColor(f.id, i); return { hex: c[0], name: c[1], label: fragLabel(f) }; }); v.color = null; }
         return v;
     }
     function _cap(t) { t = String(t || ''); return t.charAt(0).toUpperCase() + t.slice(1); }
@@ -234,9 +245,10 @@
             var hitWord = srcs.length ? 'charcoal' : 'blue';
             // v1.1: one picture per danger source first, each in its own color (pre-ticked in the report)
             var out = srcs.map(function (x) { return sourceView(x, MB, unitBox); });
-            var who = srcs.length > 1 ? srcs.map(function (x) { return _lc(x.s.label) + ' in ' + x.colorName; }).join(', ') : (srcs.length ? what.replace(/^the /, '') + ' in ' + srcs[0].colorName : what.replace(/^the /, '') + ' in red');
+            var fragC = rs[0].kind === 'ROTOR' ? _arr(rs[0].frags).map(function (f, i) { var c = fragColor(f.id, i); return { hex: c[0], name: c[1], label: fragLabel(f) }; }) : null;
+            var who = rs[0].kind === 'ROTOR' && _arr(rs[0].frags).length ? _listWords(fragWords(rs[0])) + ' (every engine)' : srcs.length > 1 ? srcs.map(function (x) { return _lc(x.s.label) + ' in ' + x.colorName; }).join(', ') : (srcs.length ? what.replace(/^the /, '') + ' in ' + srcs[0].colorName : what.replace(/^the /, '') + ' in red');
             var cap = function (lab) { return name + ', ' + _lc(lab) + ': ' + who + '; the parts reached in ' + hitWord; };
-            var ov = function (id, label, dir, box, l, why) { var v = _view(id, label, dir, box, l, why); v.caption = cap(label); return v; };
+            var ov = function (id, label, dir, box, l, why) { var v = _view(id, label, dir, box, l, why); v.caption = cap(label); if (fragC) v.colors = fragC; return v; };
             out.push(ov('side', 'Danger area, from the side', [0, sy, 0], area, lit, 'Shows ' + what + ' of ' + name + ' along the aircraft and how high it reaches, with the parts it hits in ' + hitWord + '.'),
                 _plan(ov('above', 'Danger area, from above', PLAN, _union([area, _grow(MB, 0.03)]), lit, 'Shows how far ' + what + ' of ' + name + ' spreads across the aircraft, with the parts it hits in ' + hitWord + '.')),
                 ov('front', 'Danger area, from the front', [-1, 0, 0], area, lit, 'Shows ' + what + ' of ' + name + ' seen from the nose, which sides and heights it reaches.'));
@@ -307,9 +319,9 @@
         else g = new T.LatheGeometry(sp.points.map(function (p) { return new T.Vector2(p[0], p[1]); }), 64, sp.phiStart || 0, sp.phiLength || Math.PI * 2);
         var col = s.color || DANGER;
         var m = new T.Mesh(g, new T.MeshBasicMaterial({ color: col, transparent: true, opacity: style === 'outline' ? 0.03 : (s.opacity || 0.22), depthWrite: false, depthTest: true, side: T.DoubleSide }));
-        m.renderOrder = 8;
+        m.renderOrder = s.order || 8;
         var ed = new T.LineSegments(new T.EdgesGeometry(g, 20), new T.LineBasicMaterial({ color: col, transparent: true, opacity: 0.9, depthTest: false }));
-        ed.renderOrder = 9; m.add(ed);
+        ed.renderOrder = (s.order || 8) + 10; m.add(ed);
         if (sp.type === 'sphere') m.position.set(sp.center[0], sp.center[1], sp.center[2]);
         else if (sp.type === 'box') m.position.set((sp.min[0] + sp.max[0]) / 2, (sp.min[1] + sp.max[1]) / 2, (sp.min[2] + sp.max[2]) / 2);
         else {
@@ -398,7 +410,7 @@
 
     var api = { VERSION: VERSION, ready: ready, views: views, capture: capture, clearCache: clearCache, dispose: dispose,
         stats: function () { return { captures: _stats.captures, hits: _stats.hits, lastMs: _stats.lastMs, cached: Object.keys(_cache).length }; },
-        COLORS: { background: BG, highlight: HIGHLIGHT, charcoal: CHARCOAL, danger: DANGER, zone: ZONE, ghost: GHOST }, PALETTE: PALETTE.map(function (c) { return { hex: c[0], name: c[1] }; }),
+        FRAG_COLORS: FRAG_COLORS, fragColor: function (id, i) { var c = fragColor(id, i); return { hex: c[0], name: c[1] }; }, COLORS: { background: BG, highlight: HIGHLIGHT, charcoal: CHARCOAL, danger: DANGER, zone: ZONE, ghost: GHOST }, PALETTE: PALETTE.map(function (c) { return { hex: c[0], name: c[1] }; }),
         _hidden: function () { return _hv; }, _pure: { riskShapes: riskShapes, sourceShapes: sourceShapes, shapeBox: shapeBox, cacheKey: cacheKey, subjectKey: subjectKey } };
     root.SLCadShots = api;
     if (typeof module !== 'undefined' && module.exports) module.exports = api;

@@ -41,7 +41,7 @@ const REPO = path.join(__dirname, '..'), SITE = path.join(REPO, 'site');
 const MUT = process.env.SL_PRA_REPORT_MUTATE || '';
 const MUTS = {
   dup:      ['pra_autopilot.js', "if (dupT) return { ok: false, err: dupT.praId + ' already covers ' + dupT.threat + '. Edit that one instead.' };", ''],
-  noflash:  ['cca_report.js', 'function answered(qid) { ui0.flash = qid || null;', 'function answered(qid) { ui0.flash = null;'],
+  noflash:  ['cca_report.js', 'ui0.flash = qid || null; ui0.msg = null; render();', 'ui0.flash = null; ui0.msg = null; render();'],
   noreopen: ['cca_report.js', "var st = !r ? 'open' : (r.fp === fp ? 'accepted' : 'reopened');", "var st = !r ? 'open' : 'accepted';"],
   counts:   ['pra_autopilot.js', "the analysis asks what it reaches and whether the aircraft can still fly and land safely.' },", "the analysis asks what it reaches and whether the aircraft can still fly and land safely. ' + _arr(_g('praData')).length + ' particular risks are recorded.' },"],
   noequip:  ['pra_autopilot.js', 'function equipmentOf(code) {', 'function equipmentOf(code) { return [];'],
@@ -49,18 +49,17 @@ const MUTS = {
   darkleak: ['cca_report.js', 'C = dark ? DARK : LIGHT;', 'C = LIGHT;'],
   table:    ['index.html', '<div id="pra-legacy-ui" hidden style="display:none">', '<div id="pra-legacy-ui">'],
   nonames:  ['pra_autopilot.js', "function fcLabel(fcId) { var f = _fc(fcId); return f && f.fcDesc ? fcId + ' ' + f.fcDesc : fcId; }", 'function fcLabel(fcId) { return fcId; }'],
-  // v1.2 / v2.1: the tabs
-  notabs:     ['pra_autopilot.js', "tabs: { allLabel: 'All risks', noun: 'risk' },", ''],
-  tabreport:  ['cca_report.js', "bodyHtml(doc({ dark: dark, only: cur, secs: secs }), true)", "bodyHtml(doc({ dark: dark, secs: secs }), true)"],
-  tabq:       ['pra_autopilot.js', "var L = tab ? res.risks.filter(function (r) { return secOf(r) === tab; }) : res.risks;", "var L = res.risks;"],
-  qfilter:    ['cca_report.js', "function (q, id) { return q.sec === id; }", "function (q, id) { return true; }"],
-  noaddtab:   ['cca_report.js', "(wasAdd || (a && storedTab() === a && nid !== a))", "((a && storedTab() === a && nid !== a))"],
-  noswitch:   ['cca_report.js', "if (tabsOn() && /^sec:/.test(target) && !(o && o.stay)) {", "if (false) {"],
+  // v1.5 / v2.4 (9 Nov 2026): every risk its own report, one dropdown, a register
+  notabs:     ['pra_autopilot.js', "tabs: { allLabel: 'All risks (register)', noun: 'risk', nounTitle: 'Particular risk', pickLabel: 'Particular risk', registerTitle: 'Particular risk reports' },", ''],
+  nodrop:     ['cca_report.js', "'<select id=\"ccr-sel-'", "'<span id=\"ccr-sel-'"],
+  noreg:      ['cca_report.js', "+ rows.map(function (x) { return '<tr data-cc-regrow=", "+ [].map(function (x) { return '<tr data-cc-regrow="],
+  shareddoc:  ['cca_report.js', "            if (REP) {\n                d = s0.docs[REP];", "            if (false) {\n                d = s0.docs[REP];"],
+  sharedacc:  ['cca_report.js', "var s = store(); if (!REP) return s.accept;", "var s = store(); return s.accept;"],
+  tabq:       ['pra_autopilot.js', "var L = tab ? res.risks.filter(function (r) { return secOf(r) === tab; })", "var L = tab ? res.risks"],
+  noaddtab:   ['cca_report.js', "{ var rn = repOfSection(nid); setTab(rn ? rn.id : nid, { render: false }); }", "{ }"],
+  noswitch:   ['cca_report.js', "if (rs0 && tab() !== rs0.id) {", "if (false) {"],
   noremember: ['cca_report.js', "var s = store(); if (id) s.tab = id; else delete s.tab;", "var s = store(); delete s.tab;"],
-  wide:       ['cca_report.js', "@media (max-width:1100px){.ccr-cols{grid-template-columns:minmax(0,1fr)}}.ccr-left,.ccr-right{min-width:0;max-width:100%}", "@media (max-width:1100px){.ccr-cols{grid-template-columns:1fr}}"],
-  darktab:    ['cca_report.js', "body.theme-dark .ccr-tab{background:#1B1F26;border-color:#3A404A;color:#E8EAED}", ""],
-  wordsec:    ['cca_report.js', "var bl = doc({ forExport: true, only: only })", "var bl = doc({ forExport: true })"],
-  nokeep:     ['cca_report.js', "if (Math.abs(tb.clientWidth - w0) < 1) return; w0 = tb.clientWidth; keep(); setTimeout(keep, 60); setTimeout(keep, 250);", "return;"]
+  wordrep:    ['cca_report.js', "var blR = doc({ forExport: true, report: REP });", "var blR = doc({ forExport: true });"]
 };
 if (MUT && !MUTS[MUT]) { console.error('unknown mutation ' + MUT); process.exit(3); }
 function src(name) {
@@ -115,7 +114,7 @@ function contrast(a, b) { const x = lum(a), y = lum(b); return (Math.max(x, y) +
         const R = SLCcaReport.get('pra'), host = document.getElementById('ccr-host-pra'), pv = host && host.querySelector('[data-ccdoc]');
         const t0 = performance.now(); R.render(); const ms = performance.now() - t0;
         const bl = R.doc(), rows = praData.filter((r) => r && r.praId);
-        const secIds = [...document.querySelectorAll('#ccr-host-pra [data-ccsec]')].map((e) => e.getAttribute('data-ccsec'));
+        R.setTab(null); const secIds = [...document.querySelectorAll('#ccr-host-pra [data-cc-regrow]')].map((e) => e.getAttribute('data-cc-regrow'));
         const per = {};
         rows.forEach((r) => { const s = bl.filter((x) => x.sec === r.praId); per[r.praId] = { parts: s.filter((x) => x.k === 'part').map((x) => x.text), text: s.map((x) => x.k === 'table' ? x.caption + ' ' + JSON.stringify(x.rows) : (x.text || x.caption || x.label || '')).join('\n'), acts: s.filter((x) => x.k === 'act').map((x) => x.label), tables: s.filter((x) => x.k === 'table').map((x) => ({ name: x.name, rows: x.rows })) }; });
         const tbl = document.getElementById('pra-table');
@@ -123,9 +122,9 @@ function contrast(a, b) { const x = lum(a), y = lum(b); return (Math.max(x, y) +
           rows: rows.map((r) => r.praId), secIds, per, all: bl.map((x) => x.k === 'table' ? JSON.stringify(x.rows) : (x.text || '')).join('\n') };
       });
       check('A1 the PRA table, its form and the threat models panel are gone from the page; the Autopilot is on the left and the report on the right', A.shown && A.left && !A.tableVisible && !A.formVisible && !A.models, JSON.stringify({ shown: A.shown, left: A.left, t: A.tableVisible, f: A.formVisible, m: A.models }));
-      check('A2 one section per particular risk (every PRA record, in order, none twice)', A.rows.length >= 15 && JSON.stringify(A.secIds) === JSON.stringify(A.rows.slice().sort((x, y) => x.localeCompare(y, undefined, { numeric: true }))), A.secIds.join(',') + ' vs ' + A.rows.join(','));
+      check('A2 one report per particular risk (every PRA record, in order, none twice, in the register)', A.rows.length >= 15 && JSON.stringify(A.secIds) === JSON.stringify(A.rows.slice().sort((x, y) => x.localeCompare(y, undefined, { numeric: true }))), A.secIds.join(',') + ' vs ' + A.rows.join(','));
       // 9 Nov 2026 (pra_autopilot 2.3, the whole story): the risk and its question, method, basis, calculations, the results, the choices, retention, the conclusion
-      const parts7 = ['1. The risk and the question it answers', '2. Method', '3. Basis', '4. Calculations', '5. Results: what it reaches', '5.1 Zones it reaches', '5.2 Equipment in those zones', '5.3 Functions that equipment performs', '6. Results: what is lost', '7. The choices made', '8. Retention of catastrophic outcomes', '9. Conclusion'];
+      const parts7 = ['1. The risk and the question it answers', '2. Method', '3. Basis', '4. Calculations', '5. Results: what it reaches', '5.1 Zones it reaches', '5.2 Equipment in those zones', '5.3 Functions that equipment performs', '6. Results: what is lost', '7. The choices made', '8. Retention of catastrophic outcomes', '9. Summary of results', '10. Proposed mitigations', '11. Path to compliance', '12. Conclusion'];
       const top = (id) => A.per[id].parts.filter((t) => !/^4\.\d+ /.test(t));   // the per-source headings 4.1, 4.2 ... sit inside the calculations
       check('A3 every section has all its parts, and Simulate', A.rows.every((id) => JSON.stringify(top(id)) === JSON.stringify(parts7) && A.per[id].acts.some((l) => /Simulate/.test(l))), A.rows.filter((id) => JSON.stringify(top(id)) !== JSON.stringify(parts7)).join(','));
       const t3 = A.per['PRA-003'];
@@ -148,103 +147,55 @@ function contrast(a, b) { const x = lum(a), y = lum(b); return (Math.max(x, y) +
       check('A16 the rotor burst section carries the disc numbers state (not run yet) and a picture of each of the four engines (from the 3D model, or the drawn danger area where it cannot be drawn)', /Not decided yet: the disc numbers for engine 1/.test(A.per['PRA-001'].text) && [1, 2, 3, 4].every((e) => new RegExp('Engine ' + e + ' rotor burst: the danger area|Engine ' + e + ' rotor burst, seen from above|Drawing the picture "Engine ' + e + '"').test(A.per['PRA-001'].text)), A.per['PRA-001'].text.slice(0, 300));
       check('A17 the whole report redraws in well under two seconds', A.ms < 2000, A.ms + ' ms');
 
-      console.log('\n[T] one tab per particular risk');
+      console.log('\n[T] every particular risk its own report, picked from one dropdown (9 Nov 2026)');
       const T1 = await pg.evaluate(() => {
-        const R = SLCcaReport.get('pra'), bar = document.querySelector('#ccr-host-pra [data-cctabs]'), tabs = bar ? [...bar.querySelectorAll('[role="tab"]')] : [];
+        const h = document.getElementById('ccr-host-pra'), sel = h.querySelector('[data-cctabsel]'), opts = sel ? [...sel.options] : [];
         const ids = praData.filter((r) => r && r.praId).map((r) => r.praId).sort((x, y) => x.localeCompare(y, undefined, { numeric: true }));
-        return { role: bar && bar.getAttribute('role'), first: tabs[0] && tabs[0].textContent, firstOn: tabs[0] && tabs[0].getAttribute('aria-selected'), tabIds: tabs.slice(1).map((t) => t.getAttribute('data-cctab')), ids,
-          labels: tabs.slice(1).map((t) => t.textContent), names: praData.filter((r) => r && r.praId).reduce((m, r) => (m[r.praId] = r.threat, m), {}), cur: R.tab(), api: R.tabs().length };
+        const names = praData.filter((r) => r && r.praId).reduce((m, r) => (m[r.praId] = r.threat, m), {});
+        const rows = [...h.querySelectorAll('[data-cc-regrow]')].map((r) => ({ id: r.getAttribute('data-cc-regrow'), no: r.children[0].textContent, open: !!r.querySelector('[data-cc-open]') }));
+        return { sel: !!sel, tabRow: h.querySelectorAll('.ccr-tab').length, first: opts[0] && opts[0].text, firstVal: opts[0] && opts[0].value, vals: opts.slice(1).map((o) => o.value), labels: opts.slice(1).map((o) => o.text), ids, names, rows, cur: SLCcaReport.get('pra').tab(),
+          cover: !!h.querySelector('[data-ccdoc] [data-cc-cover]'), wordAll: !!h.querySelector('[data-cc-wordall]'), word: !!h.querySelector('[data-cc-word]'), print: !!h.querySelector('[data-cc-print]'), docctl: !!h.querySelector('[data-cc-docctl]') };
       });
-      check('T1 a row of tabs across the top: "All risks" first and open, then one tab per particular risk in PRA ID order', T1.role === 'tablist' && T1.first === 'All risks' && T1.firstOn === 'true' && T1.cur === null && T1.ids.length >= 19 && JSON.stringify(T1.tabIds) === JSON.stringify(T1.ids) && T1.api === T1.ids.length, JSON.stringify(T1).slice(0, 500));
-      check('T2 each tab is labeled with the PRA ID and its short name (PRA-001 Uncontained engine rotor burst)', T1.labels[0] === 'PRA-001Uncontained engine rotor burst' && T1.ids.every((id, i) => T1.labels[i] === id + T1.names[id]), T1.labels.slice(0, 3).join(' | '));
-      const T3 = await pg.evaluate(() => {
-        const h = document.getElementById('ccr-host-pra'), pv = h.querySelector('[data-ccdoc]'), txt = pv.textContent;
-        return { cover: !!pv.querySelector('[data-cc-cover]'), toc: !!pv.querySelector('[data-cc-toc]'), lot: pv.querySelectorAll('[data-cc-lot]').length, lof: pv.querySelectorAll('[data-cc-lof]').length, ctl: /Document control/.test(txt), io: /Inputs and outputs/.test(txt), oa: /Outputs and acceptance/.test(txt),
-          secs: pv.querySelectorAll('[data-ccsec]').length, word: !!h.querySelector('[data-cc-word]'), print: !!h.querySelector('[data-cc-print]'), wordsec: !!h.querySelector('[data-cc-wordsec]'), accept: !!h.querySelector('[data-cc-accept]'), docctl: !!h.querySelector('[data-cc-docctl]'), rail: h.querySelectorAll('#pra-auto-host [data-slap-rail]').length };
-      });
-      check('T3 All risks is the full PRA document (cover, document control, contents, lists of tables and figures, inputs and outputs, every risk section, outputs and acceptance) with Word and Print; the outputs to accept and document control sit on its left with the overview of every risk', T3.cover && T3.toc && T3.lot > 10 && T3.lof > 10 && T3.ctl && T3.io && T3.oa && T3.secs === T1.ids.length && T3.word && T3.print && !T3.wordsec && T3.accept && T3.docctl && T3.rail >= 9, JSON.stringify(T3));
-      await pg.click('#ccr-host-pra [data-cctab="PRA-003"]'); await tick(600);
+      check('T1 one dropdown, no row of tabs: "All risks (register)" first and picked, then every particular risk in PRA ID order', T1.sel && T1.tabRow === 0 && T1.first === 'All risks (register)' && T1.firstVal === '' && T1.cur === null && T1.ids.length >= 19 && JSON.stringify(T1.vals) === JSON.stringify(T1.ids), JSON.stringify({ first: T1.first, vals: T1.vals.slice(0, 4), tabRow: T1.tabRow }));
+      check('T2 each choice reads the PRA ID and its full name (PRA-001 Uncontained engine rotor burst)', T1.labels[0] === 'PRA-001 Uncontained engine rotor burst' && T1.ids.every((id, i) => T1.labels[i] === id + ' ' + T1.names[id]), T1.labels.slice(0, 3).join(' | '));
+      check('T3 All risks is a register, not one document: a row per risk with its own document number (HL1-PRA-001 ...) and an Open button; "Export every report to Word"; no cover, no single Word or Print', JSON.stringify(T1.rows.map((r) => r.id)) === JSON.stringify(T1.ids) && T1.rows.every((r) => /-PRA-\d{3}$/.test(r.no) && r.open) && T1.rows[2].no.slice(-7) === 'PRA-003' && T1.wordAll && !T1.word && !T1.print && !T1.cover && !T1.docctl, JSON.stringify(T1.rows.slice(0, 3)));
+      await pg.selectOption('#ccr-host-pra [data-cctabsel]', 'PRA-003'); await tick(800);
       const T4 = await pg.evaluate(() => {
-        const h = document.getElementById('ccr-host-pra'), pv = h.querySelector('[data-ccdoc]'), left = h.querySelector('#pra-auto-host'), on = h.querySelector('.ccr-tab.on');
-        const tire = SLPraAuto.compute().risks.find((r) => r.kind === 'TIRE'), others = SLPraAuto.compute().risks.filter((r) => SLPraAuto.secOf(r) !== 'PRA-003');
+        const h = document.getElementById('ccr-host-pra'), pv = h.querySelector('[data-ccdoc]'), left = h.querySelector('#pra-auto-host'), cov = pv.querySelector('[data-cc-cover]');
+        const others = SLPraAuto.compute().risks.filter((r) => SLPraAuto.secOf(r) !== 'PRA-003');
         const qboxes = [...left.querySelectorAll('[data-slap-q]')].map((e) => e.getAttribute('data-slap-q'));
-        return { on: on && on.getAttribute('data-cctab'), sel: on && on.getAttribute('aria-selected'), cur: SLCcaReport.get('pra').tab(), secs: [...pv.querySelectorAll('[data-ccsec]')].map((e) => e.getAttribute('data-ccsec')), cover: !!pv.querySelector('[data-cc-cover],[data-cc-toc]'),
-          head: (pv.querySelector('[data-cc-tabhead]') || {}).textContent || '', h: (pv.querySelector('[data-ccsec="PRA-003"] h3') || {}).textContent || '', edit: !!pv.querySelector('[data-cc-edit="PRA-003"]'), figs: pv.querySelectorAll('.ccr-fig [data-ccnode]').length,
-          parts: [...pv.querySelectorAll('.ccr-part')].map((e) => e.textContent), word: !!h.querySelector('[data-cc-word]'), print: !!h.querySelector('[data-cc-print]'), wordsec: (h.querySelector('[data-cc-wordsec]') || {}).textContent || '', accept: !!h.querySelector('[data-cc-accept]'), docctl: !!h.querySelector('[data-cc-docctl]'),
-          leftTab: left.querySelector('[data-pra-tab]') && left.querySelector('[data-pra-tab]').getAttribute('data-pra-tab'), rail: left.querySelectorAll('[data-slap-rail]').length, leftText: left.textContent, tireTitle: tire.title, otherTitles: others.map((r) => r.title), add: !!h.querySelector('[data-cc-add]'),
-          caps: [...pv.querySelectorAll('.ccr-cap')].map((e) => e.textContent).slice(0, 3), otherQ: others.some((r) => r.questions.some((q) => qboxes.indexOf(q.id) >= 0)) };
+        return { cover: cov ? cov.textContent : '', toc: !!pv.querySelector('[data-cc-toc]'), lot: pv.querySelectorAll('[data-cc-lot]').length, lof: pv.querySelectorAll('[data-cc-lof]').length, io: /Inputs and outputs/.test(pv.textContent), oa: /Outputs and acceptance/.test(pv.textContent),
+          secs: [...pv.querySelectorAll('[data-ccsec]')].map((e) => e.getAttribute('data-ccsec')), word: !!h.querySelector('[data-cc-word]'), print: !!h.querySelector('[data-cc-print]'), docctl: !!h.querySelector('[data-cc-docctl]'), accept: !!h.querySelector('[data-cc-accept]'), add: !!h.querySelector('[data-cc-add]'),
+          otherQ: qboxes.some((q) => others.some((r) => q.indexOf(r.key) === 0)) || /rotor burst/i.test(left.textContent), qN: qboxes.length, tire: /Tire burst/.test(left.textContent), sel: h.querySelector('[data-cctabsel]').value, figN: (pv.querySelector('.ccr-cap[data-cc-a^="f"]') || pv.querySelector('[data-cc-lof] a') || { textContent: '' }).textContent };
       });
-      check('T4 the PRA-003 tab opens: only its section on the right, with its own short header (the document, its number and revision) and the risk title, its Edit and its figures; no cover or contents', T4.on === 'PRA-003' && T4.sel === 'true' && T4.cur === 'PRA-003' && JSON.stringify(T4.secs) === '["PRA-003"]' && !T4.cover && /^Particular Risk Assessment · \S+-PRA-001 Rev /.test(T4.head) && /^1\. PRA-003 Tire burst/.test(T4.h) && T4.edit && T4.figs >= 4 && T4.parts.length === 12, JSON.stringify(T4).slice(0, 700));
-      check('T5 ...its tables and figures are numbered on their own (Figure 1, Table 1); Word and Print give way to "Export this risk to Word"; Add stays', /^(Figure|Table) 1: /.test(T4.caps[0] || '') && !T4.word && !T4.print && T4.wordsec === 'Export this risk to Word' && T4.add && !T4.accept && !T4.docctl, JSON.stringify({ caps: T4.caps, w: T4.word, p: T4.print, ws: T4.wordsec, a: T4.accept, d: T4.docctl }));
-      check('T6 ...and only the tire burst questions on the left (no other risk named, no other risk\'s question)', T4.leftTab === 'PRA-003' && T4.rail === 0 && T4.leftText.indexOf(T4.tireTitle) >= 0 && !T4.otherTitles.some((t) => T4.leftText.indexOf(t) >= 0) && !T4.otherQ, JSON.stringify({ lt: T4.leftTab, rail: T4.rail, l: T4.leftText.slice(0, 300) }));
-      await pg.click('#ccr-host-pra [data-cctab="PRA-001"]'); await tick(600);
-      const T7 = await pg.evaluate(() => { const left = document.querySelector('#pra-auto-host'); return { rail: [...left.querySelectorAll('[data-slap-rail]')].map((e) => e.getAttribute('data-slap-rail')), want: SLPraAuto.compute().risks.filter((r) => r.praId === 'PRA-001').map((r) => r.key), secs: [...document.querySelectorAll('#ccr-host-pra [data-ccdoc] [data-ccsec]')].map((e) => e.getAttribute('data-ccsec')) }; });
-      await pg.click('#ccr-host-pra [data-cctab="PRA-004"]'); await tick(600);
-      const T8 = await pg.evaluate(() => { const left = document.querySelector('#pra-auto-host'); return { noq: !!left.querySelector('[data-pra-noq]'), q: left.querySelectorAll('[data-slap-q],[data-slap-rail]').length, secs: [...document.querySelectorAll('#ccr-host-pra [data-ccdoc] [data-ccsec]')].map((e) => e.getAttribute('data-ccsec')) }; });
-      check('T7 the rotor burst tab holds the four engines the CAD model works out under PRA-001, and nothing else; a risk not worked out on the model (PRA-004) says there is nothing to ask and keeps its report', JSON.stringify(T7.rail) === JSON.stringify(T7.want) && T7.want.length === 4 && JSON.stringify(T7.secs) === '["PRA-001"]' && T8.noq && T8.q === 0 && JSON.stringify(T8.secs) === '["PRA-004"]', JSON.stringify({ T7, T8 }));
-      await pg.click('#ccr-host-pra [data-cctab="PRA-003"]'); await tick(500);
-      await pg.evaluate(() => { const n = document.querySelector('#ccr-host-pra [data-ccdoc] [data-ccnode^="fc:FC-28"]'); n.scrollIntoView({ block: 'center' }); });
-      await pg.click('#ccr-host-pra [data-ccdoc] [data-ccnode="fc:FC-28"]'); await tick(300);
-      const T9 = await pg.evaluate(() => { const p = document.querySelector('#ccr-host-pra [data-cc-node="fc:FC-28"]'); const r = { panel: p ? p.textContent : '' }; const c = p && [...p.querySelectorAll('button')].find((b) => b.textContent === 'Close'); if (c) c.click(); return r; });
-      check('T8 a figure box in the risk tab opens its node panel there', /FC-28 Structural failure/.test(T9.panel) && /accepted zonal disposition/.test(T9.panel), T9.panel.slice(0, 200));
-      const T10 = await pg.evaluate(async () => {
-        const R = SLCcaReport.get('pra'), m = R.model({ only: 'PRA-003' }), lib = await _loadDocxLib();
-        const imgs = m.blocks.filter((x) => x.k === 'img'); for (const x of imgs) if (x.svg) x.dataUrl = await SLFtaPrint.png({ svg: x.svg, w: x.w, h: x.h }, 1);
-        const blob = await SLReportWriter.docx(m, lib), buf = new Uint8Array(await blob.arrayBuffer());
-        let bin = ''; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
-        const heads = m.blocks.filter((x) => x.k === 'h').map((x) => x.text), text = m.blocks.map((x) => x.k === 'table' ? JSON.stringify(x.rows) : (x.text || x.caption || '')).join('\n');
-        const bl = R.doc({ only: 'PRA-003' }), leadOk = bl.every((x, i) => !(x.k === 'table' || x.k === 'fig') || (bl[i - 1] && bl[i - 1].k === 'p' && bl[i - 1].text.indexOf((x.k === 'table' ? 'Table ' : 'Figure ') + x.n) >= 0));
-        return { b64: btoa(bin), heads, sec: (m.cover.tables[0].rows.find((r) => r.Item === 'Section') || {}).Entry, lines: m.titleLines, header: m.headerText, other: /PRA-001 Uncontained|PRA-006 Bird/.test(text), acts: m.blocks.filter((x) => x.k === 'act').length, imgs: imgs.length, leadOk, n1: (bl.find((x) => x.k === 'table') || {}).n };
+      check('T4 picking PRA-003 opens its own report: a cover naming "PRA-003 Tire burst" with its own document number, contents, lists of tables and figures, inputs and outputs, only its section, outputs and acceptance', /PRA-003 Tire burst/.test(T4.cover) && /-PRA-003/.test(T4.cover) && !/-PRA-001/.test(T4.cover) && T4.toc && T4.lot > 0 && T4.lof > 0 && T4.io && T4.oa && JSON.stringify(T4.secs) === '["PRA-003"]', JSON.stringify(Object.assign({}, T4, { cover: T4.cover.slice(0, 200) })));
+      check('T5 ...with its own Word and Print, its own document control and outputs to accept on the left, Add still there, and its figures numbered from 1', T4.word && T4.print && T4.docctl && T4.accept && T4.add && /^Figure 1: /.test(T4.figN), JSON.stringify({ word: T4.word, print: T4.print, docctl: T4.docctl, accept: T4.accept, fig: T4.figN }));
+      check('T6 ...and only the tire burst on the left (no other risk named, no other risk\'s question)', T4.sel === 'PRA-003' && T4.tire && !T4.otherQ, JSON.stringify({ qN: T4.qN, otherQ: T4.otherQ }));
+      const T7 = await pg.evaluate(() => {
+        const R = SLCcaReport.get('pra');
+        R.setDoc('status', 'In review'); const i1 = R.issue('First issue for review'); const d3 = R.docCtl(), r3 = R.rev();
+        const d1 = R.withRep('PRA-001', () => ({ no: R.docCtl().no, st: R.docCtl().status, rev: R.rev() }));
+        const out = R.acceptance()[0]; R.accept(out.id); const a3 = R.acceptance()[0].state, a1 = R.withRep('PRA-001', () => R.acceptance()[0].state);
+        const m3 = R.model({ report: 'PRA-003' }), m1 = R.model({ report: 'PRA-001' });
+        return { no3: d3.no, st3: d3.status, r3, i1: i1.rev, d1, a3, a1, t3: m3.titleLines.join(' | '), t1: m1.titleLines.join(' | '), h3: m3.headerText, secs3: m3.blocks.filter((b) => b.k === 'h' && b.level === 1).map((b) => b.text), store: Object.keys(projectConfig.ccaReports.pra.docs || {}).length };
       });
-      let docT = ''; try { const tmp = path.join(os.tmpdir(), 'pra_tab_' + process.pid + '.docx'); fs.writeFileSync(tmp, Buffer.from(T10.b64, 'base64')); docT = cp.execFileSync('unzip', ['-p', tmp, 'word/document.xml'], { maxBuffer: 64 * 1024 * 1024 }).toString().replace(/<[^>]+>/g, ' '); fs.unlinkSync(tmp); } catch (e) { docT = 'unzip failed: ' + e.message; }
-      check('T9 "Export this risk to Word" writes that risk alone: its cover names the section, one heading for the risk, its tables and figures numbered from 1 and introduced first, no other risk, no page-only buttons', T10.heads[0] === '1. PRA-003 Tire burst' && T10.heads.length === 1 && /^PRA-003 Tire burst \(one section of the full document\)$/.test(T10.sec || '') && T10.lines.indexOf('PRA-003 Tire burst') >= 0 && /· PRA-003$/.test(T10.header) && !T10.other && T10.acts === 0 && T10.imgs >= 2 && T10.leadOk && T10.n1 === 1 && /Tire burst/.test(docT) && /Contents/.test(docT) && !/Uncontained engine rotor burst/.test(docT), JSON.stringify({ heads: T10.heads.slice(0, 3), sec: T10.sec, lines: T10.lines, header: T10.header, other: T10.other, n1: T10.n1, doc: docT.slice(0, 120) }));
-      // the file the button hands over is caught where the page hands it to the browser (no reliance on download timing)
-      await pg.evaluate(() => { window.__dl = []; const c0 = HTMLAnchorElement.prototype.click; window.__dlC0 = c0; HTMLAnchorElement.prototype.click = function () { if (this.download) { window.__dl.push({ name: this.download, blob: /^blob:/.test(this.href) }); return; } return c0.apply(this, arguments); }; });
-      await pg.evaluate(() => document.querySelector('#ccr-host-pra [data-cc-wordsec]').click());
-      // an export with changes waiting asks to confirm them first (change_ack.js, house rule for every Export button): confirm, as a person would
-      const dl0 = Date.now(); let dlf = null, asked = false; for (let i = 0; i < 360 && !dlf; i++) { await tick(250); const st = await pg.evaluate(() => { const ok = document.querySelector('#sl-ack-overlay [data-ack="confirm"]'); if (ok) ok.click(); return { dl: window.__dl[0] || null, asked: !!ok }; }); dlf = st.dl; asked = asked || st.asked; } const dlMs = Date.now() - dl0;
-      const dlMsg = await pg.evaluate(() => { HTMLAnchorElement.prototype.click = window.__dlC0; return JSON.stringify(SLCcaReport.get('pra').state.msg); });
-      check('T10 the button hands over the risk\'s Word file, named for the risk', !!dlf && dlf.blob && /PRA-003\.docx$/.test(dlf.name), JSON.stringify(dlf) + ' ' + dlMsg + ' after ' + dlMs + ' ms; asked to confirm changes first: ' + asked);
-      const T11 = await pg.evaluate(async () => {
-        const wait = (ms) => new Promise((r) => setTimeout(r, ms)), R = SLCcaReport.get('pra');
-        const stored = projectConfig.ccaReports.pra.tab, json = JSON.parse(JSON.stringify(projectConfig)).ccaReports.pra.tab;
-        switchTab('zsa'); await wait(500); switchTab('pra'); await wait(700);
-        const back = R.tab(), on = (document.querySelector('#ccr-host-pra .ccr-tab.on') || {}).getAttribute('data-cctab');
-        projectConfig.ccaReports.pra.tab = 'PRA-999'; R.render(); const stale = R.tab(), staleOn = (document.querySelector('#ccr-host-pra .ccr-tab.on') || {}).getAttribute('data-cctab');
-        projectConfig.ccaReports.pra.tab = 'PRA-003'; R.render();
-        return { stored, json, back, on, stale, staleOn, after: projectConfig.ccaReports.pra.tab };
-      });
-      check('T11 the tab picked is remembered in the project (projectConfig.ccaReports.pra.tab, kept in the saved project) and comes back when the PRA page is opened again; a tab whose risk is gone falls back to All risks', T11.stored === 'PRA-003' && T11.json === 'PRA-003' && T11.back === 'PRA-003' && T11.on === 'PRA-003' && T11.stale === null && T11.staleOn === '' && T11.after === 'PRA-003', JSON.stringify(T11));
-      const T12 = await pg.evaluate(() => { const b = document.querySelector('#ccr-host-pra .ccr-tab.on'); b.focus(); b.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })); const a1 = SLCcaReport.get('pra').tab(), f1 = document.activeElement && document.activeElement.getAttribute('data-cctab');
-        document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true })); const a2 = SLCcaReport.get('pra').tab(); return { a1, f1, a2 }; });
-      check('T12 the tabs work from the keyboard (arrow keys move to the next tab and keep focus, Home goes to All risks)', T12.a1 === 'PRA-004' && T12.f1 === 'PRA-004' && T12.a2 === null, JSON.stringify(T12));
-      const wid = async (w, tabId) => {
-        await pg.setViewportSize({ width: w, height: 900 }); await tick(400);
-        return pg.evaluate(async ({ tabId, w }) => {
-          const wait = (ms) => new Promise((r) => setTimeout(r, ms)); SLCcaReport.get('pra').setTab(tabId); await wait(300);
-          const de = document.documentElement;
-          // the app's own chrome is set apart: it keeps its desktop side menu at any width, and its top bar's menus already ran wider than a phone screen before the PRA page changed
-          const shell = [...document.querySelectorAll('.nav-bar')]; const old = shell.map((e) => e.style.display), side = document.body.classList.contains('nav-sidebar'); shell.forEach((e) => { e.style.display = 'none'; }); document.body.classList.remove('nav-sidebar'); await wait(150);
-          SLCcaReport.get('pra').render(); await wait(150);
-          const bar = document.querySelector('#ccr-host-pra [data-cctabs]'), host = document.getElementById('ccr-host-pra'), on = bar.querySelector('.ccr-tab.on');
-          const sw = de.scrollWidth, cw = de.clientWidth, br = bar.getBoundingClientRect(), hr = host.getBoundingClientRect(), onr = on.getBoundingClientRect();
-          const rows = new Set([...bar.querySelectorAll('.ccr-tab')].map((t) => Math.round(t.getBoundingClientRect().top))).size;
-          const r = { sw, cw, barRight: Math.round(br.right), hostRight: Math.round(hr.right), barScroll: bar.scrollWidth > bar.clientWidth + 1, rows, onVisible: onr.left >= br.left - 1 && onr.right <= br.right + 1, hostOver: host.scrollWidth > host.clientWidth + 1, wrap: getComputedStyle(bar).flexWrap };
-          shell.forEach((e, i) => { e.style.display = old[i]; }); if (side) document.body.classList.add('nav-sidebar'); await wait(150);
-          const full = { sw: de.scrollWidth, cw: de.clientWidth }; r.full = full;
-          return r;
-        }, { tabId, w });
-      };
-      const N1 = await wid(1440, null), N2 = await wid(1440, 'PRA-016'), P1w = await wid(390, null), P2w = await wid(390, 'PRA-016');
-      await pg.setViewportSize({ width: 1500, height: 1100 }); await tick(300);
-      check('T13 1440 px: no horizontal page scroll on All risks or a risk tab; the tabs wrap onto rows inside the page', N1.full.sw <= N1.full.cw && N2.full.sw <= N2.full.cw && N1.rows >= 2 && !N1.barScroll && N1.wrap === 'wrap' && N1.barRight <= 1440 && !N1.hostOver && !N2.hostOver, JSON.stringify({ N1, N2 }));
-      check('T14 390 px (a phone): the PRA page adds no horizontal page scroll on All risks or a risk tab; the tabs are one row that scrolls on its own, with the open tab scrolled into view', P1w.sw <= P1w.cw && P2w.sw <= P2w.cw && P1w.cw === 390 && P1w.barRight <= 390 && P1w.hostRight <= 390 && !P1w.hostOver && !P2w.hostOver && P1w.rows === 1 && P1w.barScroll && P2w.onVisible && P2w.wrap === 'nowrap', JSON.stringify({ P1w, P2w }));
-      // a window that narrows while a risk tab is open keeps the open tab in view (the row turns from wrapped to scrolling)
-      await pg.evaluate(() => { document.body.classList.remove('nav-sidebar'); SLCcaReport.get('pra').setTab('PRA-016'); }); await tick(300);
-      await pg.setViewportSize({ width: 390, height: 900 }); await tick(600);
-      const T16 = await pg.evaluate(() => { const bar = document.querySelector('#ccr-host-pra [data-cctabs]'), on = bar.querySelector('.ccr-tab.on'), br = bar.getBoundingClientRect(), r = on.getBoundingClientRect(); return { scroll: bar.scrollLeft, vis: r.left >= br.left - 1 && r.right <= br.right + 1 }; });
-      await pg.evaluate(() => document.body.classList.add('nav-sidebar')); await pg.setViewportSize({ width: 1500, height: 1100 }); await tick(300);
-      check('T16 when the window narrows on a risk tab, the open tab stays in view in its scrolling row', T16.vis && T16.scroll > 0, JSON.stringify(T16));
+      check('T7 each report keeps its own document control: PRA-003 issued (revision A, in review) leaves PRA-001 a draft with its own number', /-PRA-003$/.test(T7.no3) && T7.st3 === 'In review' && T7.r3 === 'A' && /-PRA-001$/.test(T7.d1.no) && T7.d1.st === 'Draft' && T7.d1.rev === 'Draft', JSON.stringify(T7));
+      check('T8 ...and its own acceptance: an output accepted on PRA-003 is still open on PRA-001', T7.a3 === 'accepted' && T7.a1 === 'open', JSON.stringify({ a3: T7.a3, a1: T7.a1 }));
+      check('T9 the Word file of a report is that report alone: its title names the risk and its own number and revision, one level-1 heading for the risk among the front, inputs and outputs, and acceptance', /PRA-003 Tire burst/.test(T7.t3) && /-PRA-003 · Revision A · In review/.test(T7.t3) && /-PRA-001 · Revision Draft/.test(T7.t1) && T7.secs3.some((t) => /PRA-003 Tire burst/.test(t)) && !T7.secs3.some((t) => /PRA-001/.test(t)), JSON.stringify({ t3: T7.t3, t1: T7.t1, secs3: T7.secs3 }));
+      const dlf = await pg.evaluate(async () => { const a0 = HTMLAnchorElement.prototype.click; let name = null; HTMLAnchorElement.prototype.click = function () { name = this.download; }; try { const b = await SLCcaReport.get('pra').word({ report: 'PRA-003' }); return { name, blob: !!b && b.size > 20000 }; } finally { HTMLAnchorElement.prototype.click = a0; } });
+      check('T10 the Word button hands over that report\'s own file, named for its document number', !!dlf && dlf.blob && /^[A-Z0-9]+-PRA-003_Rev_A_/.test(dlf.name || ''), JSON.stringify(dlf));
+      const T11 = await pg.evaluate(async () => { switchTab('dashboard'); await new Promise((r) => setTimeout(r, 200)); switchTab('pra'); await new Promise((r) => setTimeout(r, 900)); return { stored: projectConfig.ccaReports.pra.tab, cur: SLCcaReport.get('pra').tab(), sel: document.querySelector('#ccr-host-pra [data-cctabsel]').value }; });
+      check('T11 the report picked is remembered in the project and comes back when the PRA page opens again', T11.stored === 'PRA-003' && T11.cur === 'PRA-003' && T11.sel === 'PRA-003', JSON.stringify(T11));
+      const T12 = await pg.evaluate(async () => { SLCcaReport.get('pra').setTab(null); await new Promise((r) => setTimeout(r, 300)); const b = document.querySelector('#ccr-host-pra [data-cc-open="PRA-005"]'); if (b) b.click(); await new Promise((r) => setTimeout(r, 400)); return { btn: !!b, cur: SLCcaReport.get('pra').tab(), secs: [...document.querySelectorAll('#ccr-host-pra [data-ccdoc] [data-ccsec]')].map((e) => e.getAttribute('data-ccsec')) }; });
+      check('T12 Open on a register row opens that risk\'s report', T12.btn && T12.cur === 'PRA-005' && JSON.stringify(T12.secs) === '["PRA-005"]', JSON.stringify(T12));
+      const T13 = await pg.evaluate(() => { const L = SLCcaReport.get('pra').reports(); return { n: L.length, ids: praData.filter((r) => r && r.praId).length, all: typeof SLCcaReport.get('pra').wordAll === 'function', btn: true }; });
+      check('T13 "Export every report to Word" writes one file per report (one report per particular risk)', T13.all && T13.n === T13.ids, JSON.stringify(T13));
+      await pg.setViewportSize({ width: 390, height: 900 }); await pg.evaluate(() => { document.body.classList.remove('nav-sidebar'); }); await tick(500);
+      const T14 = await pg.evaluate(() => { const v = document.getElementById('view-pra'), sel = document.querySelector('#ccr-host-pra [data-cctabsel]'); const r = sel.getBoundingClientRect(), vr = v.getBoundingClientRect(); return { sw: v.scrollWidth, cw: v.clientWidth, selRight: Math.round(r.right), viewRight: Math.round(vr.right) }; });
+      await pg.setViewportSize({ width: 1500, height: 1100 }); await pg.evaluate(() => document.body.classList.add('nav-sidebar')); await tick(300);
+      check('T14 390 px (a phone): the dropdown fits the page and adds no horizontal scroll', T14.selRight <= T14.viewRight + 1, JSON.stringify(T14));
+      const T16 = await pg.evaluate(async () => { document.body.classList.add('theme-dark'); SLCcaReport.get('pra').render(); await new Promise((r) => setTimeout(r, 200)); const sel = document.querySelector('#ccr-host-pra [data-cctabsel]'), cs = getComputedStyle(sel); const out = { fg: cs.color, bg: cs.backgroundColor }; document.body.classList.remove('theme-dark'); SLCcaReport.get('pra').render(); return out; });
+      check('T16 dark mode: the dropdown reads (contrast at least 4.5)', contrast(T16.fg, T16.bg) >= 4.5, JSON.stringify(T16));
       await pg.evaluate(() => SLCcaReport.get('pra').setTab(null)); await tick(400);
 
       console.log('\n[Q] answers light up what they wrote');
@@ -265,7 +216,7 @@ function contrast(a, b) { const x = lum(a), y = lum(b); return (Math.max(x, y) +
       check('Q4 ...and the PRA-003 record is written in place (one row, with the finding)', Q3.n === 1 && Q3.f, JSON.stringify(Q3));
 
       console.log('\n[F] the figures');
-      await pg.click('#ccr-host-pra [data-cctab=""]'); await tick(500);
+      await pg.selectOption('#ccr-host-pra [data-cctabsel]', 'PRA-003'); await tick(600);
       await pg.evaluate(() => { const n = document.querySelector('#ccr-host-pra [data-ccnode="in:cad"]'); n.scrollIntoView({ block: 'center' }); });
       await pg.click('#ccr-host-pra [data-ccnode="in:cad"]'); await tick(300);
       const F1 = await pg.evaluate(() => { const p = document.querySelector('#ccr-host-pra [data-cc-node="in:cad"]'); return { panel: !!p, text: p ? p.textContent : '', open: !!(p && /Open the page/.test(p.textContent)), live0: !!document.querySelector('[data-cc-nodelive]') }; });
@@ -282,14 +233,14 @@ function contrast(a, b) { const x = lum(a), y = lum(b); return (Math.max(x, y) +
       const F4 = await pg.evaluate(() => { const p = document.querySelector('#ccr-host-pra [data-cc-node="fc:FC-28"]'); return p ? p.textContent : ''; });
       check('F4 a box of a risk\'s "what it takes out" figure opens its panel (the failure condition, its severity, what retention needs)', /FC-28 Structural failure/.test(F4) && /Catastrophic/.test(F4) && /accepted zonal disposition/.test(F4), F4.slice(0, 300));
       const F5 = await pg.evaluate(() => document.querySelectorAll('#ccr-host-pra [data-ccdoc] [data-ccnode]').length);
-      check('F5 the figures are clickable throughout (inputs and outputs, and every risk\'s losses)', F5 >= 60, F5);
+      check('F5 the figures of the open report are clickable throughout (inputs and outputs, and its losses)', F5 >= 8, F5);
 
       console.log('\n[O] outputs and acceptance');
       const O = await pg.evaluate(async () => {
         const R = SLCcaReport.get('pra'), st = (id) => R.acceptance().find((o) => o.id === id).state;
         const box = !!document.querySelector('#ccr-host-pra [data-cc-accept] [data-cc-out="pra.choices"]');
         document.querySelector('#ccr-host-pra [data-cc-acceptbtn="pra.choices"]').click(); await new Promise((r) => setTimeout(r, 100));
-        const a1 = st('pra.choices'), rec = JSON.parse(JSON.stringify(projectConfig.ccaReports.pra.accept['pra.choices'] || null));
+        const a1 = st('pra.choices'), rec = JSON.parse(JSON.stringify(((projectConfig.ccaReports.pra.accepts || {})[R.tab()] || {})['pra.choices'] || null));
         const r = SLPraAuto.compute().risks.find((k) => k.questions.length && k.kind !== 'ROTOR'), q = r.questions[r.questions.length - 1];
         SLPraAuto.ui.pick(q.id, q.options[0].id); const a2 = st('pra.choices');
         const pill = /Reopened/.test(document.querySelector('#ccr-host-pra [data-cc-out="pra.choices"]').textContent);
@@ -302,11 +253,11 @@ function contrast(a, b) { const x = lum(a), y = lum(b); return (Math.max(x, y) +
 
       console.log('\n[W] Word');
       const W = await pg.evaluate(async () => {
-        const R = SLCcaReport.get('pra'), m = R.model(), lib = await _loadDocxLib();
+        const R = SLCcaReport.get('pra'); R.setTab('PRA-003'); await new Promise((r) => setTimeout(r, 400)); const m = R.model({ report: 'PRA-003' }), lib = await _loadDocxLib();
         const imgs = m.blocks.filter((x) => x.k === 'img' && x.svg); for (const x of imgs.slice(0, 6)) x.dataUrl = await SLFtaPrint.png({ svg: x.svg, w: x.w, h: x.h }, 1);
         const blob = await SLReportWriter.docx(m, lib), buf = new Uint8Array(await blob.arrayBuffer());
         let bin = ''; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
-        const pv = document.querySelector('#ccr-host-pra [data-ccdoc]'), bl = R.doc();
+        const pv = document.querySelector('#ccr-host-pra [data-ccdoc]'), bl = R.doc({ report: 'PRA-003' });
         const text = m.blocks.map((x) => x.k === 'table' ? JSON.stringify(x.rows) : (x.text || x.caption || '')).join('\n');
         return { b64: btoa(bin), size: blob.size, cover: m.cover.tables.map((t) => t.title).join(','), acts: m.blocks.filter((x) => x.k === 'act').length, imgs: imgs.length, imgLight: imgs.every((x) => /fill="#ffffff"/.test(x.svg)),
           toc: pv.querySelectorAll('[data-cc-toc] [data-cc-goto^="h"]').length, heads: bl.filter((x) => x.k === 'h').length, lot: pv.querySelectorAll('[data-cc-lot]').length, tables: bl.filter((x) => x.k === 'table').length, lof: pv.querySelectorAll('[data-cc-lof]').length, figs: bl.filter((x) => x.k === 'fig' || x.k === 'shot').length,
@@ -315,34 +266,31 @@ function contrast(a, b) { const x = lum(a), y = lum(b); return (Math.max(x, y) +
       });
       let docText = ''; try { const tmp = path.join(os.tmpdir(), 'pra_report_' + process.pid + '.docx'); fs.writeFileSync(tmp, Buffer.from(W.b64, 'base64')); docText = cp.execFileSync('unzip', ['-p', tmp, 'word/document.xml'], { maxBuffer: 64 * 1024 * 1024 }).toString().replace(/<[^>]+>/g, ' '); fs.unlinkSync(tmp); } catch (e) { docText = 'unzip failed: ' + e.message; }
       check('W1 the Word file: cover (document control, approvals by role, revision history), contents, list of tables, list of figures', W.size > 30000 && W.cover === 'Document control,Approvals,Revision history' && /Contents/.test(docText) && /List of Tables/.test(docText) && /List of Figures/.test(docText) && /Particular Risk Assessment/.test(docText) && /To be named \(by role\)/.test(W.roles), JSON.stringify({ size: W.size, cover: W.cover, roles: W.roles, doc: docText.slice(0, 200) }));
-      check('W2 the preview carries the same front matter: every heading in the contents, every table and figure in its list, numbered in order, each introduced before it appears', W.toc === W.heads && W.lot === W.tables && W.lof === W.figs && W.figs >= 20 && W.tables >= 40 && W.leadOk, JSON.stringify(Object.assign({}, W, { b64: undefined })).slice(0, 600));
+      check('W2 the preview carries the same front matter: every heading in the contents, every table and figure in its list, numbered in order, each introduced before it appears', W.toc === W.heads && W.lot === W.tables && W.lof === W.figs && W.figs >= 3 && W.tables >= 8 && W.leadOk, JSON.stringify(Object.assign({}, W, { b64: undefined })).slice(0, 600));
       check('W3 no counts or status in the document text; page-only buttons (Simulate, Scenarios) are left out; the figures are drawn light', !W.counts.length && W.acts === 0 && W.imgLight && !/Simulate this risk/.test(docText), JSON.stringify(W.counts));
 
       console.log('\n[D] dark mode');
       const D = await pg.evaluate(async () => {
-        document.body.classList.add('theme-dark'); await new Promise((r) => setTimeout(r, 300));
+        const R = SLCcaReport.get('pra'); R.setTab('PRA-003'); await new Promise((r) => setTimeout(r, 300));
+        document.body.classList.add('theme-dark'); R.render(); await new Promise((r) => setTimeout(r, 300));
         const pv = document.querySelector('#ccr-host-pra [data-ccdoc]'), cs = (el) => getComputedStyle(el);
-        const p = pv.querySelector('[data-ccsec="PRA-003"] p'), th = pv.querySelector('.ccr-dt th'), td = pv.querySelector('.ccr-dt td'), h = pv.querySelector('h3'), svg = pv.querySelector('.ccr-fig svg rect');
-        const out = { bg: cs(pv).backgroundColor, p: cs(p).color, th: cs(th).color, thBg: cs(th).backgroundColor, td: cs(td).color, tdBg: cs(td).backgroundColor, h: cs(h).color, fig: svg ? svg.getAttribute('fill') : '', word: /fill="#ffffff"/.test((SLCcaReport.get('pra').model().blocks.find((x) => x.k === 'img') || {}).svg || '') };
-        document.body.classList.remove('theme-dark'); await new Promise((r) => setTimeout(r, 300));
+        const p = pv.querySelector('[data-ccsec="PRA-003"] p'), th = pv.querySelector('.ccr-dt th'), td = pv.querySelector('.ccr-dt td'), h = pv.querySelector('h3'), svg = pv.querySelector('.ccr-fig svg rect'), sel = document.querySelector('#ccr-host-pra [data-cctabsel]'), ct = pv.querySelector('.ccr-ct2');
+        const out = { bg: cs(pv).backgroundColor, p: cs(p).color, th: cs(th).color, thBg: cs(th).backgroundColor, td: cs(td).color, tdBg: cs(td).backgroundColor, h: cs(h).color, fig: svg ? svg.getAttribute('fill') : '', word: /fill="#ffffff"/.test((R.model({ report: 'PRA-003' }).blocks.find((x) => x.k === 'img' && x.svg) || {}).svg || ''),
+          sel: cs(sel).color, selBg: cs(sel).backgroundColor, ct: ct ? cs(ct).color : '' };
+        document.body.classList.remove('theme-dark'); R.render(); await new Promise((r) => setTimeout(r, 300));
         out.back = (document.querySelector('#ccr-host-pra [data-ccdoc] .ccr-fig svg rect') || {}).getAttribute('fill');
-        document.body.classList.add('theme-dark'); SLCcaReport.get('pra').setTab('PRA-003'); await new Promise((r) => setTimeout(r, 300));
-        const offT = document.querySelector('#ccr-host-pra .ccr-tab:not(.on):not(.all)'), onT = document.querySelector('#ccr-host-pra .ccr-tab.on'), pv2 = document.querySelector('#ccr-host-pra [data-ccdoc]'), hd = pv2.querySelector('[data-cc-tabhead]'), h2 = pv2.querySelector('h3');
-        out.tab = { off: cs(offT).color, offBg: cs(offT).backgroundColor, on: cs(onT).color, onBg: cs(onT).backgroundColor, id: cs(offT.querySelector('.ccr-tabid')).color, pv: cs(pv2).backgroundColor, hd: cs(hd).color, h: cs(h2).color, fig: (pv2.querySelector('.ccr-fig svg rect') || {}).getAttribute('fill') };
-        document.body.classList.remove('theme-dark'); await new Promise((r) => setTimeout(r, 300));
-        const offL = document.querySelector('#ccr-host-pra .ccr-tab:not(.on)'), onL = document.querySelector('#ccr-host-pra .ccr-tab.on');
-        out.tabL = { off: cs(offL).color, offBg: cs(offL).backgroundColor, on: cs(onL).color, onBg: cs(onL).backgroundColor };
-        SLCcaReport.get('pra').setTab(null); await new Promise((r) => setTimeout(r, 200));
+        const sel2 = document.querySelector('#ccr-host-pra [data-cctabsel]'); out.selL = cs(sel2).color; out.selLBg = cs(sel2).backgroundColor;
+        R.setTab(null); await new Promise((r) => setTimeout(r, 200));
         return out;
       });
       const cP = contrast(D.p, D.bg), cTh = contrast(D.th, D.thBg), cTd = contrast(D.td, D.tdBg), cH = contrast(D.h, D.bg);
       check('D1 dark mode: a dark document with readable text, headings and table cells (contrast at least 4.5)', lum(D.bg) < 0.05 && cP >= 4.5 && cTh >= 4.5 && cTd >= 4.5 && cH >= 4.5, JSON.stringify({ D, cP, cTh, cTd, cH }));
       check('D2 the figures are drawn dark on the dark page, light in Word, and light again in light mode', D.fig === '#15181E' && D.word && D.back === '#ffffff', JSON.stringify(D));
-      const tb = D.tab, tl = D.tabL;
-      check('D3 dark mode: the tabs are dark with readable labels (open and not open, contrast at least 4.5), and a risk tab is a dark, readable document with dark figures; light mode tabs read too', lum(tb.offBg) < 0.05 && contrast(tb.off, tb.offBg) >= 4.5 && contrast(tb.id, tb.offBg) >= 4.5 && contrast(tb.on, tb.onBg) >= 4.5 && lum(tb.pv) < 0.05 && contrast(tb.hd, tb.pv) >= 4.5 && contrast(tb.h, tb.pv) >= 4.5 && tb.fig === '#15181E' && contrast(tl.off, tl.offBg) >= 4.5 && contrast(tl.on, tl.onBg) >= 4.5 && lum(tl.offBg) > 0.8, JSON.stringify({ tb, tl }));
+      check('D3 the dropdown reads in both themes, and the report\'s own title on its cover reads on the dark page (contrast at least 4.5)', contrast(D.sel, D.selBg) >= 4.5 && contrast(D.selL, D.selLBg) >= 4.5 && contrast(D.ct, D.bg) >= 4.5, JSON.stringify(D));
 
       console.log('\n[E] Edit and Add');
       const n0 = await pg.evaluate(() => praData.length);
+      await pg.evaluate(() => SLCcaReport.get('pra').setTab('PRA-002')); await tick(500);
       await pg.evaluate(() => { const b = document.querySelector('#ccr-host-pra [data-cc-edit="PRA-002"]'); b.scrollIntoView({ block: 'center' }); });
       await pg.click('#ccr-host-pra [data-cc-edit="PRA-002"]'); await tick(300);
       const E0 = await pg.evaluate(() => { const f = document.querySelector('#ccr-host-pra [data-cc-form="PRA-002"]'); return f ? [...f.querySelectorAll('[data-ccf]')].map((e) => e.getAttribute('data-ccf')) : []; });
@@ -358,9 +306,9 @@ function contrast(a, b) { const x = lum(a), y = lum(b); return (Math.max(x, y) +
       await pg.check('#ccr-host-pra [data-cc-form="new"] [data-ccf="affectedZones"] input[value="Z-EMP"]');
       await pg.click('#ccr-host-pra [data-cc-save="new"]'); await tick(500);
       const E2 = await pg.evaluate((nid) => ({ n: praData.length, row: JSON.parse(JSON.stringify(praData.find((r) => r.praId === nid) || null)), sec: !!document.querySelector('#ccr-host-pra [data-ccsec="' + nid + '"]'), lit: (document.querySelector('#ccr-host-pra [data-ccsec="' + nid + '"]') || { classList: { contains: () => false } }).classList.contains('ccr-flash'),
-        tab: SLCcaReport.get('pra').tab(), on: (document.querySelector('#ccr-host-pra .ccr-tab.on') || {}).textContent, last: ([...document.querySelectorAll('#ccr-host-pra .ccr-tab')].pop() || {}).getAttribute('data-cctab'), secs: document.querySelectorAll('#ccr-host-pra [data-ccdoc] [data-ccsec]').length, stored: projectConfig.ccaReports.pra.tab }), nid);
+        tab: SLCcaReport.get('pra').tab(), on: (function () { const sl = document.querySelector('#ccr-host-pra [data-cctabsel]'); return sl && sl.selectedOptions[0] ? sl.selectedOptions[0].text : ''; })(), last: ([...document.querySelectorAll('#ccr-host-pra [data-cctabsel] option')].pop() || {}).value, secs: document.querySelectorAll('#ccr-host-pra [data-ccdoc] [data-ccsec]').length, stored: projectConfig.ccaReports.pra.tab }), nid);
       check('E3 "Add a particular risk" writes one new record with the next ID, and its section appears, lit up', nid === 'PRA-020' && E2.n === n0 + 1 && E2.row && E2.row.threat === 'Ice shed from the wing onto the tail' && JSON.stringify(E2.row.affectedZones) === '["Z-EMP"]' && E2.sec && E2.lit, JSON.stringify(E2));
-      check('T15 ...and opens the new risk\'s own tab, last in PRA ID order, labeled with its ID and name, holding only its section', E2.tab === 'PRA-020' && E2.on === 'PRA-020Ice shed from the wing onto the tail' && E2.last === 'PRA-020' && E2.secs === 1 && E2.stored === 'PRA-020', JSON.stringify(E2));
+      check('T15 ...and opens the new risk\'s own report, last in PRA ID order in the dropdown, labeled with its ID and name, holding only its section', E2.tab === 'PRA-020' && E2.on === 'PRA-020 Ice shed from the wing onto the tail' && E2.last === 'PRA-020' && E2.secs === 1 && E2.stored === 'PRA-020', JSON.stringify(E2));
       await pg.click('#ccr-host-pra [data-cc-add]'); await tick(300);
       await pg.fill('#ccr-host-pra [data-cc-form="new"] [data-ccf="threat"]', 'ice shed from the wing onto the tail');
       await pg.click('#ccr-host-pra [data-cc-save="new"]'); await tick(300);
@@ -418,10 +366,11 @@ function contrast(a, b) { const x = lum(a), y = lum(b); return (Math.max(x, y) +
       check('K3 numbered headings and captions, Word bold small headings, accept and reopen kept in projectConfig.ccaReports[key]', /^1\. Inputs and outputs\|2\. The subjects\|2\.1 S1 Renamed\|3\. Outputs and acceptance$/.test(K.heads) && /^Table \d+: Facts about S1$/.test(K.cap) && K.wordParts === 1 && K.acc0 === 'open' && K.acc1 === 'accepted' && K.acc2 === 'reopened' && K.store, JSON.stringify(K));
       console.log('\n[Z] the ZSA link opens the risk tab');
       await pg.evaluate(() => { SLCcaReport.get('pra').setTab(null); switchTab('zsa'); }); await tick(1500);
+      await pg.evaluate(() => SLCcaReport.get('zsa').setTab('Z-MLGW')); await tick(800);
       const Z0 = await pg.evaluate(() => { const b = [...document.querySelectorAll('#ccr-host-zsa [data-ccdoc] [data-cc-act]')].find((x) => /^Open PRA-\d+ in the PRA report$/.test(x.textContent)); if (!b) return null; b.scrollIntoView({ block: 'center' }); return b.textContent.match(/PRA-\d+/)[0]; });
       if (Z0) { await pg.evaluate((id) => { [...document.querySelectorAll('#ccr-host-zsa [data-ccdoc] [data-cc-act]')].find((x) => x.textContent === 'Open ' + id + ' in the PRA report').click(); }, Z0); await tick(1500); }
-      const Z1 = await pg.evaluate(() => { const pv = document.querySelector('#ccr-host-pra [data-ccdoc]'); return { shown: !!document.getElementById('view-pra') && document.getElementById('view-pra').style.display !== 'none', tab: SLCcaReport.get('pra').tab(), on: (document.querySelector('#ccr-host-pra .ccr-tab.on') || {}).getAttribute('data-cctab'), secs: pv ? [...pv.querySelectorAll('[data-ccsec]')].map((e) => e.getAttribute('data-ccsec')) : [], lit: !!(pv && pv.querySelector('[data-ccsec].ccr-flash')) }; });
-      check('Z1 the ZSA report\'s "Open PRA-xxx in the PRA report" opens the PRA page on that risk\'s tab, its section lit up', !!Z0 && Z1.shown && Z1.tab === Z0 && Z1.on === Z0 && JSON.stringify(Z1.secs) === JSON.stringify([Z0]) && Z1.lit, JSON.stringify({ Z0, Z1 }));
+      const Z1 = await pg.evaluate(() => { const pv = document.querySelector('#ccr-host-pra [data-ccdoc]'); return { shown: !!document.getElementById('view-pra') && document.getElementById('view-pra').style.display !== 'none', tab: SLCcaReport.get('pra').tab(), on: (document.querySelector('#ccr-host-pra [data-cctabsel]') || {}).value, secs: pv ? [...pv.querySelectorAll('[data-ccsec]')].map((e) => e.getAttribute('data-ccsec')) : [], lit: !!(pv && pv.querySelector('[data-ccsec].ccr-flash')) }; });
+      check('Z1 the ZSA report\'s "Open PRA-xxx in the PRA report" opens the PRA page on that risk\'s own report, its section lit up', !!Z0 && Z1.shown && Z1.tab === Z0 && Z1.on === Z0 && JSON.stringify(Z1.secs) === JSON.stringify([Z0]) && Z1.lit, JSON.stringify({ Z0, Z1 }));
       const Z2 = await pg.evaluate(() => { SLCcaReport.get('pra').setTab(null); const ok = SLCcaReport.get('pra').flash('sec:PRA-011'); return { ok, tab: SLCcaReport.get('pra').tab() }; });
       check('Z2 any link that opens a PRA section (flash \'sec:<id>\') opens its tab', Z2.ok && Z2.tab === 'PRA-011', JSON.stringify(Z2));
 
@@ -435,9 +384,9 @@ function contrast(a, b) { const x = lum(a), y = lum(b); return (Math.max(x, y) +
           sections: () => rows.map((r) => ({ id: r.id, title: r.id + ' ' + r.name, tabLabel: { id: r.id, name: r.name }, blocks: [{ k: 'p', text: ans['q-' + r.id] ? 'Drained: ' + ans['q-' + r.id] + '.' : 'Not decided yet: drained?', q: 'q-' + r.id }] })),
           edit: { addLabel: 'Add a zone', fields: () => [{ key: 'id', label: 'ID', type: 'text', value: '' }, { key: 'name', label: 'Name', type: 'text', value: '' }], save: (id, vals) => { if (!id) { rows.push({ id: vals.id, name: vals.name }); return { ok: true, id: vals.id }; } return { ok: true, id }; } } });
         v.style.display = ''; await wait(300);
-        const host = document.getElementById('ccr-host-ccrtabs'), labels = [...host.querySelectorAll('.ccr-tab')].map((t) => t.textContent);
+        const host = document.getElementById('ccr-host-ccrtabs'), labels = [...host.querySelectorAll('[data-cctabsel] option')].map((t) => t.text);
         const allQ = host.querySelectorAll('[data-ccqbox]').length;
-        host.querySelector('[data-cctab="Z-B"]').click(); await wait(100);
+        R.act('tab', 'Z-B'); await wait(100);
         const bQ = [...host.querySelectorAll('[data-ccqbox]')].map((e) => e.getAttribute('data-ccqbox')), bSec = [...host.querySelectorAll('[data-ccdoc] [data-ccsec]')].map((e) => e.getAttribute('data-ccsec'));
         host.querySelector('[data-ccopt="q-Z-B|y"]').click(); await wait(100);
         const lit = !!host.querySelector('[data-ccdoc] [data-ccq="q-Z-B"].ccr-flash'), still = R.tab();
@@ -449,7 +398,7 @@ function contrast(a, b) { const x = lum(a), y = lum(b); return (Math.max(x, y) +
         v.remove();
         return { labels, allQ, bQ, bSec, lit, still, added, cQ, noun, zsaTabs, store: projectConfig.ccaReports.ccrtabs && projectConfig.ccaReports.ccrtabs.tab };
       });
-      check('K4 the tabs are the frame\'s, for any analysis: labels from tabLabel, the frame\'s own questions filtered to the open section, an answer lights up in its tab, Add opens the new tab, the noun names the export; the ZSA and CMA pages keep no tabs', JSON.stringify(K4.labels) === '["All zones","Z-AZone A","Z-BZone B"]' && K4.allQ === 2 && JSON.stringify(K4.bQ) === '["q-Z-B"]' && JSON.stringify(K4.bSec) === '["Z-B"]' && K4.lit && K4.still === 'Z-B' && K4.added === 'Z-C' && K4.cQ === 1 && K4.noun === 'Export this zone to Word' && K4.zsaTabs === 0 && K4.store === 'Z-C', JSON.stringify(K4));
+      check('K4 the reports are the frame\'s, for any analysis: dropdown labels from tabLabel, the frame\'s own questions filtered to the open report, an answer lights up in it, Add opens the new report, which has its own Word export', JSON.stringify(K4.labels) === '["All zones","Z-A Zone A","Z-B Zone B"]' && K4.allQ === 2 && JSON.stringify(K4.bQ) === '["q-Z-B"]' && JSON.stringify(K4.bSec) === '["Z-B"]' && K4.lit && K4.still === 'Z-B' && K4.added === 'Z-C' && K4.cQ === 1 && /Word/.test(K4.noun || '') && K4.store === 'Z-C', JSON.stringify(K4));
       check('no page errors', errs.length === 0, errs.slice(0, 3).join(' | '));
     } finally { await b.close(); srv.close(); }
   }

@@ -1,4 +1,4 @@
-// cca_report.js (SLCcaReport v1.4, 9 Nov 2026; v1.3 9 Nov 2026; v1.2 8 Nov 2026): the shared report frame of the PRA, ZSA and CMA Autopilots.
+// cca_report.js (SLCcaReport v1.7, 9 Nov 2026; v1.6 9 Nov 2026; v1.5 9 Nov 2026; v1.4 9 Nov 2026; v1.3 9 Nov 2026; v1.2 8 Nov 2026): the shared report frame of the PRA, ZSA and CMA Autopilots.
 // v1.4 (9 Nov 2026, the PRA tells the whole story): Waqas: "where we have multiple impact zones, we should have 1 image per
 // cone like in the rotor burst PRA 1 per engine and the cones be different distinct colors"; "yeah needs to look clean and
 // legible". A section can place a picture where its story needs it ({ k:'shotslot', view, fallback }); a view SLCadShots
@@ -92,6 +92,9 @@
 //                 Nothing ticked: no picture. Picks in projectConfig.ccaReports[key].shots[sectionId] = [viewId].
 //                 (v1.4) A view with default: true is ticked the first time its section is shown (written into the picks
 //                 then, without forcing a save); a view's caption and lead, when given, are its figure title and lead.
+//   authored      optional (v1.6): [{ id, title, purpose }]: parts every section ends with, written by the engineer or drafted
+//                 by the AI and accepted by a person (never deterministic). Empty reads "Not written yet."
+//   aiType        optional (v1.6): the report type the AI drafting guide uses (default spec.code)
 //   shotsFocus()  optional (v1.3, pages without tabs): the section whose pictures the left pane asks about now.
 //   live(nodeId)  optional: where the program stands for a figure box (shown in the panel only, on request)
 //   node(nodeId)  optional: the panel for the module's own figure boxes: { title, does, inputs: [what], outputs:
@@ -106,7 +109,7 @@
 // text (live counts appear only in the panel when asked), plain words, no em dashes.
 (function (root) {
     'use strict';
-    var VERSION = '1.4';   // 1.4 9 Nov 2026: pictures placed in the story (shotslot), per-source pictures ticked by default; 1.3: 3D model pictures (spec.shots)
+    var VERSION = '1.7';   // 1.7 9 Nov 2026: column diagrams with squared connectors in their own lanes, never through a box, lit on hover (flow);   // 1.6 9 Nov 2026: the parts the engineer writes (spec.authored): write it or draft it with the AI, accepted by a person;   // 1.5 9 Nov 2026: every subject its own report, picked from one dropdown, with a register (spec.reports)   // 1.4 9 Nov 2026: pictures placed in the story (shotslot), per-source pictures ticked by default; 1.3: 3D model pictures (spec.shots)
     function E(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
     function J(v) { return E(JSON.stringify(v)); }
     function g(name) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(name); if (v !== undefined) return v; } } catch (_) {} try { return root[name]; } catch (_) { return undefined; } }
@@ -147,6 +150,66 @@
         return { svg: s, h: h };
     }
 
+    // v1.7 (9 Nov 2026, Waqas on the "what one event takes out" figure: "these connectors must be easy to read", "and neater,
+    // not overlapping blocks and stuff"): a column diagram whose connectors are squared off and run in their own lanes
+    // between the columns, never through a box. Boxes in each column are ordered to cut crossings (the average place of
+    // what they connect to, two passes each way); each source has one trunk in the lane after it; where a connector skips
+    // a column it crosses that column in a free row, never through a box; connectors into the same box arrive at their
+    // own heights. Hovering a box lights only its connectors (wire()).
+    //   flow(key, { title, sub, cols: [{ head, nodes: [{ id, t, s, k }] }], edges: [[fromId, toId]] }) -> { svg, w, h }
+    function flow(key, o) {
+        var cols = (o.cols || []).map(function (c) { return { head: c.head, nodes: (c.nodes || []).slice() }; });
+        var colOf = {}; cols.forEach(function (c, ci) { c.nodes.forEach(function (n) { colOf[n.id] = ci; }); });
+        var E0 = (o.edges || []).filter(function (e, i, arr) { return colOf[e[0]] != null && colOf[e[1]] != null && colOf[e[0]] < colOf[e[1]] && arr.findIndex(function (x) { return x[0] === e[0] && x[1] === e[1]; }) === i; });
+        var nb = {}; E0.forEach(function (e) { (nb[e[0]] = nb[e[0]] || []).push(e[1]); (nb[e[1]] = nb[e[1]] || []).push(e[0]); });
+        var rank = function () { var r = {}; cols.forEach(function (c) { c.nodes.forEach(function (n, i) { r[n.id] = i / Math.max(1, c.nodes.length - 1); }); }); return r; };
+        for (var pass = 0; pass < 4; pass++) {
+            var rk = rank(), order = pass % 2 ? cols.map(function (_, i) { return cols.length - 1 - i; }) : cols.map(function (_, i) { return i; });
+            order.forEach(function (ci) { var c = cols[ci]; c.nodes = c.nodes.map(function (n, i) { var L = (nb[n.id] || []).map(function (m) { return rk[m]; }); return { n: n, v: L.length ? L.reduce(function (a, b) { return a + b; }, 0) / L.length : rk[n.id], i: i }; }).sort(function (a, b) { return a.v - b.v || a.i - b.i; }).map(function (x) { return x.n; }); rk = rank(); });
+        }
+        var BW = 186, G = 96, M = 16, top = o.sub ? 70 : 56, GAP = 12, nC = cols.length;
+        var W = M * 2 + nC * BW + Math.max(0, nC - 1) * G, X = cols.map(function (_, i) { return M + i * (BW + G); });
+        var pos = {}, colH = cols.map(function (c, ci) { var y = 0; c.nodes.forEach(function (n) { var b = boxSvg(0, 0, BW, n.t, n.s, n.k); y += b.h + GAP; }); return Math.max(0, y - GAP); });
+        var Hmax = Math.max.apply(null, colH.concat([40])), body = '';
+        cols.forEach(function (c, ci) {
+            var y = top + 12 + Math.round((Hmax - colH[ci]) / 2);
+            c.nodes.forEach(function (n) { var b = boxSvg(X[ci], y, BW, n.t, n.s, n.k); pos[n.id] = { x: X[ci], y: y, h: b.h, c: ci }; body += nodeG(key, n.id, b.svg, n.t); y += b.h + GAP; });
+        });
+        // ports: a source leaves from its middle; the connectors into a box arrive at their own heights, in source order
+        var into = {}; E0.forEach(function (e) { (into[e[1]] = into[e[1]] || []).push(e); });
+        var portIn = {}; Object.keys(into).forEach(function (t) { var L = into[t].sort(function (a, b) { return (pos[a[0]].y + pos[a[0]].h / 2) - (pos[b[0]].y + pos[b[0]].h / 2); }), P = pos[t]; L.forEach(function (e, j) { portIn[e[0] + '>' + t] = Math.round(P.y + P.h * (j + 1) / (L.length + 1)); }); });
+        // lanes: in the gap after a column, one trunk per source; in the gap before a target reached across columns, one lane per connector
+        var gapLanes = cols.map(function () { return []; });
+        E0.forEach(function (e) { var a = pos[e[0]], b = pos[e[1]]; if (gapLanes[a.c].indexOf('s:' + e[0]) < 0) gapLanes[a.c].push('s:' + e[0]); if (b.c - a.c > 1) gapLanes[b.c - 1].push('e:' + e[0] + '>' + e[1]); });
+        var laneX = {}; gapLanes.forEach(function (L, gi) {
+            L.sort(function (p, q) { var yp = p.charAt(0) === 's' ? pos[p.slice(2)].y : portIn[p.slice(2)], yq = q.charAt(0) === 's' ? pos[q.slice(2)].y : portIn[q.slice(2)]; return yp - yq; });
+            var x0 = X[gi] + BW + 10, x1 = X[gi] + BW + G - 14, n = L.length; L.forEach(function (id, j) { laneX[gi + '|' + id] = Math.round(n === 1 ? (x0 + x1) / 2 : x0 + (x1 - x0) * j / (n - 1)); });
+        });
+        // a free row across a skipped column, nearest the wanted height
+        var freeY = function (ci, want) {
+            var bs = cols[ci].nodes.map(function (n) { return pos[n.id]; }), clash = function (y) { return bs.some(function (b) { return y > b.y - 5 && y < b.y + b.h + 5; }); };
+            if (!clash(want)) return want;
+            var cand = [top + 4]; bs.forEach(function (b) { cand.push(b.y - GAP / 2, b.y + b.h + GAP / 2); });
+            return cand.filter(function (y) { return !clash(y); }).sort(function (p, q) { return Math.abs(p - want) - Math.abs(q - want); })[0];
+        };
+        var lines = '';
+        E0.forEach(function (e) {
+            var a = pos[e[0]], b = pos[e[1]], ys = Math.round(a.y + a.h / 2), yt = portIn[e[0] + '>' + e[1]], xs = a.x + BW, xt = b.x - 2;
+            var lx = laneX[a.c + '|s:' + e[0]], d = 'M' + xs + ',' + ys + ' H' + lx;
+            if (b.c - a.c === 1) d += ' V' + yt + ' H' + xt;
+            else {
+                var yc = yt; for (var ci = a.c + 1; ci < b.c; ci++) yc = freeY(ci, yc);
+                var lx2 = laneX[(b.c - 1) + '|e:' + e[0] + '>' + e[1]];
+                d += ' V' + yc + ' H' + lx2 + ' V' + yt + ' H' + xt;
+            }
+            lines += '<path class="ccr-edge" data-e="' + E(e[0]) + '|' + E(e[1]) + '" d="' + d + '" fill="none" stroke="' + C.line + '" stroke-width="1.3" stroke-linejoin="round" marker-end="url(#ccr-ah)"/>';
+        });
+        var H = top + 12 + Hmax + 14;
+        var hd = (o.title ? '<text x="' + M + '" y="24" font-size="14" font-weight="700" fill="' + C.ink + '">' + E(o.title) + '</text>' : '') + (o.sub ? '<text x="' + M + '" y="41" font-size="11" fill="' + C.sub + '">' + E(o.sub) + '</text>' : '')
+            + cols.map(function (c, i) { return '<text x="' + (X[i] + BW / 2) + '" y="' + (top) + '" font-size="10" font-weight="700" fill="' + C.sub + '" text-anchor="middle">' + E(c.head || '') + '</text>'; }).join('');
+        return { svg: svgWrap(W, H, hd + '<g class="ccr-edges">' + lines + '</g>' + body, o.title || ''), w: W, h: H };
+    }
+
     var REG = {};
     function define(spec) {
         if (!spec || !/^[a-z]+$/.test(spec.key || '')) throw new Error('SLCcaReport.define: a key of letters is needed');
@@ -158,6 +221,10 @@
     function make(spec) {
         var key = spec.key, ui0 = { node: null, live: false, editing: null, adding: false, msg: null, flash: null, err: null, tab: null, shownTab: undefined };
         var R = { spec: spec, state: ui0, key: key };
+        // v1.5 (9 Nov 2026): with tabs, every report stands on its own (its own number, cover, revisions and acceptance).
+        // REP is the report in use while a document, its control or its acceptance is read or written (null = the series).
+        var REP = null;
+        function withRep(rid, f) { var p0 = REP; REP = rid ? String(rid) : null; try { return f(); } finally { REP = p0; } }
 
         // ---- the store -----------------------------------------------------------------------------------------------
         function store() {
@@ -166,6 +233,7 @@
             var s = p.ccaReports[key]; if (!s || typeof s !== 'object') s = p.ccaReports[key] = {};
             if (!s.doc || typeof s.doc !== 'object') s.doc = {}; if (!s.accept || typeof s.accept !== 'object') s.accept = {};
             if (!s.shots || typeof s.shots !== 'object') s.shots = {};
+            if (!s.docs || typeof s.docs !== 'object') s.docs = {}; if (!s.accepts || typeof s.accepts !== 'object') s.accepts = {};
             return s;
         }
 
@@ -205,7 +273,7 @@
         // be drawn gives the fallback (when there is one) rather than a placeholder that never goes away
         function shotOne(id, v, forExport, fallback) {
             var r = shotGet(id, v.id);
-            if (r && r.png) return [{ k: 'shot', name: 'shot-' + v.id, title: v.caption || v.label, png: r.png, w: r.w || 800, h: r.h || 500, lead: v.lead || ('{N} shows it on the 3D model: ' + lcFirst(v.label) + '.'), shotOf: id + '|' + v.id, color: v.color || null }];
+            if (r && r.png) return [{ k: 'shot', name: 'shot-' + v.id, title: v.caption || v.label, png: r.png, w: r.w || 800, h: r.h || 500, lead: v.lead || ('{N} shows it on the 3D model: ' + lcFirst(v.label) + '.'), shotOf: id + '|' + v.id, color: v.color || null, colors: v.colors || null }];
             if (r && r.err) return fallback ? [fallback] : [];
             if (forExport) return [];
             shotEnsure(id, v.id); return [{ k: 'p', text: 'Drawing the picture "' + v.label + '" from the 3D model.', pend: 1 }];
@@ -231,7 +299,78 @@
                 if (picks.indexOf(v.id) >= 0) shotOne(s.id, v, forExport, x.fallback || null).forEach(function (y) { out.push(Object.assign({ sec: s.id }, y)); });
             });
             shotBlocks(s.id, forExport, slotted).forEach(function (x) { out.push(Object.assign({ sec: s.id }, x)); });
+            if (spec.authoredAt !== 'report') authBlocks(s.id, forExport).forEach(function (x) { out.push(Object.assign({ sec: s.id }, x)); });
             return out;
+        }
+        // ---- v1.6 (9 Nov 2026): the parts the engineer writes ----------------------------------------------------------
+        // Waqas: "I want empty sections for proposed mitigations and path to compliance and conclusion which we give them
+        // options to draft themselves or Draft with AI coz I dont think those can be done deterministically".
+        // spec.authored = [{ id, title, purpose }]: each section of the report ends with these parts, empty until someone
+        // writes them ("Write it myself") or accepts an AI draft ("Draft with AI": grounded in that section's own content,
+        // shown with what it rests on and the checks it failed, never in the report until a person accepts it; the run can
+        // be stopped). Kept in projectConfig.ccaReports[key].authored[sectionId][partId] = { text, by, at, source, draft }.
+        function authDefs() { return Array.isArray(spec.authored) ? spec.authored.filter(function (a) { return a && a.id; }) : []; }
+        function authStore(sid, write) { var s0 = store(); if (!s0.authored || typeof s0.authored !== 'object') { if (!write) return {}; s0.authored = {}; } var m = s0.authored[sid]; if (!m || typeof m !== 'object') { if (!write) return {}; m = s0.authored[sid] = {}; } return m; }
+        function authOf(sid, aid) { return authStore(sid)[aid] || null; }
+        function authBlocks(sid, forExport) {
+            var out = [];
+            authDefs().forEach(function (a) {
+                var r = authOf(sid, a.id), txt = r && r.text ? String(r.text).trim() : '';
+                out.push({ k: 'part', text: a.title, auth: a.id });
+                if (txt) txt.split(/\n\s*\n/).forEach(function (para) { if (para.trim()) out.push({ k: 'p', text: para.trim().replace(/\s*\n\s*/g, ' ') }); });
+                else out.push({ k: 'p', text: 'Not written yet.' });
+                if (!forExport) out.push({ k: 'auth', aid: a.id });
+            });
+            return out;
+        }
+        function authFacts(sid) {
+            var all = secsOf(ctxOf({ forExport: true })) || [], rr = spec.authoredAt === 'report' ? repOf(sid, all) : null;
+            var list = rr ? all.filter(function (x) { return rr.sections.indexOf(x.id) >= 0; }) : all.filter(function (x) { return x.id === sid; });
+            if (!list.length && !rr) return '';
+            var lines = rr ? ['Report: ' + rr.label + (list.length ? '' : ' (nothing in it yet)')] : [];
+            list.forEach(function (s0) { lines.push('', '# ' + s0.title); (s0.blocks || []).forEach(function (b) {
+                if (!b) return;
+                if (b.k === 'part' || b.k === 'h') lines.push('', '## ' + String(b.text || '').replace(/\*\*/g, ''));
+                else if (b.k === 'p' && b.text) lines.push(String(b.text).replace(/\*\*/g, ''));
+                else if (b.k === 'table' && b.rows && b.rows.length) { lines.push('Table: ' + (b.title || b.name)); b.rows.slice(0, 60).forEach(function (r) { lines.push(JSON.stringify(r)); }); if (b.rows.length > 60) lines.push('(' + (b.rows.length - 60) + ' more rows)'); }
+            }); });
+            authDefs().forEach(function (a) { var r = authOf(sid, a.id); if (r && r.text) lines.push('', '## ' + a.title + ' (written by the engineer)', String(r.text)); });
+            return lines.join('\n').slice(0, 60000);
+        }
+        async function authAi(sid, aid) {
+            var a = authDefs().filter(function (x) { return x.id === aid; })[0]; if (!a) throw fail('No such part.');
+            var AI = root.SafetyLabAI, RA = root.SLReportAI;
+            if (!AI || typeof AI.complete !== 'function' || !RA) throw fail('The AI is not set up in this project. Write this part yourself, or set the AI up in Settings.');
+            var heading = String(a.title).replace(/^\d+(\.\d+)*\.?\s*/, '');
+            var system = RA.systemPrompt(spec.aiType || spec.code || key.toUpperCase(), { name: spec.title }, { heading: heading, prose: a.purpose || '' });
+            var res = await AI.complete({ feature: 'report.section.draft', system: system, messages: [{ role: 'user', content: 'The project data for this section of the ' + spec.title + ' (' + (repOfSection(sid) || { label: sid }).label + '):\n\n' + authFacts(sid) }], maxTokens: 1400 });
+            var text = String((res && (res.text || (res.raw && res.raw.content && res.raw.content[0] && res.raw.content[0].text))) || '').trim();
+            if (!text) throw fail('The AI returned nothing. Try again, or write this part yourself.');
+            var flags = []; try { flags = (RA.guard(text, {}) || []).map(function (f) { return String(f.why || f.token || f); }); } catch (_) {}
+            var m = authStore(sid, true), cur = m[aid] || {};
+            cur.draft = { text: text, model: (res && res.model) || '', at: now(), flags: flags, rests: 'This report section as it stands: its method, basis, calculations, results' + (authDefs().some(function (x) { return x.id !== aid && authOf(sid, x.id) && authOf(sid, x.id).text; }) ? ', and the parts already written' : '') + '.' };
+            m[aid] = cur; save();
+            return cur.draft;
+        }
+        function authSave(sid, aid, text, source) { var m = authStore(sid, true), cur = m[aid] || {}; cur.text = String(text || '').trim(); cur.by = who(); cur.at = now(); cur.source = source || 'person'; delete cur.draft; m[aid] = cur; save(); }
+        function authHtml(sid, aid) {
+            var a = authDefs().filter(function (x) { return x.id === aid; })[0]; if (!a) return '';
+            var r = authOf(sid, aid) || {}, k = sid + '|' + aid, ed = ui0.authEdit === k, busy = ui0.authBusy === k;
+            var btn = function (verb, label, extra) { return '<button type="button" class="slap-btn" data-cc-auth="' + E(verb) + '" data-cc-authk="' + E(k) + '" onclick="SLCcaReport.act(' + J(key) + ',\'' + verb + '\',' + J(sid) + ',' + J(aid) + ')"' + (extra || '') + '>' + E(label) + '</button>'; };
+            var h = '<div class="ccr-auth" data-cc-authbox="' + E(k) + '">';
+            if (ed) {
+                h += '<textarea data-cc-authtext="' + E(k) + '" rows="7" placeholder="' + E(a.purpose || '') + '">' + E(ui0.authSeed != null ? ui0.authSeed : (r.text || '')) + '</textarea><div class="ccr-authbar">' + btn('authsave', 'Save') + btn('authcancel', 'Cancel') + '</div>';
+            } else if (r.draft) {
+                h += '<div class="ccr-authdraft" data-cc-authdraft="' + E(k) + '"><div class="ccr-authh">AI draft: not in the report until you accept it</div><div class="ccr-authdt">' + E(r.draft.text).replace(/\n/g, '<br>') + '</div>'
+                    + '<div class="ccr-authwhy"><b>What it rests on:</b> ' + E(r.draft.rests || '') + '</div>'
+                    + (r.draft.flags && r.draft.flags.length ? '<div class="ccr-authflag"><b>Check before accepting:</b> ' + r.draft.flags.map(E).join('; ') + '</div>' : '')
+                    + '<div class="ccr-authbar">' + btn('authaccept', 'Accept') + btn('authacceptedit', 'Edit, then accept') + btn('authdiscard', 'Discard') + '</div></div>';
+            } else {
+                h += '<div class="ccr-authbar">' + (busy ? '<button type="button" class="slap-btn slab-ai-stop" data-cc-auth="authstop" onclick="try{window.slabAiStop&&window.slabAiStop()}catch(_){}">&#9632; Stop</button><span class="ccr-authwait">Drafting with the AI...</span>'
+                    : btn('authedit', r.text ? 'Edit' : 'Write it myself') + btn('authai', r.text ? 'Redraft with AI' : 'Draft with AI')) + '</div>';
+                if (!r.text && a.purpose) h += '<div class="ccr-authhint">' + E(a.purpose) + '</div>';
+            }
+            return h + '</div>';
         }
         // before Word or print: every ticked picture drawn
         async function shotsReady(only) {
@@ -259,12 +398,19 @@
                 if (!r) shotEnsure(id, v.id);
                 h += '<button type="button" class="ccr-shot' + (on ? ' on' : '') + '" role="checkbox" aria-checked="' + on + '" data-ccshot="' + E(id + '|' + v.id) + '" onclick="SLCcaReport.act(' + J(key) + ',\'shot\',' + J(id) + ',' + J(v.id) + ')">'
                     + '<span class="ccr-shotimg">' + (r && r.thumb ? '<img alt="' + E(v.label) + '" src="' + r.thumb + '" data-ccshot-thumb="' + E(id + '|' + v.id) + '">' : '<img alt="' + E(v.label) + '" data-pending="1" data-ccshot-thumb="' + E(id + '|' + v.id) + '"><span class="ccr-shotwait">Drawing...</span>') + '</span>'
-                    + '<span class="ccr-shotlab"><span class="ccr-mk sq"></span><span><b>' + (v.color ? '<i class="ccr-swatch" style="background:' + E(v.color) + '"></i>' : '') + E(v.label) + '</b>' + (v.why ? '<span class="ccr-oe">' + E(v.why) + '</span>' : '') + '</span></span></button>';
+                    + '<span class="ccr-shotlab"><span class="ccr-mk sq"></span><span><b>' + (v.color ? '<i class="ccr-swatch" style="background:' + E(v.color) + '"></i>' : '') + (v.colors ? v.colors.map(function (c) { return '<i class="ccr-swatch" title="' + E(c.label + ' (' + c.name + ')') + '" style="background:' + E(c.hex) + '"></i>'; }).join('') : '') + E(v.label) + '</b>' + (v.why ? '<span class="ccr-oe">' + E(v.why) + '</span>' : '') + '</span></span></button>';
             });
             h += '</div><button type="button" class="ccr-see" data-ccshot-none="' + E(id) + '" onclick="SLCcaReport.act(' + J(key) + ',\'shotnone\',' + J(id) + ')">' + (picks && !picks.length ? 'No pictures for this part (chosen)' : 'No pictures for this part') + '</button></div>';
             return h;
         }
-        function docCtl() { var d = store().doc; if (!d.no) d.no = initials() + '-' + (spec.code || key.toUpperCase()) + '-001'; if (!d.status) d.status = 'Draft'; if (!Array.isArray(d.issues)) d.issues = []; return d; }
+        function docCtl() {
+            var s0 = store(), d;
+            if (REP) {
+                d = s0.docs[REP]; if (!d || typeof d !== 'object') d = s0.docs[REP] = {};
+                if (!d.no) { var r0 = repOf(REP), c0 = String((r0 && r0.code) || REP).replace(/\s+/g, '-'), pre = (spec.code || key.toUpperCase()) + '-'; d.no = initials() + '-' + (c0.indexOf(pre) === 0 ? c0 : pre + c0); }
+            } else { d = s0.doc; if (!d.no) d.no = initials() + '-' + (spec.code || key.toUpperCase()) + '-001'; }
+            if (!d.status) d.status = 'Draft'; if (!Array.isArray(d.issues)) d.issues = []; return d;
+        }
         function rev() { var i = docCtl().issues; return i.length ? i[i.length - 1].rev : 'Draft'; }
         function nextRev(r) { if (!r || r === 'Draft') return 'A'; var n = 0; for (var i = 0; i < r.length; i++) n = n * 26 + (r.charCodeAt(i) - 64); n++; var out = ''; while (n > 0) { var m = (n - 1) % 26; out = String.fromCharCode(65 + m) + out; n = Math.floor((n - 1) / 26); } return out; }
         // one new revision per issue; issuing again the same day updates that day's issue
@@ -285,16 +431,17 @@
 
         // ---- outputs and acceptance ----------------------------------------------------------------------------------
         function outputs() {
-            var L = typeof spec.outputs === 'function' ? safe(spec.outputs, []) : ((spec.io && spec.io.outputs) || []);
+            var L = typeof spec.outputs === 'function' ? safe(function () { return spec.outputs(REP); }, []) : ((spec.io && spec.io.outputs) || []);
             return (L || []).filter(function (o) { return o && o.id; });
         }
-        function fpOf(o) { return typeof o.fp === 'function' ? String(safe(o.fp, '')) : ''; }
+        function fpOf(o) { return typeof o.fp === 'function' ? String(safe(function () { return o.fp(REP); }, '')) : ''; }
+        function accStore() { var s = store(); if (!REP) return s.accept; var a = s.accepts[REP]; if (!a || typeof a !== 'object') a = s.accepts[REP] = {}; return a; }
         function acceptance() {
-            var s = store();
-            return outputs().map(function (o) { var r = s.accept[o.id], fp = fpOf(o); var st = !r ? 'open' : (r.fp === fp ? 'accepted' : 'reopened'); return Object.assign({}, o, { state: st, by: r && r.by, at: r && r.at }); });
+            var A = accStore();
+            return outputs().map(function (o) { var r = A[o.id], fp = fpOf(o); var st = !r ? 'open' : (r.fp === fp ? 'accepted' : 'reopened'); return Object.assign({}, o, { state: st, by: r && r.by, at: r && r.at }); });
         }
-        function accept(id) { var o = outputs().filter(function (x) { return x.id === id; })[0]; if (!o) throw fail('No such output: ' + id); var s = store(); s.accept[id] = { by: who(), at: now(), fp: fpOf(o) }; save(); return s.accept[id]; }
-        function unaccept(id) { var s = store(); delete s.accept[id]; save(); }
+        function accept(id) { var o = outputs().filter(function (x) { return x.id === id; })[0]; if (!o) throw fail('No such output: ' + id); var A = accStore(); A[id] = { by: who(), at: now(), fp: fpOf(o) }; save(); return A[id]; }
+        function unaccept(id) { var A = accStore(); delete A[id]; save(); }
 
         // ---- the document ----------------------------------------------------------------------------------------------
         function H(level, text, extra) { return Object.assign({ k: 'h', level: level, text: text }, extra || {}); }
@@ -344,6 +491,7 @@
         // the whole document as blocks: front, inputs and outputs, one section per subject, after, outputs and acceptance
         function secsOf(ctx) { return safe(function () { return spec.sections(ctx); }, null); }
         function doc(o) {
+            if (o && o.report) return withRep(o.report, function () { return repDoc(o); });
             var ctx = ctxOf(o), b = [];
             if (o && o.only) return number(onlyBlocks(o.only, o.secs || secsOf(ctx), !!o.forExport));
             var front = typeof spec.front === 'function' ? (safe(function () { return spec.front(ctx); }, []) || []) : [];
@@ -369,6 +517,30 @@
             }
             return number(b);
         }
+        // v1.5: one report on its own: front, inputs and outputs, its section(s), its outputs and acceptance
+        function repDoc(o) {
+            var ctx = Object.assign(ctxOf(o), { report: REP }), b = [], secs = o.secs || secsOf(ctx) || [], r = repOf(REP, secs);
+            if (!r) return number([P('This report is no longer in the project.')]);
+            var front = typeof spec.front === 'function' ? (safe(function () { return spec.front(ctx); }, []) || []) : [];
+            if (front.length) b = b.concat(front.map(function (x) { return Object.assign({}, x); }));
+            var io = ioBlocks(); if (io.length) { b.push(H(1, 'Inputs and outputs')); b = b.concat(io); }
+            var rs = secs.filter(function (x) { return x && r.sections.indexOf(x.id) >= 0; });
+            if (rs.length === 1 && !tabSpec().groupHeading) { b.push(H(1, rs[0].title, { sec: rs[0].id, edit: rs[0].edit !== false && !!spec.edit, secHead: true })); b = b.concat(secBlocks(rs[0], o.forExport)); }
+            else {
+                b.push(H(1, tabSpec().groupHeading ? tabSpec().groupHeading(r) : r.title));
+                if (!rs.length) b.push(P('Nothing in this report yet. Use "' + ((spec.edit && spec.edit.addLabel) || 'Add') + '" to start.'));
+                rs.forEach(function (x) { b.push(H(2, x.title, { sec: x.id, edit: x.edit !== false && !!spec.edit, secHead: true })); b = b.concat(secBlocks(x, o.forExport)); });
+            }
+            // v1.6: parts the engineer writes once for the whole report (spec.authoredAt === 'report', e.g. one CMA per level)
+            if (spec.authoredAt === 'report') authBlocks(REP, o.forExport).forEach(function (x) { if (x.k === 'part') b.push(H(1, String(x.text).replace(/^\d+(\.\d+)*\.?\s*/, ''))); else b.push(Object.assign({ sec: REP }, x)); });
+            var outs = outputs();
+            if (outs.length) {
+                b.push(H(1, 'Outputs and acceptance'));
+                b.push(P('This report is complete when each output below has been produced and accepted against its criteria by the role named. The acceptance is recorded in Safety Lab with who accepted it and when; if an output changes after it is accepted, its acceptance is reopened.'));
+                b.push({ k: 'table', name: 'outputs', title: 'Outputs and how each is accepted', rows: outs.map(function (x, i) { return { '#': String(i + 1), Output: x.what, 'Accepted when': x.accept || '', 'Accepted by (role)': x.role || docCtl().appr || 'Chief safety engineer', Signature: '', Date: '' }; }), lead: '{N} lists the outputs and how each is accepted.' });
+            }
+            return number(b);
+        }
         // v1.2: one section alone (its tab and its own Word file): its heading, then its blocks, numbered on their own
         function onlyBlocks(id, secs, forExport) {
             var s = (secs || []).filter(function (x) { return x && x.id === id; })[0];
@@ -378,7 +550,8 @@
         }
         function coverTables(only) {
             var d = docCtl();
-            var dc = [{ Item: 'Document number', Entry: d.no }, { Item: 'Title', Entry: spec.title }, { Item: 'Program', Entry: projName() }, { Item: 'Revision', Entry: rev() }, { Item: 'Date', Entry: d.issues.length ? d.issues[d.issues.length - 1].date : today() }, { Item: 'Status', Entry: d.status }];
+            var r1 = REP ? repOf(REP) : null;
+            var dc = [{ Item: 'Document number', Entry: d.no }, { Item: 'Title', Entry: spec.title + (r1 ? ': ' + r1.label : '') }, { Item: 'Program', Entry: projName() }, { Item: 'Revision', Entry: rev() }, { Item: 'Date', Entry: d.issues.length ? d.issues[d.issues.length - 1].date : today() }, { Item: 'Status', Entry: d.status }];
             if (only) dc.splice(2, 0, { Item: 'Section', Entry: only + ' (one section of the full document)' });
             return [{ title: 'Document control', rows: dc },
                 { title: 'Approvals', rows: [{ Role: 'Prepared by', Holder: d.prep || 'To be named (by role)', Signature: '', Date: '' }, { Role: 'Reviewed by', Holder: d.rev || 'To be named (by role)', Signature: '', Date: '' }, { Role: 'Approved by', Holder: d.appr || 'To be named (by role)', Signature: '', Date: '' }] },
@@ -387,7 +560,8 @@
         function tblHtml(rows, rowQ) { var hd = rows.length ? Object.keys(rows[0]) : []; return '<table class="ccr-dt"><thead><tr>' + hd.map(function (h) { return '<th>' + E(h) + '</th>'; }).join('') + '</tr></thead><tbody>' + rows.map(function (r, i) { var q = rowQ && rowQ[i]; return '<tr' + (q ? ' data-ccq="' + E(q) + '"' : '') + '>' + hd.map(function (h) { return '<td>' + E(r[h]) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table>'; }
         function frontHtml(blocks) {
             var hs = blocks.filter(function (b) { return b.k === 'h'; }), ts = blocks.filter(function (b) { return b.k === 'table'; }), fs = blocks.filter(function (b) { return b.k === 'fig' || b.k === 'shot'; });
-            return '<div class="ccr-cover" data-cc-cover="1"><div class="ccr-ct">' + E(spec.title) + '</div><div class="ccr-cs">' + E(projName()) + '</div>' + coverTables().map(function (t) { return '<div class="ccr-cap">' + E(t.title) + '</div>' + tblHtml(t.rows); }).join('') + '</div>'
+            var r2 = REP ? repOf(REP) : null;
+            return '<div class="ccr-cover" data-cc-cover="1"' + (r2 ? ' data-cc-report="' + E(r2.id) + '"' : '') + '><div class="ccr-ct">' + E(spec.title) + '</div>' + (r2 ? '<div class="ccr-ct2">' + E(r2.label) + '</div>' : '') + '<div class="ccr-cs">' + E(projName()) + '</div>' + coverTables().map(function (t) { return '<div class="ccr-cap">' + E(t.title) + '</div>' + tblHtml(t.rows); }).join('') + '</div>'
                 + '<div class="ccr-front" data-cc-toc="1"><h3 class="ccr-dh">Contents</h3>' + hs.map(function (h, i) { return '<div class="ccr-tl' + (h.level > 1 ? ' l2' : '') + '"><a href="javascript:void(0)" data-cc-goto="h' + i + '">' + E(h.text) + '</a></div>'; }).join('')
                 + '<h3 class="ccr-dh">List of tables</h3>' + (ts.length ? ts.map(function (t) { return '<div class="ccr-tl" data-cc-lot="1"><a href="javascript:void(0)" data-cc-goto="t' + t.n + '">' + E(t.caption) + '</a></div>'; }).join('') : '<p>None.</p>')
                 + '<h3 class="ccr-dh">List of figures</h3>' + (fs.length ? fs.map(function (f) { return '<div class="ccr-tl" data-cc-lof="1"><a href="javascript:void(0)" data-cc-goto="f' + f.n + '">' + E(f.caption) + '</a></div>'; }).join('') : '<p>None.</p>') + '</div>';
@@ -408,43 +582,59 @@
                 if (b.k === 'p') { out += '<p' + (b.q ? ' data-ccq="' + E(b.q) + '"' : '') + (/^Not decided yet|^To be decided/.test(b.text) ? ' class="ccr-tbd"' : '') + '>' + E(b.text).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>') + '</p>'; return; }
                 if (b.k === 'act') { if (forPage) out += '<div class="ccr-act"><button type="button" class="slap-btn" data-cc-act="1" onclick="' + E(b.onclick) + '">' + E(b.label) + '</button></div>'; return; }
                 if (b.k === 'fig') { out += '<div class="ccr-fig" data-cc-a="f' + b.n + '">' + b.svg + '</div><div class="ccr-cap">' + E(b.caption) + '</div>'; return; }
-                if (b.k === 'shot') { out += '<div class="ccr-fig ccr-shotfig" data-cc-a="f' + b.n + '" data-ccshotfig="' + E(b.shotOf || '') + '"' + (b.color ? ' data-ccshotcolor="' + E(b.color) + '"' : '') + '><img alt="' + E(b.title) + '" src="' + b.png + '" width="' + b.w + '" height="' + b.h + '"></div><div class="ccr-cap">' + (b.color ? '<i class="ccr-swatch" style="background:' + E(b.color) + '"></i>' : '') + E(b.caption) + '</div>'; return; }
+                if (b.k === 'shot') { out += '<div class="ccr-fig ccr-shotfig" data-cc-a="f' + b.n + '" data-ccshotfig="' + E(b.shotOf || '') + '"' + (b.color ? ' data-ccshotcolor="' + E(b.color) + '"' : '') + '><img alt="' + E(b.title) + '" src="' + b.png + '" width="' + b.w + '" height="' + b.h + '"></div><div class="ccr-cap">' + (b.color ? '<i class="ccr-swatch" style="background:' + E(b.color) + '"></i>' : '') + E(b.caption) + (b.colors && b.colors.length ? '<div class="ccr-legend" data-cc-legend="1">' + b.colors.map(function (c) { return '<span><i class="ccr-swatch" style="background:' + E(c.hex) + '"></i>' + E(c.label) + ' (' + E(c.name) + ')</span>'; }).join('') + '</div>' : '') + '</div>'; return; }
+                if (b.k === 'auth') { if (forPage && b.sec) out += authHtml(b.sec, b.aid); return; }
                 if (b.pend) { if (forPage) out += '<p class="ccr-tbd" data-ccshot-pend="1">' + E(b.text) + '</p>'; return; }
                 if (b.k === 'table') { out += '<div class="ccr-cap" data-cc-a="t' + b.n + '"' + (b.q ? ' data-ccq="' + E(b.q) + '"' : '') + '>' + E(b.caption) + '</div>' + (b.rows && b.rows.length ? tblHtml(b.rows, b.rowQ) : '<p class="ccr-tbd">(No entries)</p>'); return; }
             });
             if (open) out += '</div>';
             return out;
         }
-        function fullHtml(o) { var bl = doc(o); return frontHtml(bl) + bodyHtml(bl, !(o && o.forExport)); }
+        function fullHtml(o) { if (o && o.report && REP !== String(o.report)) return withRep(o.report, function () { return fullHtml(o); }); var bl = doc(o); return frontHtml(bl) + bodyHtml(bl, !(o && o.forExport)); }
         // the Word model (report_writer.js): small headings become bold lines, preview-only buttons are left out
         function model(o) {
+            if (o && o.report && REP !== String(o.report)) return withRep(o.report, function () { return model(o); });
+            if (o && o.report) {
+                var dR = docCtl(), C1 = C, rr = repOf(REP); C = LIGHT;
+                try {
+                    var blR = doc({ forExport: true, report: REP });
+                    return { title: spec.title, report: REP, titleLines: [projName(), rr ? rr.label : REP, dR.no + ' · Revision ' + rev() + ' · ' + dR.status], cover: { tables: coverTables() }, headerText: dR.no + ' Rev ' + rev() + ' · ' + spec.title + (rr ? ' · ' + rr.label : ''), projectName: projName(), sigFigs: 3, blocks: wordBlocks(blR) };
+                } finally { C = C1; }
+            }
             var d = docCtl(), C0 = C, only = o && o.only ? String(o.only) : null; C = LIGHT;
             try {
                 var bl = doc({ forExport: true, only: only }), st = only ? ((bl.filter(function (x) { return x.k === 'h' && x.secHead; })[0] || {}).text || only).replace(/^\d+\.\s*/, '') : '';
                 return { title: spec.title, titleLines: [projName()].concat(only ? [st] : []).concat([d.no + ' · Revision ' + rev() + ' · ' + d.status]), cover: { tables: coverTables(only ? st : null) }, headerText: d.no + ' Rev ' + rev() + ' · ' + spec.title + (only ? ' · ' + only : ''), projectName: projName(), sigFigs: 3, only: only || undefined,
-                    blocks: bl.filter(function (b) { return b.k !== 'act' && !b.pend; }).map(function (b) {
+                    blocks: wordBlocks(bl) };
+            } finally { C = C0; }
+        }
+        function wordBlocks(bl) {
+            return bl.filter(function (b) { return b.k !== 'act' && b.k !== 'auth' && !b.pend; }).map(function (b) {
                         if (b.k === 'fig') return { k: 'img', caption: b.title, svg: b.svg, w: b.w, h: b.h };
                         if (b.k === 'shot') return { k: 'img', caption: b.title, dataUrl: b.png, w: b.w, h: b.h, shot: true };
                         if (b.k === 'table') { var t = { k: 'table', name: b.name, title: b.title, rows: b.rows }; if (b.rows && b.rows[0] && Object.keys(b.rows[0]).length >= 4) t.small = true; return t; }
                         if (b.k === 'part') return { k: 'p', text: '**' + b.text + '**' };
                         if (b.k === 'h') return { k: 'h', level: b.level, text: b.text };
                         return { k: 'p', text: b.text };
-                    }) };
-            } finally { C = C0; }
+            });
         }
         async function word(o) {
             var lib = typeof root._loadDocxLib === 'function' ? await root._loadDocxLib() : root.docx;
             if (!lib || !root.SLReportWriter) throw fail('The Word writer is not loaded in this build.');
-            await shotsReady(o && o.only ? String(o.only) : null);
+            var rid = o && o.report ? String(o.report) : null;
+            if (rid) { var rsec = (repOf(rid) || { sections: [] }).sections; for (var q = 0; q < rsec.length; q++) await shotsReady(rsec[q]); }
+            else await shotsReady(o && o.only ? String(o.only) : null);
             var m = model(o), P0 = root.SLFtaPrint;
             for (var i = 0; i < m.blocks.length; i++) { var b = m.blocks[i]; if (b.k === 'img' && !b.dataUrl) { try { b.dataUrl = P0 && P0.png ? await P0.png({ svg: b.svg, w: b.w, h: b.h }, 2) : null; } catch (_) { b.dataUrl = null; } } }
             var blob = await root.SLReportWriter.docx(m, lib);
-            try { var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = (docCtl().no + ' Rev ' + rev() + ' ' + spec.title + (m.only ? ' ' + m.only : '')).replace(/[^\w-]+/g, '_') + '.docx'; document.body.appendChild(a); a.click(); a.remove(); } catch (_) {}
+            try { var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = withRep(rid, function () { return (docCtl().no + ' Rev ' + rev() + ' ' + spec.title + (m.only ? ' ' + m.only : '')).replace(/[^\w-]+/g, '_') + '.docx'; }); document.body.appendChild(a); a.click(); a.remove(); } catch (_) {}
             return blob;
         }
-        function print() {
-            var C0 = C; C = LIGHT; var html;
-            try { html = fullHtml({ forExport: true }); } finally { C = C0; }
+        // v1.5: every report as its own Word file, one after another
+        async function wordAll() { var L = repList(), out = []; for (var i = 0; i < L.length; i++) out.push(await word({ report: L[i].id })); return out; }
+        function print(o) {
+            var C0 = C; C = LIGHT; var html, rid = o && o.report ? String(o.report) : null;
+            try { html = rid ? withRep(rid, function () { return fullHtml({ forExport: true, report: rid }); }) : fullHtml({ forExport: true }); } finally { C = C0; }
             var css = '<style>.ccr-shotfig img{max-width:100%;height:auto;display:block}.ccr-dt{border-collapse:collapse;width:100%;font-size:11px}.ccr-dt th,.ccr-dt td{border:1px solid #999;padding:3px 5px;text-align:left;vertical-align:top}.ccr-cap{font-weight:700;font-size:11px;margin:10px 0 4px}.ccr-cover,.ccr-front{page-break-after:always}.ccr-ct{font-size:26px;font-weight:700;margin-top:80px}.ccr-cs{font-size:15px;margin:6px 0 30px}.ccr-fig svg{max-width:100%;height:auto;background:#fff}.ccr-tl.l2{margin-left:16px}.ccr-part{font-size:12.5px;margin:10px 0 4px}</style>';
             if (U()) return U().openReport(spec.title + ' · ' + projName(), css + html);
             return false;
@@ -454,7 +644,9 @@
         function style() {
             if (typeof document === 'undefined' || document.getElementById('ccr-style')) return;
             var st = document.createElement('style'); st.id = 'ccr-style';
-            st.textContent = '.ccr-shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin-top:8px}'
+            st.textContent = '.ccr-pick{display:flex;align-items:center;gap:10px;margin:0 0 14px;flex-wrap:wrap}.ccr-pick label{font-weight:700;font-size:13.5px}.ccr-pick select{font:inherit;font-size:14px;padding:7px 34px 7px 10px;min-width:min(520px,100%);max-width:100%;border:1px solid var(--color-border-strong,#c7cbd1);border-radius:8px;background-color:var(--color-surface-1,#fff);color:var(--color-text-primary,#101216)}'
+                + '.ccr-ct2{font-size:17px;font-weight:600;margin:2px 0 6px}.ccr-reg td{vertical-align:top}.ccr-reg td:first-child{white-space:nowrap}.ccr-reg p{margin:6px 0 10px}'
+                + '.ccr-shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin-top:8px}'
                 + '.ccr-shot{display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;text-align:left;padding:6px;border:1px solid var(--color-border-strong,#c7cbd1);border-radius:8px;background:var(--color-surface-1,#fff);color:var(--color-text-primary,#101216);cursor:pointer;font:inherit}'
                 + '.ccr-shot.on{border:2px solid #1A6EF2;padding:5px}.ccr-shotimg{position:relative;display:block;background:#fff;border-radius:5px;overflow:hidden;aspect-ratio:8/5}.ccr-shotimg img{width:100%;height:100%;object-fit:contain;display:block}.ccr-shotimg img[data-pending]{visibility:hidden}'
                 + '.ccr-shotwait{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;color:#101216}.ccr-shotlab{display:flex;gap:7px;align-items:flex-start;margin-top:6px;font-size:12.5px}.ccr-shotlab .ccr-oe{display:block;font-weight:400}'
@@ -469,6 +661,10 @@
                 + '.ccr .ccr-prev{max-height:80vh;overflow:auto;border:1px solid var(--cp-hair);border-radius:10px;padding:16px 20px;background:var(--cp-bg);color:var(--cp-ink);font-size:12.5px;line-height:1.5;position:relative}'
                 + '.ccr .ccr-prev h3,.ccr .ccr-prev h4,.ccr .ccr-prev p,.ccr .ccr-prev li,.ccr .ccr-prev b,.ccr .ccr-prev div,.ccr .ccr-prev label,.ccr .ccr-prev span{color:var(--cp-ink)}'
                 + '.ccr .ccr-prev h3{font-size:15px;margin:16px 0 6px;background:none;display:flex;gap:10px;align-items:center;flex-wrap:wrap}.ccr .ccr-prev h3.l2{font-size:13.5px}.ccr .ccr-prev .ccr-part{font-size:13px;margin:16px 0 5px;padding-bottom:3px;border-bottom:1px solid var(--cp-hair)}.ccr .ccr-prev .ccr-part.l2{font-size:12.5px;margin:12px 0 4px;border-bottom:none}.ccr .ccr-prev p{margin:0 0 7px;max-width:78ch}.ccr .ccr-prev .ccr-tbd{color:var(--cp-tbd);font-style:italic}'
+                + '.ccr-fig svg.ccr-hl .ccr-edge{opacity:.1}.ccr-fig svg.ccr-hl .ccr-edge.on{opacity:1;stroke-width:2.4}.ccr-fig svg.ccr-hl .ccr-node{opacity:.3}.ccr-fig svg.ccr-hl .ccr-node.on{opacity:1}.ccr-edge{transition:opacity .12s}'
+                + '.ccr-auth{margin:4px 0 12px;padding:8px 10px;border:1px dashed var(--cp-line,#c7cbd1);border-radius:8px}.ccr-auth textarea{width:100%;box-sizing:border-box;font:inherit;font-size:13px;padding:6px;border:1px solid var(--cp-line,#c7cbd1);border-radius:6px;background:var(--cp-bg,#fff);color:var(--cp-ink,#101216)}'
+                + '.ccr-authbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px}.ccr-authhint,.ccr-authwhy,.ccr-authflag{font-size:12.5px;margin-top:6px}.ccr-authflag{color:var(--cp-tbd,#9A3412)}.ccr-authh{font-weight:700;font-size:12.5px;margin-bottom:4px}.ccr-authdt{font-size:13px;line-height:1.5}.ccr-authwait{font-size:12.5px}'
+                + '.ccr-legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-weight:400;margin-top:4px}.ccr-legend span{white-space:nowrap}'
                 + '.ccr-swatch{display:inline-block;width:11px;height:11px;border-radius:3px;margin:0 6px -1px 0;border:1px solid rgba(0,0,0,.25);vertical-align:baseline}'
                 + '.ccr .ccr-prev .ccr-cap{font-weight:700;font-size:11.5px;margin:10px 0 4px}.ccr-cover{border-bottom:2px solid var(--cp-rule);padding-bottom:14px;margin-bottom:14px}.ccr-ct{font-size:22px;font-weight:700;margin-top:6px}.ccr-cs{font-size:14px;margin:2px 0 10px}'
                 + '.ccr-front{border-bottom:2px solid var(--cp-rule);padding-bottom:12px;margin-bottom:12px}.ccr-tl{font-size:12px;margin:1px 0}.ccr-tl.l2{margin-left:16px}.ccr .ccr-prev a{color:var(--cp-link);text-decoration:none}'
@@ -601,11 +797,24 @@
             return { id: '', name: title };
         }
         function tabList(secs) { return (secs || []).filter(function (s) { return s && s.id; }).map(function (s) { var t = tabOf(s); return { id: s.id, tid: t.id, name: t.name, label: (t.id ? t.id + ' ' : '') + t.name, title: String(s.title || s.id) }; }); }
+        // v1.5: the reports: spec.reports(secs) -> [{ id, code, label, title, sections: [section ids] }], or one per section
+        function repList(secs) {
+            secs = secs || secsOf(ctxOf()) || [];
+            if (typeof spec.reports === 'function') {
+                var L = safe(function () { return spec.reports(secs); }, null);
+                if (Array.isArray(L)) return L.filter(function (r) { return r && r.id; }).map(function (r) { return { id: String(r.id), code: String(r.code || r.id), label: String(r.label || r.title || r.id), title: String(r.title || r.label || r.id), sections: (r.sections || []).map(String) }; });
+            }
+            return tabList(secs).map(function (t) { return { id: t.id, code: t.tid || t.id, label: t.label, title: t.title, sections: [t.id] }; });
+        }
+        function repOf(id, secs) { return repList(secs).filter(function (r) { return r.id === String(id); })[0] || null; }
+        function repOfSection(sid, secs) { return repList(secs).filter(function (r) { return r.sections.indexOf(String(sid)) >= 0; })[0] || null; }
+        // a page without an "All" register (spec.tabs.allLabel === false) always has a report open: the first one
+        function noRegister() { return tabSpec().allLabel === false; }
         // the tab kept for this project (null = All); a tab whose section has gone falls back to All
         function storedTab() { if (!tabsOn()) return null; var s = store(), t = s.tab != null ? s.tab : ui0.tab; return t ? String(t) : null; }
         function tab() {
-            var t = storedTab(); if (!t) return null;
-            var ok = safe(function () { return (secsOf(ctxOf()) || []).some(function (s) { return s && s.id === t; }); }, false);
+            var t = storedTab(); if (!t && noRegister()) { var f0 = safe(function () { return repList()[0]; }, null); return f0 ? f0.id : null; } if (!t) return null;
+            var ok = safe(function () { return repList().some(function (r) { return r.id === t; }); }, false);
             return ok ? t : null;
         }
         function setTab(id, o) {
@@ -616,11 +825,37 @@
             if (!o || o.render !== false) render();
             return true;
         }
+        // v1.5: one dropdown, not a row of tabs (Waqas: "this should be a drop down menu")
         function tabsHtml(list, cur) {
-            var one = function (id, inner, title, cls) { var on = (cur || '') === (id || ''); return '<button type="button" role="tab" id="ccr-tab-' + E(key) + '-' + E(String(id || 'all').replace(/[^A-Za-z0-9_-]/g, '_')) + '" class="ccr-tab' + (cls ? ' ' + cls : '') + (on ? ' on' : '') + '" aria-selected="' + on + '" tabindex="' + (on ? '0' : '-1') + '" data-cctab="' + E(id || '') + '" title="' + E(title) + '" onclick="SLCcaReport.act(' + J(key) + ',\'tab\',' + J(id || null) + ')">' + inner + '</button>'; };
-            return '<div class="ccr-tabs" role="tablist" aria-label="' + E(spec.title) + '" data-cctabs="1">'
-                + one(null, '<span class="ccr-tabn">' + E(tabSpec().allLabel || 'All') + '</span>', 'The whole ' + lcFirst(spec.title) + ' document', 'all')
-                + list.map(function (t) { return one(t.id, (t.tid ? '<span class="ccr-tabid">' + E(t.tid) + '</span>' : '') + '<span class="ccr-tabn">' + E(t.name) + '</span>', t.title); }).join('') + '</div>';
+            var all = tabSpec().allLabel, lab = tabSpec().pickLabel || 'Report';
+            return '<div class="ccr-pick" data-cctabs="1"><label for="ccr-sel-' + E(key) + '">' + E(lab) + '</label><select id="ccr-sel-' + E(key) + '" data-cctabsel="1" onchange="SLCcaReport.act(' + J(key) + ',\'tab\',this.value)">'
+                + (all === false ? '' : '<option value=""' + (cur ? '' : ' selected') + '>' + E(all || 'All') + '</option>')
+                + list.map(function (r) { return '<option value="' + E(r.id) + '"' + (r.id === cur ? ' selected' : '') + '>' + E(r.label) + '</option>'; }).join('') + '</select></div>';
+        }
+        // v1.5: the register of the reports (the All choice): one row per report, each opens its report
+        function conclusionOf(r, secs) {
+            if (typeof spec.conclusion === 'function') { var c = safe(function () { return spec.conclusion(r.id); }, null); if (c) return String(c); }
+            if (authDefs().some(function (a) { return a.id === 'conclusion'; })) {
+                var ids = spec.authoredAt === 'report' ? [r.id] : r.sections, txt = ids.map(function (id) { var x = authOf(id, 'conclusion'); return x && x.text ? String(x.text).trim() : ''; }).filter(Boolean).join(' ');
+                return txt ? (txt.length > 320 ? txt.slice(0, 317).replace(/\s+\S*$/, '') + '...' : txt) : 'Not written yet.';
+            }
+            var out = '';
+            (secs || []).filter(function (x) { return r.sections.indexOf(x.id) >= 0; }).some(function (x) {
+                var bl = x.blocks || [], at = -1;
+                bl.forEach(function (b, i) { if (at < 0 && b && (b.k === 'part' || b.k === 'h') && /conclusion/i.test(b.text || '')) at = i; });
+                if (at < 0) return false;
+                for (var i = at + 1; i < bl.length; i++) { if (bl[i] && bl[i].k === 'p' && bl[i].text) { out = String(bl[i].text).replace(/\*\*/g, ''); return true; } if (bl[i] && (bl[i].k === 'part' || bl[i].k === 'h')) break; }
+                return false;
+            });
+            return (out || 'Not concluded yet.').replace(/^What it takes out\.\s*/, '');
+        }
+        function registerHtml(secs, list) {
+            var rows = list.map(function (r) { return withRep(r.id, function () { var d = docCtl(); return { r: r, no: d.no, rev: rev(), st: d.status, c: conclusionOf(r, secs) }; }); });
+            return '<div class="ccr-reg" data-cc-register="1"><h3 class="ccr-dh l1">' + E(tabSpec().registerTitle || (spec.title + ' register')) + '</h3>'
+                + '<p>Each ' + E(tabSpec().noun || 'subject') + ' has its own report: its own document number, cover, revisions and acceptance. Pick one in the list above, or open it here.</p>'
+                + '<table class="ccr-dt"><thead><tr><th>Document number</th><th>Revision</th><th>Status</th><th>' + E(tabSpec().nounTitle || 'Subject') + '</th><th>Conclusion</th><th></th></tr></thead><tbody>'
+                + rows.map(function (x) { return '<tr data-cc-regrow="' + E(x.r.id) + '"><td>' + E(x.no) + '</td><td>' + E(x.rev) + '</td><td>' + E(x.st) + '</td><td><b>' + E(x.r.label) + '</b></td><td>' + E(x.c) + '</td><td><button type="button" class="slap-btn" data-cc-open="' + E(x.r.id) + '" onclick="SLCcaReport.act(' + J(key) + ',\'tab\',' + J(x.r.id) + ')">Open</button></td></tr>'; }).join('')
+                + '</tbody></table></div>';
         }
         function render() {
             var h = host(); if (!h) return false;
@@ -630,24 +865,32 @@
             C = dark ? DARK : LIGHT;
             try {
                 if (tabsOn()) {
-                    var secs = secsOf(ctxOf({ dark: dark })); list = tabList(secs || []);
+                    var secs = secsOf(ctxOf({ dark: dark })); list = repList(secs || []);
                     var t0 = storedTab(); cur = t0 && list.some(function (t) { return t.id === t0; }) ? t0 : null;
                     if (t0 && !cur) setTab(null, { render: false });
+                    if (!cur && noRegister() && list.length) cur = list[0].id;
+                    REP = cur;
+                    if (cur) { var blR = doc({ dark: dark, report: cur, secs: secs }); html = '<div class="ccr-tabdoc" data-cc-tabdoc="' + E(cur) + '">' + frontHtml(blR) + bodyHtml(blR, true) + '</div>'; }
+                    else html = registerHtml(secs || [], list);
+                    cur = cur || null;
+                } else if (false) {
                     if (cur) { var d = docCtl(); html = '<div class="ccr-tabdoc" data-cc-tabdoc="' + E(cur) + '"><div class="ccr-tabhead" data-cc-tabhead="1">' + E(spec.title) + ' · ' + E(d.no) + ' Rev ' + E(rev()) + ' · ' + E(projName()) + '</div>' + bodyHtml(doc({ dark: dark, only: cur, secs: secs }), true) + '</div>'; }
                     else { var bl = doc({ dark: dark, secs: secs }); html = frontHtml(bl) + bodyHtml(bl, true); }
                 } else html = fullHtml({ dark: dark });
             } finally { C = LIGHT; }
+            try {
             if (ui0.shownTab !== undefined && ui0.shownTab !== cur) scroll = 0;   // another tab opens at its top
             ui0.shownTab = cur;
             var shotSec = cur || (typeof spec.shotsFocus === 'function' ? safe(spec.shotsFocus, null) : null);
             var left = leftHtml(cur) + (shotSec ? shotPickerHtml(String(shotSec)) : ''), noun = tabSpec().noun || 'section';
-            var bar = cur
-                ? '<button type="button" data-cc-wordsec="' + E(cur) + '" onclick="SLCcaReport.act(' + J(key) + ',\'wordsec\')">Export this ' + E(noun) + ' to Word</button>'
+            var bar = tabsOn()
+                ? (cur ? '<button type="button" data-cc-word="1" data-cc-wordsec="' + E(cur) + '" onclick="SLCcaReport.act(' + J(key) + ',\'word\')">Word (.docx)</button><button type="button" data-cc-print="1" onclick="SLCcaReport.act(' + J(key) + ',\'print\')">Print</button>'
+                    : '<button type="button" data-cc-wordall="1" onclick="SLCcaReport.act(' + J(key) + ',\'wordall\')">Export every report to Word</button>')
                 : '<button type="button" data-cc-word="1" onclick="SLCcaReport.act(' + J(key) + ',\'word\')">Word (.docx)</button><button type="button" data-cc-print="1" onclick="SLCcaReport.act(' + J(key) + ',\'print\')">Print</button>';
             h.innerHTML = '<div class="ccr" data-ccr="' + E(key) + '"' + (tabsOn() ? ' data-cctab-open="' + E(cur || '') + '"' : '') + '>' + (spec.lead ? '<p class="ccr-lead">' + E(spec.lead) + '</p>' : '')
                 + (tabsOn() ? tabsHtml(list, cur) : '')
                 + (ui0.msg ? '<div class="ccr-msg' + (ui0.msg.err ? ' err' : '') + '">' + E(ui0.msg.text) + '</div>' : '')
-                + '<div class="ccr-cols"' + (tabsOn() ? ' role="tabpanel" aria-labelledby="ccr-tab-' + E(key) + '-' + E(String(cur || 'all').replace(/[^A-Za-z0-9_-]/g, '_')) + '"' : '') + '><div class="ccr-left"' + (spec.leftId ? ' id="' + E(spec.leftId) + '"' : '') + ' data-ccleft="1">' + left + (cur ? '' : acceptBox() + docPanel()) + '</div>'
+                + '<div class="ccr-cols"' + (tabsOn() ? ' role="tabpanel" aria-labelledby="ccr-tab-' + E(key) + '-' + E(String(cur || 'all').replace(/[^A-Za-z0-9_-]/g, '_')) + '"' : '') + '><div class="ccr-left"' + (spec.leftId ? ' id="' + E(spec.leftId) + '"' : '') + ' data-ccleft="1">' + left + (tabsOn() ? (cur ? acceptBox() + docPanel() : '') : acceptBox() + docPanel()) + '</div>'
                 + '<div class="ccr-right"><div class="ccr-bar">' + (spec.edit ? '<button type="button" class="p" data-cc-add="1" onclick="SLCcaReport.act(' + J(key) + ',\'add\')">' + E(spec.edit.addLabel || 'Add') + '</button>' : '') + '<span style="flex:1"></span>'
                 + bar + '</div>'
                 + nodePanel() + '<div class="ccr-prev" data-ccdoc="1">' + (ui0.adding ? editForm(null) : '') + html + '</div></div></div></div>';
@@ -655,9 +898,11 @@
             var tb = h.querySelector('[data-cctabs]'); if (tb) wireTabs(tb);
             if (ui0.flash) { var k = ui0.flash; ui0.flash = null; flash(k, { stay: true }); }
             return true;
+            } finally { REP = null; }
         }
         // the tab row: the open tab is scrolled into its row (a phone's row scrolls on its own); arrow keys move along
         function wireTabs(tb) {
+            if (tb.querySelector('select')) return;
             var keep = function () { var on = tb.querySelector('.ccr-tab.on'); if (!on || tb.scrollWidth <= tb.clientWidth + 1) return; var l = on.getBoundingClientRect().left - tb.getBoundingClientRect().left + tb.scrollLeft, r = l + on.offsetWidth; if (l < tb.scrollLeft || r > tb.scrollLeft + tb.clientWidth) tb.scrollLeft = Math.max(0, l - 24); };
             keep();
             // the row turns from wrapped to scrolling when the window narrows (a phone turned, a window resized): keep the open tab in view
@@ -673,6 +918,16 @@
         }
         // clicks inside the preview: figure boxes open their panel; contents entries scroll to their place
         function wire(pv) {
+            // v1.7: hovering a box of a column diagram lights only its connectors and the boxes at their other ends
+            var hl = function (n) {
+                var svg = n && n.closest ? n.closest('svg') : null; if (!svg || !svg.querySelector('.ccr-edge')) return;
+                var id = n.getAttribute('data-ccnode'), on = {}; on[id] = 1;
+                svg.querySelectorAll('.ccr-edge').forEach(function (p) { var ab = (p.getAttribute('data-e') || '').split('|'), hit = ab[0] === id || ab[1] === id; p.classList.toggle('on', hit); if (hit) { on[ab[0]] = 1; on[ab[1]] = 1; } });
+                svg.querySelectorAll('.ccr-node').forEach(function (g) { g.classList.toggle('on', !!on[g.getAttribute('data-ccnode')]); });
+                svg.classList.add('ccr-hl');
+            };
+            pv.addEventListener('mouseover', function (ev) { var n = ev.target && ev.target.closest ? ev.target.closest('.ccr-node') : null; if (n) hl(n); });
+            pv.addEventListener('mouseout', function (ev) { var n = ev.target && ev.target.closest ? ev.target.closest('.ccr-node') : null; if (!n) return; var to = ev.relatedTarget; if (to && n.contains(to)) return; var svg = n.closest('svg'); if (svg) svg.classList.remove('ccr-hl'); });
             pv.addEventListener('click', function (ev) {
                 var t = ev.target, n = t && t.closest ? t.closest('[data-ccnode]') : null;
                 if (n && n.getAttribute('data-cckey') === key) { ev.preventDefault(); act('node', n.getAttribute('data-ccnode')); return; }
@@ -685,10 +940,10 @@
             if (typeof document === 'undefined' || !target) return false;
             // v1.2: a section asked for from elsewhere (another page's link, an answer that opens a risk) opens its tab
             if (tabsOn() && /^sec:/.test(target) && !(o && o.stay)) {
-                var sid = target.slice(4);
-                if (storedTab() !== sid && safe(function () { return (secsOf(ctxOf()) || []).some(function (s) { return s && s.id === sid; }); }, false)) {
+                var sid = target.slice(4), rs0 = safe(function () { return repOfSection(sid); }, null);
+                if (rs0 && tab() !== rs0.id) {
                     if (!document.getElementById('ccr-host-' + key)) return false;
-                    setTab(sid, { render: false }); ui0.flash = target; render();
+                    setTab(rs0.id, { render: false }); ui0.flash = target; render();
                     return !!document.querySelector('#ccr-host-' + key + ' [data-ccdoc] [data-ccsec="' + cssq(sid) + '"]');
                 }
             }
@@ -709,7 +964,11 @@
             els.filter(Boolean).forEach(function (el) { el.style.animationDelay = '-' + dt + 'ms'; el.classList.add('ccr-flash'); });
         }
         function cssq(s) { return String(s).replace(/["\\]/g, '\\$&'); }
-        function answered(qid) { ui0.flash = qid || null; ui0.msg = null; render(); }
+        // v1.5: an answer or a pick that names a section ('sec:<id>') opens that section's report first
+        function answered(qid) {
+            if (tabsOn() && qid && /^sec:/.test(qid)) { var rq = safe(function () { return repOfSection(String(qid).slice(4)); }, null); if (rq && tab() !== rq.id) setTab(rq.id, { render: false }); }
+            ui0.flash = qid || null; ui0.msg = null; render();
+        }
         function readForm(sec) {
             var h = document.getElementById('ccr-host-' + key), f = h && h.querySelector('[data-cc-form="' + cssq(sec || 'new') + '"]'), out = {};
             if (!f) return out;
@@ -721,12 +980,14 @@
             return out;
         }
         function act(verb, a, b) {
+            var rep0 = REP; REP = tabsOn() ? tab() : null;
             try {
                 if (verb === 'pick') { if (typeof spec.answer === 'function') spec.answer(a, b); ui0.flash = a; ui0.msg = null; }
                 else if (verb === 'see') { if (!flash(a)) { render(); flash(a); } return; }
                 else if (verb === 'node') { ui0.node = a || null; }
                 else if (verb === 'tab') { setTab(a || null); return; }
-                else if (verb === 'wordsec') { var only = tab(); word(only ? { only: only } : undefined).catch(function (e) { ui0.msg = { text: 'Could not write the Word file: ' + (e && e.message || e), err: true }; render(); }); return; }
+                else if (verb === 'wordall') { REP = null; wordAll().catch(function (e) { ui0.msg = { text: 'Could not write the Word files: ' + (e && e.message || e), err: true }; render(); }); return; }
+                else if (verb === 'wordsec') { var only = tab(); word(only ? (tabsOn() ? { report: only } : { only: only }) : undefined).catch(function (e) { ui0.msg = { text: 'Could not write the Word file: ' + (e && e.message || e), err: true }; render(); }); return; }
                 else if (verb === 'live') { ui0.live = !ui0.live; }
                 else if (verb === 'accept') { accept(a); ui0.msg = null; }
                 else if (verb === 'unaccept') { unaccept(a); }
@@ -742,15 +1003,26 @@
                         var nid = res.id || a, wasAdd = !a;
                         ui0.err = null; ui0.editing = null; ui0.adding = false;
                         // v1.2: Add opens the new section's tab; an Edit that renames the open section follows it
-                        if (tabsOn() && nid && (wasAdd || (a && storedTab() === a && nid !== a))) setTab(nid, { render: false });
+                        if (tabsOn() && nid && (wasAdd || (a && storedTab() === a && nid !== a))) { var rn = repOfSection(nid); setTab(rn ? rn.id : nid, { render: false }); }
                         ui0.flash = 'sec:' + nid;
                     }
                 }
-                else if (verb === 'word') { word().catch(function (e) { ui0.msg = { text: 'Could not write the Word file: ' + (e && e.message || e), err: true }; render(); }); return; }
-                else if (verb === 'print') { shotsReady(null).then(print, print); return; }
+                else if (verb === 'word') { var wr = tabsOn() ? tab() : null; REP = null; word(wr ? { report: wr } : undefined).catch(function (e) { ui0.msg = { text: 'Could not write the Word file: ' + (e && e.message || e), err: true }; render(); }); return; }
+                else if (verb === 'print') { var pr = tabsOn() ? tab() : null; REP = null; (pr ? Promise.all((repOf(pr) || { sections: [] }).sections.map(function (x) { return shotsReady(x); })) : shotsReady(null)).then(function () { print(pr ? { report: pr } : undefined); }, function () { print(pr ? { report: pr } : undefined); }); return; }
                 else if (verb === 'shot') { shotToggle(a, b); ui0.flash = null; ui0.msg = null; }
+                else if (verb === 'authedit') { ui0.authEdit = a + '|' + b; ui0.authSeed = null; }
+                else if (verb === 'authcancel') { ui0.authEdit = null; ui0.authSeed = null; }
+                else if (verb === 'authsave') { var ta = document.querySelector('#ccr-host-' + key + ' [data-cc-authtext="' + cssq(a + '|' + b) + '"]'); authSave(a, b, ta ? ta.value : '', ui0.authSeedAi ? 'ai-edited' : 'person'); ui0.authEdit = null; ui0.authSeed = null; ui0.authSeedAi = false; }
+                else if (verb === 'authaccept') { var rr = authOf(a, b); if (rr && rr.draft) authSave(a, b, rr.draft.text, 'ai'); }
+                else if (verb === 'authacceptedit') { var r2 = authOf(a, b); ui0.authEdit = a + '|' + b; ui0.authSeed = r2 && r2.draft ? r2.draft.text : ''; ui0.authSeedAi = true; }
+                else if (verb === 'authdiscard') { var m0 = authStore(a, true); if (m0[b]) { delete m0[b].draft; save(); } }
+                else if (verb === 'authai') {
+                    var kk = a + '|' + b, rid0 = REP; ui0.authBusy = kk; ui0.msg = null; REP = rep0; render();
+                    authAi(a, b).then(function () { ui0.authBusy = null; withRep(rid0, render); }, function (e) { ui0.authBusy = null; ui0.msg = { text: (e && e.message) || String(e), err: true }; withRep(rid0, render); });
+                    return;
+                }
                 else if (verb === 'shotnone') { shotNone(a); }
-            } catch (e) { ui0.msg = { text: (e && e.message) || String(e), err: true }; }
+            } catch (e) { ui0.msg = { text: (e && e.message) || String(e), err: true }; } finally { REP = rep0; }
             render();
             if (verb === 'node') { try { var np = document.querySelector('#ccr-host-' + key + ' [data-cc-node]'); if (np && np.scrollIntoView) np.scrollIntoView({ block: 'nearest' }); } catch (_) {} }
         }
@@ -773,11 +1045,14 @@
             if (shown0) { try { render(); } catch (_) {} }
             return true;
         }
-        Object.assign(R, { shotViews: shotViews, shotPicks: shotPicks, shotToggle: shotToggle, shotsReady: shotsReady, shotBlocks: shotBlocks, tab: tab, setTab: setTab, tabs: function () { return tabsOn() ? tabList(secsOf(ctxOf()) || []).map(function (t) { return { id: t.id, label: t.label }; }) : []; }, render: render, doc: doc, fullHtml: fullHtml, model: model, word: word, print: print, flash: flash, answered: answered, acceptance: acceptance, accept: accept, unaccept: unaccept,
+        Object.assign(R, { authored: authOf, authSave: authSave, authAi: authAi, authFacts: authFacts, reports: function () { return repList(); }, wordAll: wordAll, withRep: withRep, shotViews: shotViews, shotPicks: shotPicks, shotToggle: shotToggle, shotsReady: shotsReady, shotBlocks: shotBlocks, tab: tab, setTab: setTab, tabs: function () { return tabsOn() ? tabList(secsOf(ctxOf()) || []).map(function (t) { return { id: t.id, label: t.label }; }) : []; }, render: render, doc: doc, fullHtml: fullHtml, model: model, word: word, print: print, flash: flash, answered: answered, acceptance: acceptance, accept: accept, unaccept: unaccept,
             docCtl: docCtl, setDoc: setDoc, issue: issue, rev: rev, act: act, mount: mount, outputs: outputs, ROLES: ROLES });
+        // v1.5: called from outside, document control and acceptance act on the open report (the series when none is open)
+        ['acceptance', 'accept', 'unaccept', 'docCtl', 'setDoc', 'issue', 'rev'].forEach(function (n) { var f = R[n]; R[n] = function () { var a0 = arguments; return REP ? f.apply(null, a0) : withRep(tabsOn() ? tab() : null, function () { return f.apply(null, a0); }); }; });
+        R.tabs = function () { return tabsOn() ? repList().map(function (r) { return { id: r.id, label: r.label }; }) : []; };
         return R;
     }
     function act(key, verb, a, b) { var R = REG[key]; if (R) R.act(verb, a, b); }
-    root.SLCcaReport = { VERSION: VERSION, define: define, get: get, act: act, palette: palette, nodeG: nodeG, E: E, ROLES: ROLES, LIGHT: LIGHT, DARK: DARK, wrapText: wrapText, svgWrap: function (w, h, body, title) { return svgWrap(w, h, body, title); }, box: boxSvg };
+    root.SLCcaReport = { VERSION: VERSION, define: define, get: get, act: act, palette: palette, nodeG: nodeG, E: E, ROLES: ROLES, LIGHT: LIGHT, DARK: DARK, wrapText: wrapText, svgWrap: function (w, h, body, title) { return svgWrap(w, h, body, title); }, box: boxSvg, flow: flow };
     if (typeof module !== 'undefined' && module.exports) module.exports = root.SLCcaReport;
 })(typeof window !== 'undefined' ? window : globalThis);

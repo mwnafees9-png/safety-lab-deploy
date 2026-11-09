@@ -62,7 +62,7 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
     console.log('\n[L] load order and pin');
     const HTML = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8'), at = f => HTML.indexOf('src="' + f + '?v=');
     const SRC = fs.readFileSync(path.join(SITE, 'cma_autopilot.js'), 'utf8');
-    check('cma_autopilot.js is pinned at v1.1, its header and VERSION say 1.1; cca_report 1.1 or later, cma_flow 1.3, no_dupes 1.1 pinned', HTML.indexOf('cma_autopilot.js?v=1.1') > 0 && /SLCmaAuto v1\.1/.test(SRC.slice(0, 200)) && /var VERSION = '1\.1'/.test(SRC) && /cca_report\.js\?v=1\.[1-9]"/.test(HTML) && /cma_flow\.js\?v=1\.3/.test(HTML) && /no_dupes\.js\?v=1\.1/.test(HTML));
+    check('cma_autopilot.js is pinned at v1.1 or later, its header and VERSION the same; cca_report 1.1 or later, cma_flow 1.3, no_dupes 1.1 pinned', (function () { var m = /SLCmaAuto v(1\.(\d+))/.exec(SRC.slice(0, 200)); return !!m && +m[2] >= 1 && HTML.indexOf('cma_autopilot.js?v=' + m[1] + '"') > 0 && SRC.indexOf("var VERSION = '" + m[1] + "'") >= 0; })() && /cca_report\.js\?v=1\.[1-9]"/.test(HTML) && /cma_flow\.js\?v=1\.3/.test(HTML) && /no_dupes\.js\?v=1\.1/.test(HTML));
     check('it loads after cma_flow.js, autopilot_ui.js, cca_report.js and no_dupes.js', at('cma_autopilot.js') > at('cma_flow.js') && at('cma_flow.js') > 0 && at('cma_autopilot.js') > at('autopilot_ui.js') && at('autopilot_ui.js') > 0 && at('cma_autopilot.js') > at('cca_report.js') && at('cca_report.js') > 0 && at('cma_flow.js') > at('no_dupes.js') && at('no_dupes.js') > 0);
     check('the table switch is one named constant, on: the report frame has the page', /var HIDE_CMA_TABLE_UI = true;/.test(SRC) && (SRC.match(/HIDE_CMA_TABLE_UI =/g) || []).length === 1);
     check('the duplicate rule for CMAs lives in no_dupes.js and both writers ask it', /function cmaClash\(/.test(fs.readFileSync(path.join(SITE, 'no_dupes.js'), 'utf8')) && /cmaClash\(probe, rows\(\)\)/.test(SRC) && /N\.cmaOwner\(_cma\(\), key\)/.test(fs.readFileSync(path.join(SITE, 'cma_flow.js'), 'utf8')));
@@ -326,9 +326,12 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
             const pv = () => host.querySelector('[data-ccdoc]');
             X.r1 = { defined: !!R, inView: !!host && view.contains(host) && vis(host), underHead: !!host && !!host.previousElementSibling && host.previousElementSibling.classList.contains('header-with-export'),
                 left: !!host.querySelector('[data-cmq-left]'), claimBtns: host.querySelectorAll('[data-cmqclaim]').length, secs: pv().querySelectorAll('[data-ccsec]').length, claims: live().length,
-                tableGone: !vis(document.getElementById('cma-table')) && !vis(document.getElementById('cma-flow-host')) && !vis(document.getElementById('cma-scope-chips')), log: vis(document.getElementById('cma-decision-log')) || !!document.getElementById('cma-decision-log') };
+                repClaims: (R.reports().find(rp => rp.id === R.tab()) || { sections: [] }).sections.length, tableGone: !vis(document.getElementById('cma-table')) && !vis(document.getElementById('cma-flow-host')) && !vis(document.getElementById('cma-scope-chips')), log: vis(document.getElementById('cma-decision-log')) || !!document.getElementById('cma-decision-log') };
             // pick a claim with a free category: the four-step one made earlier ("Rudder lane independence")
             const row = live().find(c => c.subject === 'Rudder lane independence');
+            // v1.2: one CMA report per level; the claim's own report is opened first (its gates decide which)
+            const repOfRow = R.reports().find(rp => rp.sections.indexOf(A.anchorOf(row)) >= 0);
+            X.r1.ownReport = !!repOfRow; if (repOfRow) { R.setTab(repOfRow.id); await wait(500); }
             host.querySelector('[data-cmqclaim="' + row.internalId + '"]').click(); await wait(500);
             X.r1.selected = A.selected() === row.internalId && !!host.querySelector('[data-cmqclaim="' + row.internalId + '"].on') && !!host.querySelector('[data-cmqbox="cma/' + row.internalId + '/claim"]');
             X.r1.secFlash = !!pv().querySelector('[data-ccsec="' + A.anchorOf(row) + '"].ccr-flash');
@@ -357,17 +360,17 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
             R.render(); await wait(200);
             const a2 = R.acceptance().find(o => o.id === oid), m2 = A.acceptance().find(o => o.id === oid);
             const pill = host.querySelector('[data-cc-out="' + oid + '"] .slap-pill');
-            X.r4 = { btn: !!btn, a1: a1 && a1.state, m1: m1 && m1.state, a2: a2 && a2.state, m2: m2 && m2.state, pill: pill && pill.textContent, role: a1 && a1.role, oneStore: !(projectConfig.cmaAuto && projectConfig.cmaAuto.accept) && !!projectConfig.ccaReports.cma.accept[oid] };
+            X.r4 = { btn: !!btn, a1: a1 && a1.state, m1: m1 && m1.state, a2: a2 && a2.state, m2: m2 && m2.state, pill: pill && pill.textContent, role: a1 && a1.role, oneStore: !(projectConfig.cmaAuto && projectConfig.cmaAuto.accept) && !!(projectConfig.ccaReports.cma.accepts[R.tab()] || {})[oid] };
             // v1.0's store moved once into the frame's
             projectConfig.cmaAuto = { accept: { 'cma.findings': { by: 'old', at: '2026-11-08T00:00:00Z', fp: 'x' } } };
             A.acceptOutput('cma.reqs');
             X.r4.migrated = !projectConfig.cmaAuto && projectConfig.ccaReports.cma.accept['cma.findings'] && projectConfig.ccaReports.cma.accept['cma.findings'].by === 'old';
             // Word
-            const m = R.model(), lib = await _loadDocxLib();
+            const m = R.model({ report: R.tab() }), lib = await _loadDocxLib();
             const imgs = m.blocks.filter(x => x.k === 'img'); for (const x of imgs.slice(0, 4)) x.dataUrl = await SLFtaPrint.png({ svg: x.svg, w: x.w, h: x.h }, 1);
             const blob = await SLReportWriter.docx(m, lib), buf = new Uint8Array(await blob.arrayBuffer());
             let bin = ''; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
-            const bl = R.doc();
+            const bl = R.doc({ report: R.tab() });
             // the document's own words: the data the engineer typed (subjects, claims, findings, gate and event names) taken out
             const data = []; live().forEach(c => { [c.subject, c.claim, c.findings, c.mitigation, c.references, c.flow && c.flow.claim, c.flow && c.flow.summary].forEach(t => { if (t) data.push(String(t)); }); ((c.flow && c.flow.concerns) || []).forEach(cc => [cc.text, cc.mitigation, cc.backedBy, cc.acceptWhy, cc.reqText].forEach(t => t && data.push(String(t)))); Object.values((c.flow && c.flow.answers) || {}).forEach(a => a.why && data.push(String(a.why))); });
             let text = m.blocks.map(x => x.k === 'table' ? JSON.stringify(x.rows) : (x.text || x.caption || '')).join('\n');
@@ -436,7 +439,7 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
             X.n.noDupGates = (() => { const seen = {}; let d = 0; live().forEach(c => ((c.flow ? c.flow.gates : c.linkedGateIds) || []).forEach(g => { if (seen[g]) d++; seen[g] = 1; })); return d; })();
             return X;
         }), 240000, 'the frame step');
-        check('[R] the CMA page is the report on the frame, right under the heading: questions on the left, a section per claim on the right', F2.r1.defined && F2.r1.inView && F2.r1.underHead && F2.r1.left && F2.r1.claimBtns === F2.r1.claims && F2.r1.secs === F2.r1.claims, JSON.stringify(F2.r1));
+        check('[R] the CMA page is the report on the frame, right under the heading: questions on the left, a section per claim of the open report (aircraft level or one system) on the right', F2.r1.defined && F2.r1.inView && F2.r1.underHead && F2.r1.left && F2.r1.claimBtns === F2.r1.repClaims && F2.r1.secs === F2.r1.repClaims && F2.r1.repClaims > 0 && F2.r1.ownReport, JSON.stringify(F2.r1));
         check('[R] the CMA table, its scope chips and the four-step editor are gone from the page; the decision log stays', F2.r1.tableGone && F2.r1.log);
         check('[R] picking a claim shows its questions and lights up its section', F2.r1.selected && F2.r1.secFlash, JSON.stringify(F2.r1));
         check('[R] an answer card in the frame answers, and the table row it wrote lights up', F2.r2.answered && F2.r2.rowLit && /Does not apply/.test(F2.r2.rowText), JSON.stringify(F2.r2));
@@ -446,7 +449,7 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
         check('[R] one record of acceptance: the frame\'s store; v1.0\'s is moved into it once', F2.r4.oneStore && F2.r4.migrated, JSON.stringify(F2.r4));
         let docText = ''; try { const tmp = path.join(require('os').tmpdir(), 'cma_report_' + process.pid + '.docx'); fs.writeFileSync(tmp, Buffer.from(F2.w.b64, 'base64')); docText = require('child_process').execFileSync('unzip', ['-p', tmp, 'word/document.xml'], { maxBuffer: 64 * 1024 * 1024 }).toString().replace(/<[^>]+>/g, ' '); fs.unlinkSync(tmp); } catch (e) { docText = 'unzip failed: ' + e.message; }
         check('[R] Word: cover (document control, approvals by role, revision history), contents, list of tables, list of figures', F2.w.size > 30000 && F2.w.cover === 'Document control,Approvals,Revision history' && /To be named \(by role\)/.test(F2.w.roles) && /Contents/.test(docText) && /List of Tables/.test(docText) && /List of Figures/.test(docText) && /Common Mode Analysis/.test(docText), JSON.stringify({ size: F2.w.size, cover: F2.w.cover, doc: docText.slice(0, 160) }));
-        check('[R] the preview has the same front matter, every table and figure numbered and introduced before it appears', F2.w.toc === F2.w.heads && F2.w.lot === F2.w.tables && F2.w.lof === F2.w.figs && F2.w.tables >= 20 && F2.w.figs >= 3 && F2.w.leadOk, JSON.stringify(Object.assign({}, F2.w, { b64: '' })).slice(0, 300));
+        check('[R] the open report\'s preview has the same front matter as its Word file, every table and figure numbered and introduced before it appears', F2.w.toc === F2.w.heads && F2.w.lot === F2.w.tables && F2.w.lof === F2.w.figs && F2.w.tables >= 6 && F2.w.figs >= 1 && F2.w.leadOk, JSON.stringify(Object.assign({}, F2.w, { b64: '' })).slice(0, 300));
         check('[R] no counts and no em dashes in the document text; figures drawn light for Word; no page-only buttons', !F2.w.counts.length && !F2.w.dashes && F2.w.imgLight && F2.w.acts === 0, JSON.stringify(F2.w.counts));
         check('[R] dark mode: a dark document with readable text, headings, table cells and answer cards (4.5:1 or better); figures dark on the page, light again after', F2.d.bg < 0.05 && F2.d.p >= 4.5 && F2.d.th >= 4.5 && F2.d.td >= 4.5 && F2.d.h >= 4.5 && F2.d.card >= 4.5 && F2.d.fig === '#15181E' && /^#fff/i.test(F2.d.back || ''), JSON.stringify(F2.d));
         check('[R] Edit in the report opens the CMA\'s fields and saves into the same row; the section lights up', F2.e.form && F2.e.fields === 'subject,gates,claim,level,references,summary' && F2.e.saved, JSON.stringify(F2.e));
