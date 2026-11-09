@@ -178,7 +178,7 @@ const find = (ctx, id) => ctx.ftaPages.find(p => p.id === id);
         check('[L] no em dash in the repair\'s words', !/\u2014/.test(JSON.stringify(p.obsoleteHistory) + JSON.stringify(c.journal)));
     }
     const html = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8'), at = f => html.indexOf('src="' + f);
-    check('pins: safety_lab.js 65.79, rename_guard.js 1.7, stale_revive.js 1.0 after both', at('safety_lab.js?v=65.79') > 0 && at('rename_guard.js?v=1.7') > 0 && at('stale_revive.js?v=1.0') > at('rename_guard.js?v=1.7') && at('stale_revive.js?v=1.0') > at('fta_dedupe.js?v=1.0'));
+    check('pins: safety_lab.js 65.80, rename_guard.js 1.7, stale_revive.js 1.0 after both', at('safety_lab.js?v=65.80') > 0 && at('rename_guard.js?v=1.7') > 0 && at('stale_revive.js?v=1.0') > at('rename_guard.js?v=1.7') && at('stale_revive.js?v=1.0') > at('fta_dedupe.js?v=1.0'));
     console.log('\n' + pass + ' passed, ' + fail + ' failed' + (MUT ? ' (mutation ' + MUT + ')' : ''));
     process.exit(fail ? 1 : 0);
 })();

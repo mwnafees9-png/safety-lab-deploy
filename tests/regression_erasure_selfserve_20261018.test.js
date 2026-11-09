@@ -296,7 +296,7 @@ function loadVM(opts) {
     await pg.waitForSelector('#ep-save', { timeout: 8000 });
     const after = await pg.evaluate(async () => {
       const dbs = (await indexedDB.databases()).map(d => d.name);
-      const before = localStorage.getItem('safetyLab.autosave.v1');
+      const before = (localStorage.getItem('safetyLab.autosave.v1') || (await SLDB.get('safetyLab.autosave.v1')) || null);   // 10 Nov 2026: the working copy lives in IndexedDB now (local_store.js)
       // everything that would normally write the project back:
       const sched = scheduleAutosave();
       _flushAutosave();
@@ -328,7 +328,7 @@ function loadVM(opts) {
     await sleep(3500);
     const re = await pg.evaluate(async () => ({
       dbs: (await indexedDB.databases()).map(d => d.name),
-      meta: localStorage.getItem('safetyLab.autosave.meta.v1'), auto: localStorage.getItem('safetyLab.autosave.v1'), pin: sessionStorage.getItem('safetyLab.tabProject.v1'),
+      meta: localStorage.getItem('safetyLab.autosave.meta.v1'), auto: (localStorage.getItem('safetyLab.autosave.v1') || (await SLDB.get('safetyLab.autosave.v1')) || null), pin: sessionStorage.getItem('safetyLab.tabProject.v1'),
     }));
     check('after the reload its offline co-edit store is gone; another project\'s stays', !re.dbs.includes('slab-crdt-proj-open') && re.dbs.includes('slab-crdt-proj-other'), JSON.stringify(re.dbs));
     check('after the reload the erased project is not back on this device', !/proj-open/.test(String(re.meta)) && !/"Wing"/.test(String(re.auto)) && re.pin === null, String(re.meta).slice(0, 120));
@@ -347,12 +347,12 @@ function loadVM(opts) {
       await SLDB.set('safetyLab.autosave.ringMeta', m.concat([{ slot: 4, name: 'Rig', ts: 1 }, { slot: 3, name: 'Else', ts: 2 }]));
     });
     await sleep(600);
-    const keep0 = await pg.evaluate(() => localStorage.getItem('safetyLab.autosave.v1'));
+    const keep0 = await pg.evaluate(async () => (localStorage.getItem('safetyLab.autosave.v1') || (await SLDB.get('safetyLab.autosave.v1')) || null));   // 10 Nov 2026: IndexedDB (local_store.js)
     await pg.evaluate(() => { SLErasure.eraseProject('proj-gone', 'Rig'); });
     await pg.waitForSelector('#ep-confirm'); await typeDelete(pg, '#ep-confirm'); await pg.click('#ep-go'); await pg.waitForSelector('#ep-done', { timeout: 8000 });
     const e2 = await pg.evaluate(async () => {
       let m = await SLDB.get('safetyLab.autosave.ringMeta'); if (typeof m === 'string') m = JSON.parse(m);
-      return { latch: window.__slabErasing === true, sched: scheduleAutosave(), auto: localStorage.getItem('safetyLab.autosave.v1'), r4: await SLDB.get('safetyLab.autosave.ring.4'), r3: await SLDB.get('safetyLab.autosave.ring.3'), slots: (m || []).map(x => x.slot) };
+      return { latch: window.__slabErasing === true, sched: scheduleAutosave(), auto: (localStorage.getItem('safetyLab.autosave.v1') || (await SLDB.get('safetyLab.autosave.v1')) || null), r4: await SLDB.get('safetyLab.autosave.ring.4'), r3: await SLDB.get('safetyLab.autosave.ring.3'), slots: (m || []).map(x => x.slot) };
     });
     check('the open project keeps saving: no latch, autosave still accepts', !e2.latch && e2.sched === true);
     check('...and its working copy is untouched', !!keep0 && !!e2.auto);

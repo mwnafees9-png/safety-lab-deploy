@@ -140,7 +140,7 @@ async function scenarios(browser, siteDir, quick) {
     R.c2after = await S();
     R.c2barGone = (await bar()) === '';
     R.c2journal = await pg.evaluate(() => ((projectConfig.journal && projectConfig.journal.entries) || []).map(e => e.kind + ': ' + e.s).slice(-3));
-    R.c2stored = await pg.evaluate(() => (localStorage.getItem(AUTOSAVE_KEY) || '').indexOf('C1 edit 2') >= 0);
+    R.c2stored = await pg.evaluate(async () => (await (async () => { let v = localStorage.getItem(AUTOSAVE_KEY) || ''; if (!v && typeof SLDB !== 'undefined') { v = await SLDB.get(AUTOSAVE_KEY); if (typeof _maybeDecompress === 'function') v = await _maybeDecompress(v); } return String(v || ''); })()).indexOf('C1 edit 2') >= 0);   // 10 Nov 2026: the autosave slot is in IndexedDB (local_store.js)
   }
   dbg('C3');
   // ------------------------------------------------------------------ C3: Next runs at once, nothing opens
@@ -238,7 +238,7 @@ async function scenarios(browser, siteDir, quick) {
   await click('#save-indicator'); await waitFor(ackOpen, 3000); await sleep(200);
   if (await ackOpen()) { await click('.sl-ack-confirm'); await sleep(1500); }
   R.c6after = await S();
-  R.c6stored = await pg.evaluate(() => (localStorage.getItem(AUTOSAVE_KEY) || '').indexOf('C6 waiting at the reload') >= 0 && JSON.parse(localStorage.getItem(AUTOSAVE_META_KEY) || '{}').unacked !== true);
+  R.c6stored = await pg.evaluate(async () => (await (async () => { let v = localStorage.getItem(AUTOSAVE_KEY) || ''; if (!v && typeof SLDB !== 'undefined') { v = await SLDB.get(AUTOSAVE_KEY); if (typeof _maybeDecompress === 'function') v = await _maybeDecompress(v); } return String(v || ''); })()).indexOf('C6 waiting at the reload') >= 0 && JSON.parse(localStorage.getItem(AUTOSAVE_META_KEY) || '{}').unacked !== true);
   await ctx.close(); srv.close();
   return R;
 }

@@ -280,7 +280,9 @@ console.log('\n[E1] the old contract is intact');
 {
   const c = harness({ snapshot: FULL, idbAvailable: true });
   vm.runInContext('_writeAutosave();', c);
-  check('the localStorage mirror is still written', c._store['safetyLab.autosave.v1'] !== undefined);
+  // 10 Nov 2026 (Waqas's brief, storage full: "localStorage keeps only small settings"): with IndexedDB the project is
+  // no longer mirrored into localStorage; only its small meta is (regression_storage_full_20261110 proves the rest).
+  check('with IndexedDB the project is not mirrored into localStorage, its small meta is', c._store['safetyLab.autosave.v1'] === undefined && c._store['safetyLab.autosave.meta.v1'] !== undefined);
   check('_autosavePending is still cleared by a dispatched write', c._autosavePending === false);
 }
 {

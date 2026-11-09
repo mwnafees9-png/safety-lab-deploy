@@ -19,14 +19,16 @@
     'use strict';
     if (typeof window === 'undefined') return;
     window.LABS_THREAD_CONFIG = {
-        url: String((window.SLConfig && window.SLConfig.supabaseUrl) ||
+        // 10 Nov 2026: slab_config.js values are used exactly when it has run (Files only
+        // gets ''); the hosted literals apply only when it did not load at all.
+        url: String(window.SLConfig ? (window.SLConfig.supabaseUrl || '') : (
             window.__SLAB_SUPABASE_URL__ ||
             (window.SafetyLab && window.SafetyLab.SUPABASE_URL) ||
-            'https://fhrqkhdrwbfnizkepkch.supabase.co').replace(/\/+$/, ''),
-        anonKey: String((window.SLConfig && window.SLConfig.supabaseKey) ||
+            'https://fhrqkhdrwbfnizkepkch.supabase.co')).replace(/\/+$/, ''),
+        anonKey: String(window.SLConfig ? (window.SLConfig.supabaseKey || '') : (
             window.__SLAB_SUPABASE_KEY__ ||
             (window.SafetyLab && window.SafetyLab.SUPABASE_KEY) ||
-            'sb_publishable_ExwM8wVKnQ3chHQKPyRFOw_WMtLGfiQ'),
+            'sb_publishable_ExwM8wVKnQ3chHQKPyRFOw_WMtLGfiQ')),
         channel: 'labs-thread',
         // 3 Oct 2026 (security review, batch 4): the cross-machine leg is OFF. It was a PUBLIC
         // Realtime channel (labs-thread:AE-001) that every copy of the app joined, for every

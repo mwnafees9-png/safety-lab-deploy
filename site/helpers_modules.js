@@ -1,4 +1,5 @@
 // 13 Sep 2026 (R19 hygiene): store writers announce their own writes with scheduleAutosave; see tests/regression_writers_announce.test.js
+// 10 Nov 2026 (storage full, local_store.js): _writeAutosave and _writeLastGood keep the project in IndexedDB only (the small meta stays in localStorage, written through SLLocalStore.setItem so it never throws); the backend client keeps its sign-in token through SLLocalStore.authStorage; _initSupabaseClient builds no client in Files only or with no database address.
 // 10 Nov 2026: getNodeColors(d, dark) takes the theme as an optional second argument, so a picture of a tree drawn for Word or print (light) while the page is dark gets the canvas's light colors (cma_claims.js, the CMA report). Without it, the page's theme as before.
 // 16 Oct 2026 (AI Assistant page): renderAiAssistant draws the page (SLAiInputsPage.render, ai_inputs_page.js) above the AI settings.
 // 13 Oct 2026 (late, AutoSave, Waqas: "when a user saves a choice/change it should be autosaving"): _writeAutosave answers whether it wrote (true / false) and leaves its IndexedDB write as window.__slAutosaveIdb so save_state.js v2.0 can wait for it; the autosave meta carries unacked (changes still waiting for an acknowledgement, with the accepted state in its own slot) and cloudPending (accepted work not yet in the cloud) instead of the old unsaved markers; _updateSaveIndicator hands the header to SLSaveState.renderIndicator; snapshot undo is used while anything is held from the live sync.
@@ -8021,6 +8022,10 @@ function _initSupabaseClient() {
     // customer install that still points at Safety Lab). Belt-and-suspenders to
     // the slab_config guard: no backend contact under a fatal config.
     try { if (typeof window !== 'undefined' && window.__SLAB_CONFIG_FATAL__) { console.error('[Safety Lab Aero] backend disabled — ' + window.__SLAB_CONFIG_FATAL__); return null; } } catch (_) {}
+    // 10 Nov 2026 (Files only rebuild): no backend client at all in Files only mode, and
+    // none when no database address is configured. Never a fallback to the hosted one.
+    try { if (typeof window !== 'undefined' && window.SLConfig && window.SLConfig.browserOnly) return null; } catch (_) {}
+    if (!SUPABASE_PROJECT_URL || !SUPABASE_PUBLISHABLE_KEY) return null;
     try {
         if (typeof window === 'undefined' || !window.supabase || typeof window.supabase.createClient !== 'function') {
             console.warn('[Safety Lab Aero] Supabase SDK not loaded — magic-link auth disabled, falling back to local signup.');
@@ -8028,6 +8033,8 @@ function _initSupabaseClient() {
         }
         _supabaseClient = window.supabase.createClient(SUPABASE_PROJECT_URL, SUPABASE_PUBLISHABLE_KEY, {
             auth: {
+                // 10 Nov 2026 (local_store.js): the token's storage cannot fail when the browser is full
+                storage: (window.SLLocalStore && window.SLLocalStore.authStorage) || undefined,
                 persistSession: true,
                 autoRefreshToken: true,
                 detectSessionInUrl: true,
@@ -13058,9 +13065,12 @@ function _autosaveStoredWorthKeeping() {
     if (_autosaveStoredHasContent !== null) return _autosaveStoredHasContent;
     try {
         const raw = localStorage.getItem(AUTOSAVE_KEY);
-        _autosaveStoredHasContent = raw ? _autosaveHasContent(JSON.parse(raw)) : false;
-    } catch (_) { _autosaveStoredHasContent = false; }   // unreadable ⇒ nothing to protect
-    return _autosaveStoredHasContent;
+        if (raw) { _autosaveStoredHasContent = _autosaveHasContent(JSON.parse(raw)); return _autosaveStoredHasContent; }
+    } catch (_) { _autosaveStoredHasContent = false; return false; }   // unreadable ⇒ nothing to protect
+    // 10 Nov 2026: the project lives in IndexedDB now and its read is not back yet. The small meta in
+    // localStorage says a copy was stored: not known is not empty, so while recovery runs that copy is
+    // kept (the IndexedDB read settles the answer). No meta: nothing was ever stored, nothing to keep.
+    try { return !!localStorage.getItem(AUTOSAVE_META_KEY); } catch (_) { return false; }
 }
 
 function _writeAutosave() {
@@ -13145,14 +13155,14 @@ function _writeAutosave() {
     } else {
         try { if (typeof window !== 'undefined') window.__slAutosaveIdb = null; } catch (_) {}
     }
-    // localStorage mirror (synchronous — the pagehide/beforeunload safety net). Best-effort: a
-    // project larger than the localStorage quota fails here but is still safe in IndexedDB.
+    // 10 Nov 2026 (storage full, local_store.js): the project lives in IndexedDB only. The localStorage
+    // mirror of the whole project is gone: it filled the browser's small shared space (about 5 MB) until
+    // the sign-in could not keep its token. Only the small meta stays in localStorage, written so it can
+    // never throw; without IndexedDB (rare) the project still goes to localStorage as before.
     let lsOk = false;
-    try {
-        localStorage.setItem(AUTOSAVE_KEY, payload);
-        localStorage.setItem(AUTOSAVE_META_KEY, JSON.stringify(meta));
-        lsOk = true;
-    } catch(e) { /* quota exceeded — IndexedDB holds the full payload */ }
+    const _lsSet = function (k, v) { try { return ((typeof window !== 'undefined' && window.SLLocalStore) ? window.SLLocalStore.setItem(k, v) : (localStorage.setItem(k, v), true)) === true; } catch (_) { return false; } };
+    try { _lsSet(AUTOSAVE_META_KEY, JSON.stringify(meta)); } catch (_) {}
+    if (!idbAvail) lsOk = _lsSet(AUTOSAVE_KEY, payload);
     try { if (typeof window !== 'undefined') window.__slAutosaveLs = lsOk; } catch (_) {}   // 13 Oct 2026 (AutoSave): with __slAutosaveIdb, what save_state.js reads to say Saved honestly
     _autosaveLastWrite = meta.ts;
     _autosavePending = false;   // write dispatched — nothing pending to flush
@@ -13192,11 +13202,11 @@ function _writeLastGood(payload, meta, snapHasContent) {
     const now = (meta && meta.ts) || Date.now();
     if (_lastgoodLastWrite && (now - _lastgoodLastWrite) < LASTGOOD_MIN_INTERVAL_MS) return false;
     let wrote = false;
-    try {
-        localStorage.setItem(LASTGOOD_KEY, payload);
-        localStorage.setItem(LASTGOOD_META_KEY, JSON.stringify(meta));
-        wrote = true;
-    } catch (_) { /* quota — the IndexedDB copy below is the one that matters for big projects */ }
+    // 10 Nov 2026 (local_store.js): IndexedDB only, like the autosave; the small meta stays in localStorage.
+    // Without IndexedDB (rare) the copy still goes to localStorage, as before.
+    const _lsSet = function (k, v) { try { return ((typeof window !== 'undefined' && window.SLLocalStore) ? window.SLLocalStore.setItem(k, v) : (localStorage.setItem(k, v), true)) === true; } catch (_) { return false; } };
+    if (!SLDB.available()) { if (_lsSet(LASTGOOD_KEY, payload) && _lsSet(LASTGOOD_META_KEY, JSON.stringify(meta))) wrote = true; }
+    else { try { _lsSet(LASTGOOD_META_KEY, JSON.stringify(meta)); } catch (_) {} }
     try {
         if (SLDB.available()) {
             _maybeCompress(payload)

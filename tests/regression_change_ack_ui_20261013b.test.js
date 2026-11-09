@@ -207,7 +207,8 @@ async function shot(pg, name, sel) {
     check('one dialog for the whole word (not one per keystroke)', s.stats.prompts === prompts2 + 1 && prompts2 === 1, 'prompts ' + s.stats.prompts);
     check('Acknowledge keeps the typed name', (await pg.evaluate(() => window.__b2node.name)) === before2 + ' typed');
     check('Acknowledge SAVED it at once, no Save step: the header says "Saved" and the time', s.dirty === false && s.save.state === 'saved' && /^Saved \d/.test(s.ind) && s.save.where === 'device', s.ind + ' ' + JSON.stringify(s.save));
-    check('it is in this browser\'s storage (the autosave slot holds the typed name)', await pg.evaluate(() => (localStorage.getItem('safetyLab.autosave') || localStorage.getItem(AUTOSAVE_KEY) || '').indexOf(' typed') >= 0));
+    // 10 Nov 2026 (storage full rebuild, local_store.js): the autosave slot lives in IndexedDB now.
+    check('it is in this browser\'s storage (the autosave slot holds the typed name)', await pg.evaluate(async () => { let v = localStorage.getItem(AUTOSAVE_KEY) || ''; if (!v && typeof SLDB !== 'undefined') { v = await SLDB.get(AUTOSAVE_KEY); if (typeof _maybeDecompress === 'function') v = await _maybeDecompress(v); } return String(v || '').indexOf(' typed') >= 0; }));
     await shot(pg, 'as_01_saved', '#save-indicator');
     check('the confirmation is in the project journal with who and what', s.journal.some(j => /^change-ack: Not signed in confirmed 1 change: Changed Fault tree/.test(j)), s.journal.slice(-3).join(' | '));
     await pg.evaluate(() => { try { closeNodeConfigModal(); } catch (_) {} });

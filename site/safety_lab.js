@@ -3237,19 +3237,23 @@ window.openNodePropertiesModal = openNodePropertiesModal;
 // The direct-window fallback stays only so an out-of-order load can't crash.
 const _slabBackendCfg = (typeof window !== 'undefined') ? window : {};
 const _slabCfg = (typeof window !== 'undefined' && window.SLConfig) ? window.SLConfig : null;
-const SUPABASE_PROJECT_URL = String(
-    (_slabCfg && _slabCfg.supabaseUrl) ||
+// 10 Nov 2026 (Files only rebuild): when slab_config.js has run, its values are used
+// EXACTLY. A Files only install gets '' here and no backend client is ever built; a
+// customer install never falls back to the hosted address. The hosted literals below
+// are reached only when slab_config.js did not load at all (out-of-order load).
+const _slabHostedUrl = 'https://fhrqkhdrwbfnizkepkch.supabase.co';
+const _slabHostedKey = 'sb_publishable_ExwM8wVKnQ3chHQKPyRFOw_WMtLGfiQ';
+const SUPABASE_PROJECT_URL = String(_slabCfg ? (_slabCfg.supabaseUrl || '') : (
     _slabBackendCfg.__SLAB_SUPABASE_URL__ ||
     (_slabBackendCfg.SafetyLab && _slabBackendCfg.SafetyLab.SUPABASE_URL) ||
-    'https://fhrqkhdrwbfnizkepkch.supabase.co'
-).replace(/\/+$/, '');
-const SUPABASE_PUBLISHABLE_KEY = String(
-    (_slabCfg && _slabCfg.supabaseKey) ||
+    _slabHostedUrl
+)).replace(/\/+$/, '');
+const SUPABASE_PUBLISHABLE_KEY = String(_slabCfg ? (_slabCfg.supabaseKey || '') : (
     _slabBackendCfg.__SLAB_SUPABASE_KEY__ ||
     (_slabBackendCfg.SafetyLab && _slabBackendCfg.SafetyLab.SUPABASE_KEY) ||
-    'sb_publishable_ExwM8wVKnQ3chHQKPyRFOw_WMtLGfiQ'
-);
-try { if (SUPABASE_PROJECT_URL !== 'https://fhrqkhdrwbfnizkepkch.supabase.co') console.info('[Safety Lab Aero] Collaboration backend →', SUPABASE_PROJECT_URL); } catch (_) {}
+    _slabHostedKey
+));
+try { if (SUPABASE_PROJECT_URL && SUPABASE_PROJECT_URL !== _slabHostedUrl) console.info('[Safety Lab Aero] Collaboration backend →', SUPABASE_PROJECT_URL); } catch (_) {}
 
 // [P2 batch 5] L6381-6381 moved verbatim to bindings_modules.js
 // [P2 batch 5] L6382-6382 moved verbatim to bindings_modules.js

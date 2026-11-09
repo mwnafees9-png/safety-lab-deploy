@@ -1,4 +1,4 @@
-// ms_sso.js — v1.0 — Microsoft 365 / Entra ID single sign-on ("SharePoint-style" login).
+// ms_sso.js v1.2 (10 Nov 2026: the button follows SLSignInOptions, signin_options.js). Microsoft 365 / Entra ID single sign-on ("SharePoint-style" login).
 // BORN MODULAR: new file, zero monolith edits. Injects a "Sign in with Microsoft"
 // button into the existing #signup-modal and drives Supabase's Azure OAuth provider.
 //
@@ -28,7 +28,9 @@
     // flip the default below to true or set window.SL_MS_SSO_ENABLED = true.
     // Read the flag at call time, not load time — auth_gate.js reads the very
     // same global, so one switch turns both buttons on together.
-    function MS_SSO_ENABLED() { try { return window.SL_MS_SSO_ENABLED === true; } catch (_) { return false; } }
+    // 10 Nov 2026: SLSignInOptions (signin_options.js) answers for every install: our hosted service reads the switch;
+    // a customer's own server only once it says Microsoft sign-in is turned on there.
+    function MS_SSO_ENABLED() { try { return window.SLSignInOptions ? window.SLSignInOptions.microsoft() === true : window.SL_MS_SSO_ENABLED === true; } catch (_) { return false; } }
 
     var MS_LOGO =
         '<svg width="18" height="18" viewBox="0 0 21 21" aria-hidden="true" style="flex:0 0 auto;">' +

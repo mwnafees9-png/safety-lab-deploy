@@ -231,7 +231,9 @@
     // this button 400s for every visitor. It stays hidden until someone sets
     // window.SL_MS_SSO_ENABLED = true — the same flag ms_sso.js reads, so the
     // gate button and the signup-modal button can never disagree again.
-    try { if (window.SL_MS_SSO_ENABLED !== true) return ''; } catch (_) { return ''; }
+    // 10 Nov 2026: SLSignInOptions (signin_options.js) decides: our hosted service reads the switch as before; a
+    // customer's own server shows the button only once that server says Microsoft sign-in is turned on.
+    try { if (!_opt().microsoft()) return ''; } catch (_) { return ''; }
     var MS_LOGO = '<svg width="17" height="17" viewBox="0 0 21 21" aria-hidden="true" style="flex:0 0 auto;">' +
       '<rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/>' +
       '<rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>';
@@ -250,12 +252,19 @@
   // -------------------------------------------------------------------------
   // Form pane HTML — content varies by mode
   // -------------------------------------------------------------------------
+  // 10 Nov 2026: what the screen offers and says (signin_options.js); the hosted words if it is not loaded.
+  function _opt() {
+    if (window.SLSignInOptions) return window.SLSignInOptions;
+    return { microsoft: function () { return window.SL_MS_SSO_ENABLED === true; }, signup: function () { return true; }, ownServer: function () { return false; },
+      text: function () { return { signinSub: 'Sign in to continue with Safety Lab Aero.', signupSub: 'Start a 10-day trial. No credit card required. Email verification is required to activate the trial.', verifySent: 'Click it to activate your account and start your 10-day trial.', wrongPassword: 'Email or password is incorrect. If you have not signed up yet, switch to "Create account" above.', accountsFrom: '' }; } };
+  }
   function formPaneHTML() {
+    const T = _opt().text();
     if (_mode === 'verify-sent') {
       return [
         '<div class="sl-form-pane"><div class="sl-form-pane-inner">',
         '  <h1 class="sl-form-title">Check your email</h1>',
-        '  <p class="sl-form-sub">We sent a verification link to <strong id="sl-verify-email-display">your inbox</strong>. Click it to activate your account and start your 10-day trial.</p>',
+        '  <p class="sl-form-sub">We sent a verification link to <strong id="sl-verify-email-display">your inbox</strong>. ' + T.verifySent + '</p>',
         '  <button class="sl-primary" type="button" onclick="window.SafetyLab._authBackToSignIn()">Back to sign in</button>',
         '  <div class="sl-msg" id="sl-msg"></div>',
         // If the link is reported invalid or expired, the usual cause on a corporate
@@ -310,17 +319,18 @@
       ].join('');
     }
     // signin | signup share the structure
-    const isSignup = _mode === 'signup';
+    const canSignup = _opt().signup();
+    const isSignup = _mode === 'signup' && canSignup;
     return [
       '<div class="sl-form-pane"><div class="sl-form-pane-inner">',
+      (canSignup ? [
       '  <div class="sl-form-tabs" role="tablist">',
       '    <button class="sl-form-tab ' + (isSignup ? '' : 'active') + '" type="button" onclick="window.SafetyLab._authSetMode(\'signin\')">Sign in</button>',
       '    <button class="sl-form-tab ' + (isSignup ? 'active' : '') + '" type="button" onclick="window.SafetyLab._authSetMode(\'signup\')">Create account</button>',
-      '  </div>',
+      '  </div>'].join('') : ''),
       '  <h1 class="sl-form-title">' + (isSignup ? 'Create your account' : 'Welcome back') + '</h1>',
-      '  <p class="sl-form-sub">' + (isSignup
-              ? 'Start a 10-day trial. No credit card required. Email verification is required to activate the trial.'
-              : 'Sign in to continue with Safety Lab Aero.') + '</p>',
+      '  <p class="sl-form-sub">' + (isSignup ? T.signupSub : T.signinSub) + '</p>',
+      (T.accountsFrom ? '  <p class="sl-form-sub" data-sl-accounts-from="1">' + T.accountsFrom + '</p>' : ''),
       ssoBlockHTML(),
       '  <form id="sl-auth-form" autocomplete="on" novalidate>',
       (isSignup ? '    <div class="sl-field"><label for="sl-name">Full name</label><input id="sl-name" type="text" required autocomplete="name" autofocus placeholder="Jane Doe"></div>' : ''),
@@ -677,6 +687,7 @@
   }
 
   function setMode(mode) {
+    if (mode === 'signup' && !_opt().signup()) mode = 'signin';   // a customer's own server: the administrator adds accounts
     _mode = mode;
     renderGate();
   }
@@ -803,8 +814,10 @@
       // "Invalid login credentials" can mean: wrong password, OR account doesn\'t
       // exist (e.g. signup failed earlier). The actionable message is: try the
       // Create Account tab.
+      // 10 Nov 2026 (local_store.js): a full browser storage never shows its raw error ("exceeded the quota").
+      if ((window.SLLocalStore && window.SLLocalStore.isQuota(err)) || /quota/i.test(msg)) { showMessage(window.SLLocalStore ? window.SLLocalStore.plainError(err) : 'This browser\'s storage for Safety Lab Aero is full. Close other Safety Lab Aero tabs and try again.', 'error'); return; }
       const friendly = /invalid login credentials/i.test(msg)
-        ? 'Email or password is incorrect. If you have not signed up yet, switch to "Create account" above.'
+        ? _opt().text().wrongPassword
         : (/email not confirmed/i.test(msg)
               ? 'Please verify your email first. Check your inbox for the activation link.'
               : (/signups not allowed|signup_disabled/i.test(msg)
@@ -1039,6 +1052,13 @@
     // 6 Sep 2026 — the desktop bypass that lived here ("skip the online auth gate on
     // Electron") is GONE. The desktop signs in at this gate exactly like the web; what
     // differs is only that a stored login still opens the app offline (below).
+    // 10 Nov 2026 (Files only rebuild): Files only opens with no sign-in. The local start
+    // checks the license and the agreement and asks once for a profile name; no backend
+    // client is ever built, so this returns before getSupabase().
+    if (window.SLConfig && window.SLConfig.browserOnly && !window.__SLAB_CONFIG_FATAL__) {
+      if (window.SLLocalStart && typeof window.SLLocalStart.run === 'function') { window.SLLocalStart.run(); }
+      return;
+    }
     const sb = getSupabase();
     if (!sb) { setTimeout(init, 300); return; }
 
@@ -1209,6 +1229,17 @@
     }
   }
 
+  // 10 Nov 2026: when a customer's own server answers whether it has Microsoft sign-in, redraw the sign-in screen
+  // (keeping what was typed) so the button appears only if it does.
+  try {
+    window.addEventListener('slab-signin-options', function () {
+      const g = document.getElementById(GATE_ID);
+      if (!g || g.classList.contains('sl-local') || (_mode !== 'signin' && _mode !== 'signup')) return;
+      const em = g.querySelector('#sl-email'), typed = em ? em.value : '';
+      renderGate();
+      const em2 = document.querySelector('#' + GATE_ID + ' #sl-email'); if (em2 && typed) em2.value = typed;
+    });
+  } catch (_) {}
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();

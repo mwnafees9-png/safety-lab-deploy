@@ -43,11 +43,12 @@ check('slab_config loads BEFORE fn_wrap and every backend reader',
       before(idx, SREF('slab_config.js'), SREF('helpers_modules.js')) &&
       before(idx, SREF('slab_config.js'), SREF('corpus_retrieve.js')) &&
       before(idx, SREF('slab_config.js'), SREF('labs_thread_config.js')));
-check('safety_lab.js reads SLConfig.supabaseUrl/Key', /_slabCfg && _slabCfg\.supabaseUrl/.test(S('safety_lab.js')) && /_slabCfg && _slabCfg\.supabaseKey/.test(S('safety_lab.js')));
+// 10 Nov 2026 (Files only rebuild): with SLConfig present its values are used exactly (no hosted fallback).
+check('safety_lab.js reads SLConfig.supabaseUrl/Key, exactly when SLConfig is present', /_slabCfg \? \(_slabCfg\.supabaseUrl \|\| ''\)/.test(S('safety_lab.js')) && /_slabCfg \? \(_slabCfg\.supabaseKey \|\| ''\)/.test(S('safety_lab.js')));
 check('bindings_modules.js reads SLConfig.aiEndpoint', /window\.SLConfig\) \? String\(window\.SLConfig\.aiEndpoint/.test(S('bindings_modules.js')));
 check('notify_agents.js reads SLConfig.aiEndpoint', /window\.SLConfig\) return String\(window\.SLConfig\.aiEndpoint/.test(S('notify_agents.js')));
 check('corpus_retrieve.js reads SLConfig.corpusEndpoint', /window\.SLConfig && window\.SLConfig\.corpusEndpoint/.test(S('corpus_retrieve.js')));
-check('labs_thread_config.js reads SLConfig.supabaseUrl/Key', /window\.SLConfig && window\.SLConfig\.supabaseUrl/.test(S('labs_thread_config.js')));
+check('labs_thread_config.js reads SLConfig.supabaseUrl/Key, exactly when SLConfig is present', /window\.SLConfig \? \(window\.SLConfig\.supabaseUrl \|\| ''\)/.test(S('labs_thread_config.js')) && /window\.SLConfig \? \(window\.SLConfig\.supabaseKey \|\| ''\)/.test(S('labs_thread_config.js')));
 check('_initSupabaseClient bails on the fatal flag', /__SLAB_CONFIG_FATAL__/.test(S('helpers_modules.js')) && before(strip(S('helpers_modules.js')), '__SLAB_CONFIG_FATAL__', 'createClient'));
 
 console.log('\n[config] EXECUTED — mode resolution');

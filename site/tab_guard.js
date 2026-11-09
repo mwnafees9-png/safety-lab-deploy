@@ -1,3 +1,4 @@
+// 10 Nov 2026 (storage full, local_store.js): "Load the newer state" reads the autosave from IndexedDB when localStorage no longer holds it.
 // 16 Oct 2026: the conflict dialog says how many changes here wait to be confirmed (change_ack.js v2.0); loading the newer state drops them.
 // 13 Oct 2026 (change acknowledgement, fix2-J): a tab without the write lease still hands the state after each change to SLChangeAck.stash(), so its acknowledgements diff against the right "before".
 // ============================================================================
@@ -191,6 +192,19 @@
         _closeConflict();
         try {
             const raw = _ls() && _ls().getItem('safetyLab.autosave.v1');
+            // 10 Nov 2026 (local_store.js): the autosave lives in IndexedDB now; read it from there.
+            if (!raw && typeof SLDB !== 'undefined' && SLDB.available()) {
+                SLDB.get('safetyLab.autosave.v1').then(function (v) { return (typeof _maybeDecompress === 'function') ? _maybeDecompress(v) : v; }).then(function (txt) {
+                    const p2 = txt ? JSON.parse(txt) : null, d2 = p2 && (p2.data || p2);
+                    if (!d2 || typeof _applyProjectData !== 'function') throw new Error('nothing stored');
+                    _applyProjectData(d2); _lastSeenGen = _readGen();
+                    try { if (typeof showToast === 'function') showToast('Loaded the newer state from the other tab. This tab now owns saving.', 'success', 3500); } catch (_) {}
+                }).catch(function () {
+                    try { if (typeof showToast === 'function') showToast('Could not read the newer autosave. Keeping this tab\u2019s state.', 'warning', 4500); } catch (_) {}
+                    _lastSeenGen = _readGen();
+                });
+                return;
+            }
             const payload = raw ? JSON.parse(raw) : null;
             const data = payload && (payload.data || payload);
             if (data && typeof _applyProjectData === 'function') {
