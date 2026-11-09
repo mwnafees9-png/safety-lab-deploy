@@ -1,5 +1,11 @@
 // ============================================================================
-// cca_models.js — v1.0 — proper zone models (ZSA) + dynamic threat models (PRA).
+// cca_models.js — v1.05 — proper zone models (ZSA) + dynamic threat models (PRA).
+// v1.04 (8 Nov 2026): the PRA page is the PRA report now (cca_report.js, pra_autopilot.js v2.0); the "Dynamic threat
+// models" panel is no longer drawn there (Waqas: the shorthand was unreadable). praDynamicModel stays the computation
+// source and also gives the systems lost directly, the knock-on ones with what they were reached through, and what
+// each zone takes out; a caller drawing many risks can hand in the zonal findings once (opts.findings).
+// v1.05 (8 Nov 2026): the "Zone models" panel is not drawn once SLZsaAuto.TABLE_RETIRED is on (the ZSA report
+// says the same in plain words, zone by zone). zsaZoneModel stays exported for INV-18 and the report.
 //
 // ZSA and PRA were elicited tables that never consulted the aircraft model.
 // Now each row carries its MODEL, computed live on every render:
@@ -64,14 +70,14 @@
     }
 
     // ---------------------------------------------------------- threat model
-    function praDynamicModel(praIdOrInternal) {
+    function praDynamicModel(praIdOrInternal, opts) {
         const p = _pra().find(x => x && (x.praId === praIdOrInternal || String(x.internalId) === String(praIdOrInternal)));
         if (!p) return null;
         const zones = Array.isArray(p.affectedZones) ? p.affectedZones.slice() : [];
         const inj = zones.map(z => 'zone:' + z);
-        const ev = (typeof fsEvaluate === 'function' && inj.length) ? fsEvaluate(inj) : { trippedFcs: [], breaches: [], closure: [], downSystems: [], rulesEvaluated: 0, rulesHolding: 0 };
+        const ev = (typeof fsEvaluate === 'function' && inj.length) ? fsEvaluate(inj) : { trippedFcs: [], breaches: [], closure: [], downSystems: [], failed: [], zoneNotes: [], rulesEvaluated: 0, rulesHolding: 0 };
         // retention check: every Cat trip must be an ACCEPTED zonal finding
-        const findings = (typeof fsZonalFindings === 'function') ? fsZonalFindings() : [];
+        const findings = (opts && Array.isArray(opts.findings)) ? opts.findings : ((typeof fsZonalFindings === 'function') ? fsZonalFindings() : []);
         const catTrips = ev.trippedFcs.filter(fc => fc.severity === 'Catastrophic');
         const retention = catTrips.map(fc => {
             const f = findings.find(x => zones.indexOf(x.zone) >= 0 && x.fcId === fc.fcId);
@@ -81,6 +87,10 @@
         return {
             praId: p.praId || String(p.internalId), threat: p.threat || '', zones,
             downSystems: ev.downSystems || [], tripped: ev.trippedFcs, breaches: ev.breaches,
+            // v1.04: lost directly (what the zones hold and route) and as a knock-on (the availability cascade)
+            directSystems: (ev.failed || []).slice(),
+            knockOn: (ev.closure || []).filter(c => c && c.down && c.kind === 'system' && (ev.failed || []).indexOf(c.id) < 0).map(c => ({ id: c.id, name: c.name || c.id, from: c.from || '' })),
+            zoneNotes: (ev.zoneNotes || []).map(z => ({ zone: z.zone, systems: (z.systems || []).slice() })),
             cascade: (ev.closure || []).length,
             rules: { evaluated: ev.rulesEvaluated, holding: ev.rulesHolding },
             retention, retained,
@@ -128,6 +138,7 @@
     function renderZsaModels() {
         const view = document.getElementById('view-zsa');
         if (!view) return;
+        if (window.SLZsaAuto && window.SLZsaAuto.TABLE_RETIRED) { const old = document.getElementById('zsa-models-host'); if (old) old.innerHTML = ''; return; }
         let host = document.getElementById('zsa-models-host');
         if (!host) { host = document.createElement('div'); host.id = 'zsa-models-host'; view.appendChild(host); }
         const zones = _zsa().filter(z => z && z.zoneId);
@@ -155,32 +166,11 @@
             }).join('') + '</div>';
     }
 
+    // v1.04 (8 Nov 2026): the PRA page is the PRA report (pra_autopilot.js); the "Dynamic threat models" panel is no
+    // longer drawn. Kept as a name for callers: it takes away any copy an older build left on the page.
     function renderPraModels() {
-        const view = document.getElementById('view-pra');
-        if (!view) return;
-        let host = document.getElementById('pra-models-host');
-        if (!host) { host = document.createElement('div'); host.id = 'pra-models-host'; view.appendChild(host); }
-        const pras = _pra().filter(p => p && (p.affectedZones || []).length);
-        if (!pras.length) { host.innerHTML = ''; return; }
-        host.innerHTML =
-            '<div style="border:1px solid var(--color-border-strong); background:var(--color-surface-1); margin-top:18px;">' +
-            '<div style="padding:9px 14px; border-bottom:2px solid var(--color-text-primary);"><b>Dynamic threat models — the postulated risk, evaluated against the live aircraft</b></div>' +
-            '<p style="font-size:12px; color:var(--color-text-secondary); padding:8px 14px 4px;">Each particular risk expands through its zones — housing, routing, cascade — and reports what actually trips, recomputed from the model on every visit. Catastrophic consequences must be carried by an ACCEPTED zonal disposition; anything else shows red here and in the sweep.</p>' +
-            pras.map(p => {
-                const m = praDynamicModel(p.praId || p.internalId);
-                if (!m) return '';
-                const ret = m.tripped.some(t => t.severity === 'Catastrophic')
-                    ? (m.retained ? '<span class="u-mono" style="color:#1D9E75; font-weight:700;">retention carried ✓ (accepted disposition)</span>'
-                        : '<span class="u-mono" style="color:#8E2A2A; font-weight:700;">RETENTION NOT CARRIED — ' + m.retention.filter(r => r.state !== 'accepted').map(r => _esc(r.fcId) + ':' + _esc(r.state)).join(', ') + '</span>')
-                    : '<span class="u-mono" style="color:var(--color-text-tertiary);">no Catastrophic consequence computed</span>';
-                return '<div style="padding:8px 14px; border-top:1px solid var(--color-border-hair); font-size:12px;">' +
-                    '<b>' + _esc(m.praId) + '</b> ' + _esc(m.threat.slice(0, 56)) + ' · zones ' + m.zones.map(_esc).join(', ') +
-                    ' <button class="ckpt-m-btn" style="font-size:11px; padding:2px 10px; margin-left:8px;" onclick=\'ccaSimulate(' + JSON.stringify(m.zones.map(z => 'zone:' + z)) + ')\'>Simulate →</button>' +
-                    '<div style="color:var(--color-text-secondary); margin-top:4px;" class="u-mono">downs: ' + (m.downSystems.length ? m.downSystems.map(_esc).join(', ') : '—') +
-                    ' · trips: ' + (m.tripped.length ? m.tripped.map(t => _esc(t.fcId) + ' ' + _sevPill(t.severity)).join(', ') : 'none') +
-                    ' · MAC ' + m.rules.holding + '/' + m.rules.evaluated + ' holding · cascade ' + m.cascade + '</div>' +
-                    '<div style="margin-top:2px;">' + ret + '</div></div>';
-            }).join('') + '</div>';
+        const old = (typeof document !== 'undefined') ? document.getElementById('pra-models-host') : null;
+        if (old) old.remove();
     }
 
     (function wrap() {
@@ -190,7 +180,7 @@
                 const r = orig.apply(this, arguments);
                 try {
                     if (tabId === 'zsa') setTimeout(renderZsaModels, 150);
-                    if (tabId === 'pra') setTimeout(renderPraModels, 150);
+                    // v1.04: no "Dynamic threat models" panel on the PRA page (the PRA report replaces it)
                 } catch (_) {}
                 return r;
             };

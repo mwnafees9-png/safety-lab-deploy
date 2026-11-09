@@ -1,4 +1,6 @@
 // ============================================================================
+// msg3_zonal.js v1.22 (8 Nov 2026): a small "Open the CAD model" link in the header (the CAD Model page has its own
+// menu row now).
 // msg3_zonal.js — v1.0 — MSG-3 Zonal Inspection program, REUSING the shared
 // zonal model (ZONES) + equipment register + inherent-hazard library. BORN
 // MODULAR: modal launched from the Zonal Model page. The zone tree authored for
@@ -80,7 +82,8 @@
         ov.innerHTML = '<div style="background:#fff;color:#202024;border-radius:14px;max-width:720px;width:100%;max-height:86vh;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,.32);">' +
             '<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid #EEF2F8;">' +
               '<div><div style="font-weight:700;color:var(--color-text-primary);">MSG-3 Zonal Inspection program</div>' +
-              '<div style="font-size:11.5px;color:#55555C;">Reuses the same zone tree + equipment as ZSA — authored once, two consumers.</div></div>' +
+              '<div style="font-size:11.5px;color:#55555C;">Reuses the same zone tree + equipment as ZSA — authored once, two consumers.</div>' +
+              '<a href="javascript:void(0)" data-cad-link="1" style="font-size:11.5px;color:#0A4FB8;text-decoration:none" onclick="_m3CloseModal();switchTab(\'cad\')">Open the CAD model &rarr;</a></div>' +
               '<button onclick="_m3CloseModal()" style="border:none;background:transparent;font-size:22px;cursor:pointer;color:#888;">&times;</button></div>' +
             '<div id="m3z-body" style="padding:12px 18px;overflow:auto;"></div></div>';
         ov.addEventListener('mousedown', function (e) { if (e.target === ov) ov.remove(); });

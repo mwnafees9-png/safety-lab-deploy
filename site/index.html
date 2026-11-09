@@ -158,6 +158,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                 <a class="asb-item sub" id="snav-plan-auto" onclick="switchTab('plan-auto')" role="button" tabindex="0"><span class="asb-lbl">Plan Autopilot</span></a>
                 <a class="asb-item sub" id="snav-spp" onclick="switchTab('spp')" role="button" tabindex="0"><span class="asb-lbl">Program Planning</span></a>
                 <a class="asb-item sub" id="snav-phases" onclick="switchTab('phases')" role="button" tabindex="0"><span class="asb-lbl">Flight Phases</span></a>
+                <!-- 8 Nov 2026: the CAD Model page has its own row next to Flight Phases (it was a pill under ZSA); the ZSA, PRA, routing, physical hazards and MSG-3 zonal pages link to it -->
+                <a class="asb-item sub" id="snav-cad" onclick="switchTab('cad')" role="button" tabindex="0"><span class="asb-lbl">CAD Model</span></a>
                 </div>
             </details>
             <details class="asb-grp" id="asb-grp-sys" open>
@@ -1321,6 +1323,10 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                     </div>
                 </div>
             </div>
+            <!-- 8 Nov 2026 (Waqas: "I want the PRA table gone, and each PRA presented in a report format"): the PRA page is the PRA Autopilot and the PRA report
+                 (cca_report.js, pra_autopilot.js v2.0), with Edit per section and "Add a particular risk". The old form and table stay in the page, hidden, for the
+                 code that still reads them (imports, exports, scenarios, model links); praData is written by the report. -->
+            <div id="pra-legacy-ui" hidden style="display:none">
             <div class="controls" style="border-left-color: #9d174d; background: var(--bg-container);">
                 <p class="cfg-hint" title="The purpose of the Particular Risk Assessment is explicitly to gauge and protect against external impacts to Continued Safe Flight and Landing (CSFL).">PRA protects <span style="color: #ef4444;">CSFL</span> against external threats.</p>
                 <div style="display: flex; justify-content: flex-end; margin-bottom: 8px;">
@@ -1377,6 +1383,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                     <thead><tr><th>Actions</th><th>PRA ID</th><th>Threat Source</th><th>Propagation Path</th><th>Model links</th><th>CSFL Impact Analysis</th><th>Affected Zones</th><th>Exposed Functions</th><th>Mitigation Strategy</th><th>Scenarios</th></tr></thead>
                     <tbody id="pra-body"></tbody>
                 </table>
+            </div>
             </div>
         </div>
 
@@ -1512,7 +1519,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                     </div>
                 </div>
             </div>
-            <div class="ar-filter-bar">
+            <div class="ar-filter-bar" id="cma-scope-chips">
                 <span class="ar-filter-label">Scope:</span>
                 <span class="ar-filter-chip active" data-cma-scope="all"      onclick="setCmaScopeFilter('all')">All</span>
                 <span class="ar-filter-chip"        data-cma-scope="aircraft" onclick="setCmaScopeFilter('aircraft')">Aircraft</span>
@@ -1575,7 +1582,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                     <button type="button" class="cma-auto-detect-btn" onclick="autoDetectCommonModes()" title="Common causes in the fault trees (CCF groups, shared events, shared resources) are detected live as the trees change and each one must be decided. This runs the same check now.">✨ Check common causes now</button>
                 </div>
             </div>
-            <div style="overflow-x: auto;">
+            <!-- 8 Nov 2026: the CMA table and its scope chips carry ids so the one switch in cma_autopilot.js (HIDE_CMA_TABLE_UI) can take them off the page once the CMA report replaces them. -->
+            <div style="overflow-x: auto;" id="cma-table-wrap">
                 <table id="cma-table">
                     <thead><tr><th>Actions</th><th>Scope</th><th>CMA ID</th><th>Subject</th><th>Independence Claim</th><th>Linked Gates</th><th>Modes Considered</th><th>Findings</th><th>Mitigation</th><th>Status</th></tr></thead>
                     <tbody id="cma-body"></tbody>
@@ -4253,7 +4261,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- 21 Oct 2026 (full function tree): func_tree.js is the one place that knows how aircraft functions nest to any depth. Loads before the modules that render and pick functions. -->
     <script src="func_tree.js?v=1.1" defer></script>
     <!-- 30 Oct 2026 (Waqas: no duplicates anywhere; systems can be renamed, edited and removed): no_dupes.js is the one rule for what counts as the same function, FCIM row, FHA row or system; system_admin.js renames, edits and removes a system (its apply functions are undo targets, so it loads before safety_lab.js wraps them). -->
-    <script src="no_dupes.js?v=1.0" defer></script>
+    <script src="no_dupes.js?v=1.1" defer></script>
     <script src="system_admin.js?v=1.0" defer></script>
     <script src="data_ops_modules.js?v=66.68" defer></script>
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
@@ -4572,13 +4580,16 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="pra_panel.js?v=1.18" defer></script>
     <!-- 15 Oct 2026: the exchange with Sys Lab (zones, CAD containment and risk results out; the physical architecture in). Deterministic, no AI. -->
     <script src="zonal_exchange.js?v=1.3" defer></script>
+    <!-- 8 Nov 2026 (after pra_panel.js and zonal_exchange.js, which keep their places right after cad_page.js): screenshots of the 3D model for the reports (SLCadShots), drawn offscreen in a hidden viewer of its own -->
+    <script src="cad_shots.js?v=1.1" defer></script>
     <!-- 19 Oct 2026: the zonal safety analysis, computed zone by zone from the zone model, CAD, Sys Lab routes and the fault trees. Deterministic, no AI. -->
     <script src="zsa_engine.js?v=1.1" defer></script>
     <script src="zsa_engine_ui.js?v=1.1" defer></script>
     <!-- 4 Nov 2026: the ZSA and PRA Autopilots (the shared look first) -->
     <script src="autopilot_ui.js?v=1.5" defer></script>
-    <script src="zsa_autopilot.js?v=1.2" defer></script>
-    <script src="pra_autopilot.js?v=1.3" defer></script>
+    <script src="cca_report.js?v=1.4" defer></script>
+    <script src="zsa_autopilot.js?v=1.5" defer></script>
+    <script src="pra_autopilot.js?v=2.3" defer></script>
     <!-- 6 Nov 2026: the HF Autopilot (SLHfAuto): the human factors work through the design cycle, one plain question at a time, written into the HF tables -->
     <script src="hf_autopilot.js?v=2.1" defer></script>
     <!-- 6 Nov 2026: the Plan Autopilot. After autopilot_ui.js (the shared look), objectives_matrix.js (the objectives) and program_plan.js (the lanes). -->
@@ -4594,7 +4605,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="cma_live.js?v=1.3" defer></script>
     <script src="pra_library.js?v=1.3" defer></script>
     <script src="pra_canvas.js?v=1.23" defer></script>
-    <script src="msg3_zonal.js?v=1.21" defer></script>
+    <script src="msg3_zonal.js?v=1.22" defer></script>
     <script src="mac_l3.js?v=1.0" defer></script>
     <!-- M1 phase 2 — L3 cockpit: flow editor, per-deviation BDD corroboration, FMEA sign desk. -->
     <script src="mac_flows.js?v=1.2" defer></script>
@@ -4648,10 +4659,10 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="tree_homes.js?v=1.2" defer></script>
     <!-- 24 Oct 2026: verify_sync.js (SLVerifySync): every top-down tree gets its verification tree, kept in step with it; removed branches and deleted trees are asked about. After tree_homes.js. -->
     <script src="verify_sync.js?v=1.2" defer></script>
-    <script src="prove_tabs.js?v=1.8" defer></script>
+    <script src="prove_tabs.js?v=1.9" defer></script>
     <!-- 24 Oct 2026: nav_areas.js (SLNavAreas) lays the left menu out the way Sys Lab does: a Working on picker, sections, and each section's pages as tabs above the page. After support_modules.js, helpers_modules.js, program_plan.js and prove_tabs.js. -->
     <script src="level_view.js?v=1.2" defer></script>
-    <script src="nav_areas.js?v=2.0" defer></script>
+    <script src="nav_areas.js?v=2.1" defer></script>
     <script src="fta_tree_picker.js?v=1.6" defer></script>
     <!-- 25 Aug 2026 — the way back from a golden-thread jump (reviewer: "to go
          back you have to click on the golden thread"). Wraps _gtvShowEco /
@@ -4685,12 +4696,14 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- 31 Oct 2026: comment_kinds.js (SLCommentKinds): review comments on every assessment (fault trees and their nodes, CCMR, MAC, CoFFE, resources, Markov, RBD, ETA, FRACAS, MSG-3, crew credit) and the rows ANEM may change when a comment asks. After assurance_modules.js (Review, Traceability). -->
     <script src="comment_kinds.js?v=1.0" defer></script>
     <!-- 31 Oct 2026: cma_flow.js (SLCmaFlow): the Common Mode Analysis in four steps (gates and claim, the App M questionnaire, concerns and mitigations, close out), a status that means something, and the DAL reduction given back only when it is mitigated. After cma_walkthrough.js, cma_live.js and critical_gates.js. -->
-    <script src="cma_flow.js?v=1.2" defer></script>
+    <script src="cma_flow.js?v=1.3" defer></script>
     <!-- 31 Oct 2026: rate_sources.js (SLRateSources): every failure rate names its source (supplier guarantee, field data, calculated, library entry, engineering judgment); the sources table, the canvas warning and the SSA table; ANEM only matches library entries. After cma_flow.js. -->
     <script src="rate_sources.js?v=1.3" defer></script>
     <!-- 31 Oct 2026: iface_reqs.js (SLIfaceReqs): requirements on interfacing systems. The need and its budget come from the trees (an event another system provides); the interfaces stay owned by Sys Lab; ANEM drafts the wording only and the budget must stand in it exactly. After rate_sources.js. -->
     <script src="iface_reqs.js?v=1.0" defer></script>
-    <script src="cca_models.js?v=1.03" defer></script>
+    <!-- 8 Nov 2026: cma_autopilot.js (SLCmaAuto): the CMA Autopilot. Plain questions per independence claim (the gates, the claim, every common mode category, how each concern is closed), answered through SLCmaFlow into the CMA rows, and the CMA report content (one section per claim), inputs and outputs, and inline Edit / Add a CMA. After cma_flow.js and autopilot_ui.js. -->
+    <script src="cma_autopilot.js?v=1.1" defer></script>
+    <script src="cca_models.js?v=1.05" defer></script>
     <!-- Skills V1 — versioned drafting-instruction registry. Loads EAGERLY (tiny,
          static) and BEFORE ai_loader so the engine finds window.SLABSkills on its
          first completion; the engine falls back to inline specs if absent. -->

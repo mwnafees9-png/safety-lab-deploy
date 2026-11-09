@@ -1,4 +1,6 @@
 // ============================================================================
+// nav_areas.js v1.7 (8 Nov 2026): the CAD Model page is a row of its own under Plan and basis, next to Flight Phases
+// (it was a pill of the ZSA area; the ZSA, PRA, routing, physical hazards and MSG-3 zonal pages link to it).
 // nav_areas.js v1.6 (28 Oct 2026): Admin is a page of its own (Connections, Workspaces and locks, Seats and license);
 // Connections leaves Requirements (Waqas: "this is not just a requirements thing").
 // nav_areas.js v1.4 (25 Oct 2026): Waqas: "when you click on left nav menu it flickers"; "CCA in system folders
@@ -48,12 +50,12 @@
 // ============================================================================
 (function (root) {
     'use strict';
-    var VERSION = '1.6';
+    var VERSION = '1.7';
     // A section: key, label, icon, scope ('aircraft' | 'system' | 'foot'), items (menu link ids, or a group
     // { group, label, ids }), and pages: every page (switchTab id) that belongs to it, with the link that stands
     // for it in the bar (a page that has no link of its own, such as the AFHA's Functions tab, lights its area's link).
     var AREAS = [
-        { key: 'plan', label: 'Plan and basis', ic: '📐', scope: 'aircraft', items: ['snav-plan-auto', 'snav-arp-process', 'snav-spp', 'snav-phases'] },
+        { key: 'plan', label: 'Plan and basis', ic: '📐', scope: 'aircraft', items: ['snav-plan-auto', 'snav-arp-process', 'snav-spp', 'snav-phases', 'snav-cad'] },
         { key: 'afha', label: 'AFHA', ic: '⚠', scope: 'aircraft', items: ['snav-afha'],
           pages: { 'ac-func': 'snav-afha', 'ac-fcim': 'snav-afha', 'ac-asm': 'snav-afha' } },
         // the fault trees and diagram tools of a level are links made here (DYN below): their pages decide their
@@ -61,7 +63,7 @@
         { key: 'pasa', label: 'PASA', ic: '🌳', scope: 'aircraft', items: ['snav-pasa', 'snav-ac-req', 'snav-fta', 'sl-nav-diag-pasa'],
           pages: { interdep: 'snav-pasa', resources: 'snav-pasa', mac: 'snav-pasa', mfms: 'snav-pasa', coffe: 'snav-pasa' } },
         { key: 'cca', label: 'Common cause', ic: '🔗', scope: 'aircraft', items: ['snav-zsa', 'snav-pra', 'snav-cma', 'snav-cea', 'snav-stpa'],
-          pages: { zonal: 'snav-zsa', cad: 'snav-zsa', routing: 'snav-zsa', phys: 'snav-zsa', ipledger: 'snav-cma', cra: 'snav-cma' } },
+          pages: { zonal: 'snav-zsa', routing: 'snav-zsa', phys: 'snav-zsa', ipledger: 'snav-cma', cra: 'snav-cma' } },
         { key: 'asa', label: 'ASA', ic: '✈', scope: 'aircraft', items: ['snav-asa', 'sl-nav-trees-asa', 'snav-ccmr', 'snav-mmel', 'snav-sse'] },
         { key: 'hf', label: 'Human factors', ic: '👤', scope: 'aircraft', items: ['snav-hfa-auto', 'snav-hfa-results'] },
         { key: 'ram', label: 'R&M', ic: '🔧', scope: 'aircraft', items: ['snav-ram-hub', 'snav-library',
@@ -98,7 +100,7 @@
                   // 6 Nov 2026: the HF pages in the order the design cycle does them, in plain words (hf_autopilot.js)
                   // 6 Nov 2026 (Waqas: "can we scrap existing tables its hard to explain their purposes"): the section is the HF
                   // Autopilot (the questions) and the HF results (the tables it fills); the old table pages leave the menu, their data stays
-                  'snav-hfa-auto': 'HF Autopilot', 'snav-hfa-results': 'HF results', 'snav-plan-auto': 'Plan Autopilot',
+                  'snav-hfa-auto': 'HF Autopilot', 'snav-hfa-results': 'HF results', 'snav-plan-auto': 'Plan Autopilot', 'snav-cad': 'CAD Model',
                   'snav-hfa-alloc': '1. Who does what', 'snav-hfa-tid': '2. Crew procedures', 'snav-hfa-task': '3. Crew workload', 'snav-hfa-hea': '4. Crew errors', 'snav-hfa-alerts': '5. Alerts',
                   'snav-hfa-cd': '6. Controls and displays', 'snav-hfa-sa': '7. Situation awareness', 'snav-hfa-ergo': '8. Reach and view', 'snav-hfa-mfc': '9. Minimum crew',
                   'snav-ws-locks': 'Workspaces and locks', 'snav-admin-lic': 'Seats and license', 'snav-anem': 'ANEM live chat', 'snav-dal-ref': 'DAL credit (DO-178C / 254)', 'snav-prove': 'Prove', 'snav-fta': 'Fault trees' };

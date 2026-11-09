@@ -384,7 +384,8 @@ const FIX = path.join(__dirname, 'fixtures', 'cad', 'toy_aircraft.step');
     check('the worker is not a page script', !/<script src="cad_import_worker\.js/.test(IDX));
     const PT = require(path.join(SITE, 'prove_tabs.js'));
     const zsa = PT.AREAS.find(a => a.label === 'ZSA').tabs.map(x => x.t);
-    check('CAD Model is a ZSA tab, right after Zonal Model', zsa.indexOf('cad') === zsa.indexOf('zonal') + 1);
+    // 8 Nov 2026: the CAD Model page left the ZSA pills for its own menu row next to Flight Phases (regression_cad_nav_20261108)
+    check('CAD Model has its own menu row (no longer a ZSA tab)', zsa.indexOf('cad') < 0 && /id="snav-cad" onclick="switchTab\('cad'\)"/.test(S('index.html')));
     check("the page mounts its own 'view-cad'", S('cad_page.js').indexOf("v.id = 'view-cad'") >= 0);
     check('viewer API names as agreed', ['mount', 'loadModel', 'highlightZone', 'highlightParts', 'highlightVolume', 'onSelect', 'dispose'].every(k => typeof V[k] === 'function'));
     {

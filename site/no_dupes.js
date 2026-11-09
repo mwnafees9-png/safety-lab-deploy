@@ -1,5 +1,8 @@
 // ============================================================================
-// no_dupes.js — v1.0 — ONE RULE FOR WHAT COUNTS AS THE SAME THING.
+// no_dupes.js — v1.1 — ONE RULE FOR WHAT COUNTS AS THE SAME THING.
+// v1.1 (8 Nov 2026): the common mode analysis. A gate is in one CMA at most, whether that CMA is in the four steps
+// (row.flow.gates) or was logged before them (row.linkedGateIds); two CMAs never share a subject (case and spaces ignored).
+// Suggested rows (not yet accepted) own nothing. cma_flow.js (cmaForGate) and cma_autopilot.js (Add, Edit) both ask here.
 //
 // Waqas, 30 Oct 2026: "AI or the tool itself must not create duplicates anywhere in the app, once
 // an analysis or a field has been created, it can then be updated or removed, not duplicated".
@@ -214,8 +217,29 @@
         return s.join('. ') + '. Nothing was added twice.';
     }
 
+    // ---------------------------------------------------------------- common mode analysis (8 Nov 2026)
+    function cmaGatesOf(row) { return row ? ((row.flow && Array.isArray(row.flow.gates) ? row.flow.gates : row.linkedGateIds) || []).map(String) : []; }
+    // the CMA a gate already belongs to (a four-step CMA first, then one logged before the steps), or null
+    function cmaOwner(arr, key, except) {
+        var k = String(key), live = (Array.isArray(arr) ? arr : []).filter(function (c) { return c && !c.suggested && c !== except; });
+        return live.find(function (c) { return c.flow && cmaGatesOf(c).indexOf(k) >= 0; }) || live.find(function (c) { return !c.flow && cmaGatesOf(c).indexOf(k) >= 0; }) || null;
+    }
+    // row: { internalId?, gates: [gate keys], subject }. Returns { row, kind: 'gate' | 'subject', gate?, reason } or null.
+    function cmaClash(row, arr) {
+        if (!row) return null;
+        var rest = others(arr, row).filter(function (c) { return !c.suggested; });
+        var gates = (row.gates || []).map(String);
+        for (var i = 0; i < gates.length; i++) {
+            var o = cmaOwner(rest, gates[i]);
+            if (o) return { row: o, kind: 'gate', gate: gates[i], reason: 'That gate is already in ' + (S(o.cmaId) || 'another CMA') + ': one CMA per set of gates. Edit that one instead.' };
+        }
+        var subj = norm(row.subject);
+        if (subj) { var hit = rest.find(function (c) { return norm(c.subject) === subj; }); if (hit) return { row: hit, kind: 'subject', reason: (S(hit.cmaId) || 'Another CMA') + ' already covers "' + S(hit.subject) + '". Edit that one instead.' }; }
+        return null;
+    }
+
     var API = {
-        VERSION: '1.0', norm: norm,
+        VERSION: '1.1', norm: norm, cmaGatesOf: cmaGatesOf, cmaOwner: cmaOwner, cmaClash: cmaClash,
         importUpsert: importUpsert, newTally: newTally, tallyText: tallyText,
         acFunctionClash: acFunctionClash, sysFunctionClash: sysFunctionClash,
         awarenessKey: awarenessKey, fcimClash: fcimClash,

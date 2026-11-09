@@ -1,4 +1,7 @@
 // ============================================================================
+// prove_tabs.js, v1.9 (8 Nov 2026): the CAD Model leaves the ZSA pills for its own row in the left menu (under Plan
+// and basis, next to Flight Phases); the ZSA pages (Zonal Model, ZSA, Routing, Physical Hazards) carry a small
+// "Open the CAD model" link at the end of their bar instead.
 // prove_tabs.js, v1.8 (24 Oct 2026): the Fault trees bar follows the tree home on screen (tree_homes.js):
 // its label names the home (PASA, ASA, a system's PSSA or SSA, Standalone) and a verification home shows only
 // its trees (the diagram tools are the allocation level's: PASA, a system's PSSA, Standalone).
@@ -93,10 +96,9 @@
         // themselves are untouched; this bar is presentation over them, exactly
         // like every area above. Routing and the Principle Ledger keep their
         // program-plan lane gates (their rail rows used to carry them).
-        { label: 'ZSA', tabs: [
+        { label: 'ZSA', cadLink: true, tabs: [
             { t: 'zonal',   k: 'Zonal Model' },
-            // 13 Oct 2026: the CAD Model page (cad_page.js), beside the zone tree it feeds.
-            { t: 'cad',     k: 'CAD Model' },
+            // 13 Oct 2026 the CAD Model page was a pill here; 8 Nov 2026 it has its own menu row (cadLink below).
             { t: 'zsa',     k: 'Zonal Safety (ZSA)' },
             { t: 'routing', k: 'Routing / Zone-Spanning', gateLane: 'routing' },
             { t: 'phys',    k: 'Physical Hazards' }
@@ -173,7 +175,7 @@
             var on = x.t === activeTab;
             return '<button type="button" role="tab" class="prove-tab' + (on ? ' active' : '') + '"' +
                 (on ? ' aria-selected="true"' : '') + ' data-prove-tab="' + _esc(x.t) + '">' + _esc(x.k) + '</button>';
-        }).join('');
+        }).join('') + (area.cadLink ? '<a href="javascript:void(0)" class="prove-tab-cad" data-cad-link="1" style="margin-left:auto;font-size:12px;align-self:center;color:var(--color-accent,#1A6EF2);text-decoration:none;white-space:nowrap" onclick="switchTab(\'cad\')">Open the CAD model &rarr;</a>' : '');
         Array.prototype.forEach.call(bar.querySelectorAll('[data-prove-tab]'), function (btn) {
             btn.addEventListener('click', function () {
                 try { if (typeof switchTab === 'function') switchTab(btn.getAttribute('data-prove-tab')); } catch (_) {}

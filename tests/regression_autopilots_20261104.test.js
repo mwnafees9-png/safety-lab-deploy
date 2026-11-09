@@ -35,7 +35,7 @@ const MUTS = {
   calc:         ['pra_autopilot.js', "calc = (r.calc && r.calc.groups[gk]) || null; if (!calc || calc.status === 'meets' || calc.status === 'clear') return; }", "calc = (r.calc && r.calc.groups[gk]) || { status: 'fails', models: {} }; }"],
   alt:          ['pra_autopilot.js', "var frags = FRAG.filter(function (f) { return !f.optional || !!(_peekStore().settings || {}).alternate; });", 'var frags = FRAG.filter(function (f) { return !f.optional; });'],
   inputs:       ['pra_autopilot.js', "        if (!(mass > 0)) return { ok: false, err: 'Enter the disc mass with its blades (kg), from the engine maker\\'s data.' };\n", ''],
-  nextgate:     ['zsa_autopilot.js', "class=\"slap-btn p\" ' + (o ? '' : 'disabled') + ' onclick=\"SLZsaAuto.ui.step(", "class=\"slap-btn p\" ' + '' + ' onclick=\"SLZsaAuto.ui.step("]
+  nextgate:     ['zsa_autopilot.js', "class=\"slap-btn p\" ' + (done ? '' : 'disabled') + ' onclick=\"SLZsaAuto.ui.step(", "class=\"slap-btn p\" ' + '' + ' onclick=\"SLZsaAuto.ui.step("]
 };
 if (MUT && !MUTS[MUT]) { console.error('unknown mutation ' + MUT); process.exit(3); }
 function src(name) { let s = fs.readFileSync(path.join(SITE, name), 'utf8'); const m = MUTS[MUT]; if (m && m[0] === name) { if (s.indexOf(m[1]) < 0) throw new Error('mutation site missing: ' + m[1]); s = s.replace(m[1], m[2]); } return s; }
@@ -100,11 +100,11 @@ const tick = (ms) => new Promise((r) => setTimeout(r, ms || 0));
       check('an answer writes the zone\'s row in place (still one row for Z-MLGW)', rowsBefore === 1 && z1.n === 1, rowsBefore + ' -> ' + z1.n);
       check('...with the mitigation the answer names, and the units from the CAD model', /Drip shield over/.test(z1.mit) && /LDG-BOGIE/.test(z1.equip), z1.mit + ' | ' + z1.equip);
       check('...what the row said before is kept (zsaTyped)', /Four main bogies/.test(z1.typed || ''), z1.typed);
-      check('...and it is still open while a question waits', z1.status === 'Open' && z1.st.state === 'todo');
+      check('...and it is still open while a question waits', z1.status === 'open' && z1.st.state === 'todo');   // 8 Nov 2026 (zsa_autopilot 1.3): the record's own values, open / closed (zsa_record.js)
       const z2 = await pg.evaluate((ids) => { SLZsaAuto.compute().byCode['Z-MLGW'].questions.forEach((q) => { if (q.id !== ids.drainId && q.id !== ids.leakId) SLZsaAuto.answer(q.id, q.options.find((o) => o.status !== 'open').id); }); SLZsaAuto.answer(ids.drainId, 'pools'); const z = SLZsaAuto.compute().byCode['Z-MLGW']; const signedOpen = SLZsaAuto.sign('Z-MLGW'); return { st: SLZsaAuto.zoneStatus(z), signedOpen, row: zsaData.find((r) => r.zoneId === 'Z-MLGW').findingStatus }; }, z1);
-      check('a design change leaves the finding open, and an open zone cannot be signed', z2.st.open === 1 && z2.st.state === 'open' && z2.signedOpen === false && z2.row === 'Open', JSON.stringify(z2));
+      check('a design change leaves the finding open, and an open zone cannot be signed', z2.st.open === 1 && z2.st.state === 'open' && z2.signedOpen === false && z2.row === 'open', JSON.stringify(z2));
       const z3 = await pg.evaluate((ids) => { SLZsaAuto.answer(ids.drainId, 'drain'); const ok = SLZsaAuto.sign('Z-MLGW'); const z = SLZsaAuto.compute().byCode['Z-MLGW']; const s1 = SLZsaAuto.zoneStatus(z); const row = zsaData.find((r) => r.zoneId === 'Z-MLGW'); const r1 = { status: row.findingStatus, by: row.assessedBy }; SLZsaAuto.answer(ids.leakId, 'move'); return { ok, s1, r1, s2: SLZsaAuto.zoneStatus(z), stored: projectConfig.zsaAuto.answers[ids.leakId] }; }, z1);
-      check('every answer in and nothing open: the zone is signed and its row closed with who signed', z3.ok === true && z3.s1.state === 'done' && z3.r1.status === 'Closed' && !!z3.r1.by, JSON.stringify(z3));
+      check('every answer in and nothing open: the zone is signed and its row closed with who signed', z3.ok === true && z3.s1.state === 'done' && z3.r1.status === 'closed' && !!z3.r1.by, JSON.stringify(z3));
       check('changing an answer reopens a signed zone', z3.s2.state === 'open' && !z3.s2.signed, JSON.stringify(z3.s2));
       check('the answer is kept in the project with who and when', z3.stored && z3.stored.pick === 'move' && !!z3.stored.by && !!z3.stored.at);
       // the page, by clicking

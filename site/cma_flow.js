@@ -1,4 +1,9 @@
-/* cma_flow.js v1.0 (31 Oct 2026): the Common Mode Analysis in four steps (customer checklist item 1).
+/* cma_flow.js v1.3 (31 Oct 2026; 8 Nov 2026): the Common Mode Analysis in four steps (customer checklist item 1).
+ *
+ * v1.3 (8 Nov 2026, Waqas: no duplicates anywhere): a gate already linked by a CMA logged before the four steps counts
+ * as taken too (cmaForGate asks no_dupes.js cmaOwner), so a new CMA, Add gate and "Review in CMA" never make a second
+ * CMA for it. Live detection on such a gate adopts that earlier CMA into the steps and adds its concern there; the row
+ * live detection itself made for the same finding keeps its own path in cma_live.js.
  *
  * One CMA per set of gates, done in four steps, with a status that means something:
  *   1. What must be independent: the AND gates whose inputs are claimed independent (the critical gates, the ones a
@@ -23,7 +28,7 @@
  */
 (function (root) {
     'use strict';
-    var VERSION = '1.1';
+    var VERSION = '1.3';
     var CLOSED = 'Closed — Accepted';
     function _g(n) {
         try { var E = root.SLEnv; if (E && typeof E.get === 'function') { var v = E.get(n); if (v !== undefined) return v; } } catch (_) {}
@@ -82,7 +87,12 @@
         return out;
     }
     // the four-step CMA a gate is in (one CMA per set of gates)
-    function cmaForGate(key) { return _cma().find(function (c) { return c && c.flow && (c.flow.gates || []).map(String).indexOf(S(key)) >= 0; }) || null; }
+    // v1.3: an earlier CMA (no steps yet) that links the gate counts too; a four-step CMA wins when both do
+    function cmaForGate(key) {
+        try { var N = root.SLNoDupes; if (N && typeof N.cmaOwner === 'function') return N.cmaOwner(_cma(), key); } catch (_) {}
+        var k = S(key), live = _cma().filter(function (c) { return c && !c.suggested; });
+        return live.find(function (c) { return c.flow && (c.flow.gates || []).map(String).indexOf(k) >= 0; }) || live.find(function (c) { return !c.flow && (c.linkedGateIds || []).map(String).indexOf(k) >= 0; }) || null;
+    }
 
     // ---- the row ---------------------------------------------------------------------------------------------
     function _blank() { return { v: 1, step: 1, gates: [], claim: '', answers: {}, concerns: [], gateFp: {}, signedBy: '', signedAt: '', summary: '', drafts: {} }; }
@@ -272,6 +282,9 @@
         var gates = (s && (s.coupledGates && s.coupledGates.length ? s.coupledGates : s.locations)) || [];
         var r = null; gates.some(function (k) { r = cmaForGate(k); return !!r; });
         if (!r) return null;
+        // v1.3: the row live detection made for this same finding keeps its own path (cma_live.js); any other earlier
+        // CMA on these gates is brought into the steps and takes the finding as a concern, never a second row
+        if (!r.flow) { if (r.autoKey && String(r.autoKey) === String(s.key)) return null; adopt(r); }
         var have = r.flow.concerns.find(function (c) { return c.liveKey === s.key; });
         if (have) { if (have.status !== 'Open') { have.status = 'Open'; _changed(r, 'concern ' + have.id + ' reopened by live detection'); } return r; }
         addConcern(r.internalId, { text: S(s.subject || s.title || 'Common cause found by live detection') + (s.members && s.members.length ? ': ' + s.members.slice(0, 4).join(', ') : ''), effect: 'Defeats the independence of ' + gates.filter(function (k) { return r.flow.gates.indexOf(k) >= 0; }).map(gateLabel).join('; '), from: 'live detection', defeats: true, liveKey: s.key });

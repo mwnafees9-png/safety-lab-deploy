@@ -40,7 +40,7 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
     if (!process.env.PLAYWRIGHT_BROWSERS_PATH && fs.existsSync('/opt/pw-browsers')) process.env.PLAYWRIGHT_BROWSERS_PATH = '/opt/pw-browsers';
     const HTML = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8');
     const iCK = HTML.indexOf('comment_kinds.js?v=1.0'), iAs = HTML.indexOf('assurance_modules.js?v=');
-    check('cma_flow.js v1.2 loads after cma_live.js and critical_gates.js', HTML.indexOf('cma_flow.js?v=1.2') > HTML.indexOf('cma_live.js?v=') && HTML.indexOf('cma_flow.js?v=1.2') > HTML.indexOf('critical_gates.js?v='));
+    check('cma_flow.js v1.3 loads after cma_live.js and critical_gates.js', HTML.indexOf('cma_flow.js?v=1.3') > HTML.indexOf('cma_live.js?v=') && HTML.indexOf('cma_flow.js?v=1.3') > HTML.indexOf('critical_gates.js?v='));
     if (!pw) { console.log('  note  Playwright is not installed: the browser part did not run'); console.log('\n' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0); }
     const demo = require('./lib/demo_projects_all.js').all().find(d => d.key === 'showcase:kestrel');
     const CSP = (() => { const w = fs.readFileSync(path.join(__dirname, '..', 'worker.js'), 'utf8'); const m = /const CSP_POLICY = \[([\s\S]*?)\]\.join\('; '\)/.exec(w); return eval('[' + m[1] + ']').join('; '); })();
@@ -122,6 +122,9 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
             recalc();
             const lc = row2.flow.concerns.find(c => c.liveKey === sus.key);
             R.l = { intoRow: hit === row2, concern: !!lc && lc.defeats, noNewRow: cmaData.length === n1, compromises: _cmaCompromisedGateIdSet().has(String(gB.node.id)) };
+            // 8 Nov 2026: the CMA page is the report now (cma_autopilot.js, HIDE_CMA_TABLE_UI on). [A] and [U] check the four-step
+            // editor, which stays behind that switch: switched off here, back on after (regression_cma_report_20261108 covers the report).
+            if (window.SLCmaAuto && SLCmaAuto.setTableHidden) SLCmaAuto.setTableHidden(false);
             // [A] a legacy row
             const leg = cmaData.find(c => c && !c.flow && (c.linkedGateIds || []).length);
             if (leg) {
@@ -159,6 +162,7 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
             const crit = gates.find(g => g.critical && !F.cmaForGate(g.key));
             if (crit) { const nn = cmaData.length; SLCriticalGates.startReview(crit.key); await wait(300); const made = F.cmaForGate(crit.key); R.u.review = !!made && cmaData.length === nn + 1 && F.opened() === made.internalId; SLCriticalGates.startReview(crit.key); await wait(200); R.u.reviewAgain = cmaData.length === nn + 1; }
             else R.u.review = R.u.reviewAgain = 'no free critical gate';
+            if (window.SLCmaAuto && SLCmaAuto.setTableHidden) SLCmaAuto.setTableHidden(null);
             // [M]
             const d = Reports.extractData('CMA');
             const grid = JSON.stringify((d && d.cma_grid) || []);
@@ -166,7 +170,8 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
             // [N] ANEM with the service stubbed
             await window.slLoadAI(); await until(() => window.SafetyLabAI && window.SafetyLabAI.cmaFlowDraft, 20000);
             const cats = []; F.categories().forEach(g => (g.items || []).forEach(it => cats.push(it[0])));
-            const row3 = F.create([free[2] ? free[2].key : gates[gates.length - 1].key]);
+            const free3 = gates.find(g => !F.cmaForGate(g.key)) || free[2];   // 8 Nov 2026: a gate no CMA has now (an earlier CMA's gate counts as taken, cma_flow 1.3)
+            const row3 = F.create([free3.key]);
             let reply = {};
             window.AiClient = { isConfigured: () => true, messages: async () => ({ content: [{ type: 'text', text: JSON.stringify(reply) }], model: 'test-model', stop_reason: 'end_turn' }) };
             reply = { answers: [{ cat: cats[0], answer: 'no', why: 'Each channel has its own power supply.' }, { cat: 'made-up', answer: 'no', why: 'x' }, { cat: cats[1], answer: 'na', why: 'Residual beta 0.01 applies.' }, { cat: cats[2], answer: 'concern', why: 'Both computers sit in one equipment bay.' }] };
