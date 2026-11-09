@@ -10,15 +10,18 @@
  * claimed independent: a gate relying on a subset or a different set gets its own CMA."
  *
  * On the Aeolus HL-1 demo, in the real app, with the production CSP:
- *   [S]  pins and headers: critical_gates 1.4, cma_claims 1.0 (before cma_autopilot), cma_autopilot 1.4, cca_report 1.8,
+ *   [S]  pins and headers: critical_gates 1.4, cma_claims 1.1 (before cma_autopilot), helpers_modules 3.68, cma_autopilot 1.4, cca_report 1.8,
  *        plan_autopilot 2.3; no em dashes in what changed; the 78ch and 980px text caps gone
  *   [N]  the "if certain" number: a gate taken as certain that makes the failure condition certain reads "every flight", never
  *        a rate (no 34.5 / flight time anywhere); other values convert as before (G-7098: -ln(1 - P) / 3 h); the words say it
  *   [P]  the standalone panel is gone from the CMA page; SLCriticalGates and its API stay
  *   [G]  every critical gate has its section in the right report (aircraft or its system), under its failure condition by ID
  *        and name with the severity in words; gates claiming exactly the same items share one claim, a subset gets its own
- *   [F]  each gate's section shows the fault tree around it: the gate highlighted, its inputs marked, the figure numbered and
- *        in the list of figures; boxes open the node panel
+ *   [F]  each gate's section shows its fault tree as the tool's canvas draws it (Waqas, 10 Nov 2026: "why are we showing
+ *        them like these instead of the actual fault trees from the tool?"): the canvas's gate and event symbols, its ID and
+ *        probability line, its DAL badges; the gate outlined, its inputs outlined dashed; up to 40 nodes (and 6 columns, the
+ *        printed trees' limit) one picture, a bigger tree in parts ("over 40 nodes be cut down, cropped and shown as multiple
+ *        images"), each cut naming the part it continues in; numbered and in the list of figures; boxes open the node panel
  *   [A]  every common mode category in each claim: answered from the project data with its source, or waiting for the
  *        engineer in the "Write it myself" / "Draft with AI" box; same inputs, same answers
  *   [W]  the engineer's part: nothing written until saved or accepted; an AI draft (stubbed) writes nothing; accepting makes
@@ -29,7 +32,8 @@
  *   [X]  Word: contents, list of figures, the tree pictures, no preview-only boxes, no counts
  *   [K]  dark mode: the report and its tree pictures readable (contrast at least 4.5)
  *   no page errors
- * MUTATION PROOFS: SL_CMAG_MUTATE=certain | panel | group | nofig | nomark | noauto | aiwrites | dup | width | html2word.
+ * MUTATION PROOFS: SL_CMAG_MUTATE=certain | panel | group | nofig | nomark | notool | nosplit | noauto | aiwrites | dup | width |
+ * html2word.
  * Each one turns this red.
  * Run: node --no-maglev --no-concurrent-sparkplug tests/regression_cma_report_gates_20261110.test.js
  */
@@ -43,8 +47,10 @@ const MUTS = {
     certain:   ['critical_gates.js', "var rateOf = function (p) { if (p == null || everyFlight(p)) return null;", "var rateOf = function (p) { if (p == null) return null;"],
     panel:     ['critical_gates.js', "var old = d.getElementById('critical-gates-panel'); if (old && old.parentNode) old.parentNode.removeChild(old);\n        return;", "return _renderPanelV13();"],
     group:     ['cma_claims.js', "function claimKey(key) { var ins = inputs(key);", "function claimKey(key) { return 'gate:' + S(key); var ins = inputs(key);"],
-    nofig:     ['cma_autopilot.js', "var fig = treeFigure(r, x, gid, opts); if (fig) blocks.push(fig);", "var fig = null;"],
-    nomark:    ['cma_claims.js', "dash = ' stroke-dasharray=\"6 3\"'; tag = 'Claimed independent';", "tag = '';"],
+    nofig:     ['cma_autopilot.js', "treeFigure(r, x, gid, opts).forEach(function (fig) { blocks.push(fig); });", "void 0;"],
+    nomark:    ['cma_claims.js', "isInput = inputs.indexOf(n) >= 0,", "isInput = false,"],
+    notool:    ['cma_claims.js', "'<path d=\"' + E(shape({ data: n })) + '\"", "'<path d=\"M -20,-20 h 40 v 40 h -40 Z\""],
+    nosplit:   ['cma_claims.js', "var MAX_NODES = 40, MAX_COLS = 6,", "var MAX_NODES = 1e9, MAX_COLS = 1e9,"],
     noauto:    ['cma_claims.js', "    function evidence(keys) {\n", "    function evidence(keys) { return {};\n"],
     aiwrites:  ['cma_autopilot.js', "        m0[c.key][grp] = { lines: lines, at: now(), model: (res && res.model) || '', flags: flags };", "        answerMany(r, lines, 'ai'); m0[c.key][grp] = { lines: lines, at: now(), model: (res && res.model) || '', flags: flags };"],
     dup:       ['cma_autopilot.js', "        var row = c.real ? c.row : null, was = c.row.internalId;", "        var row = null, was = c.row.internalId;"],
@@ -62,8 +68,8 @@ const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y
     console.log('\n[S] pins, headers, no em dashes, no text caps');
     const HTML = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8'), at = f => HTML.indexOf('src="' + f + '?v=');
     const R = n => fs.readFileSync(path.join(SITE, n), 'utf8');
-    check('S1 critical_gates.js 1.4, cma_claims.js 1.0, cma_autopilot.js 1.4, cca_report.js 1.8, plan_autopilot.js 2.3 pinned, headers the same', /critical_gates\.js\?v=1\.4"/.test(HTML) && /cma_claims\.js\?v=1\.0"/.test(HTML) && /cma_autopilot\.js\?v=1\.4"/.test(HTML) && /cca_report\.js\?v=1\.8"/.test(HTML) && /plan_autopilot\.js\?v=2\.3"/.test(HTML)
-        && /critical_gates\.js v1\.4/.test(R('critical_gates.js').slice(0, 2500)) && /SLCmaClaims v1\.0/.test(R('cma_claims.js').slice(0, 200)) && /SLCmaAuto v1\.4/.test(R('cma_autopilot.js').slice(0, 200)) && /SLCcaReport v1\.8/.test(R('cca_report.js').slice(0, 200)) && /v2\.3/.test(R('plan_autopilot.js').slice(0, 400)));
+    check('S1 critical_gates.js 1.4, cma_claims.js 1.1, helpers_modules.js 3.68, cma_autopilot.js 1.4, cca_report.js 1.8, plan_autopilot.js 2.3 pinned, headers the same', /critical_gates\.js\?v=1\.4"/.test(HTML) && /cma_claims\.js\?v=1\.1"/.test(HTML) && /helpers_modules\.js\?v=3\.68"/.test(HTML) && /cma_autopilot\.js\?v=1\.4"/.test(HTML) && /cca_report\.js\?v=1\.8"/.test(HTML) && /plan_autopilot\.js\?v=2\.3"/.test(HTML)
+        && /critical_gates\.js v1\.4/.test(R('critical_gates.js').slice(0, 2500)) && /SLCmaClaims v1\.1/.test(R('cma_claims.js').slice(0, 200)) && /SLCmaAuto v1\.4/.test(R('cma_autopilot.js').slice(0, 200)) && /SLCcaReport v1\.8/.test(R('cca_report.js').slice(0, 200)) && /v2\.3/.test(R('plan_autopilot.js').slice(0, 400)));
     check('S2 cma_claims.js loads after critical_gates.js and cma_flow.js and before cma_autopilot.js', at('cma_claims.js') > at('critical_gates.js') && at('cma_claims.js') > at('cma_flow.js') && at('cma_claims.js') < at('cma_autopilot.js') && at('critical_gates.js') > 0);
     check('S3 no em dashes in the files this change wrote', ['critical_gates.js', 'cma_claims.js', 'cma_autopilot.js', 'cca_report.js'].every(f => R(f).indexOf('\u2014') < 0) && fs.readFileSync(__filename, 'utf8').indexOf('\u2014') < 0);
     check('S4 the report text caps are gone (78ch paragraphs, 980px leads)', R('cca_report.js').indexOf('max-width:78ch') < 0 && !/\.ccr-lead\{[^}]*max-width:980px/.test(R('cca_report.js')) && !/\.pla-lead\{[^}]*max-width:980px/.test(R('plan_autopilot.js')));
@@ -136,18 +142,30 @@ const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y
             out.f = { bad: [] };
             gates.forEach(gt => {
                 const c = claimOf(gt.key); if (!c) return; const sec = secs.find(s => s.id === A.anchorOf(c.row)); if (!sec) return;
-                const fig = sec.blocks.find(b => b.type === 'figure' && b.gateKey === gt.key);
-                const ins = K.inputs(gt.key).length;
-                if (!fig) { out.f.bad.push(gt.key + ' no figure'); return; }
-                const hl = (fig.svg.match(/stroke-width="2\.6"/g) || []).length, dashed = (fig.svg.match(/stroke-dasharray="6 3"/g) || []).length;
-                if (fig.svg.indexOf('data-cmt-gate="' + gt.key + '"') < 0 || hl !== 1 || dashed !== ins || !fig.nodes.some(n => n.kind === 'gate') || fig.nodes.filter(n => n.kind === 'input').length !== ins || !fig.nodes.every(n => n.label && n.accept)) out.f.bad.push(gt.key + ' hl' + hl + ' dashed' + dashed + ' inputs' + ins);
+                const figs0 = sec.blocks.filter(b => b.type === 'figure' && b.gateKey === gt.key);
+                const ins = K.inputs(gt.key).map(n => String(n.node.id));
+                if (!figs0.length) { out.f.bad.push(gt.key + ' no figure'); return; }
+                const svgAll = figs0.map(f => f.svg).join('');
+                const gateMarks = (svgAll.match(/data-cmt-mark="gate"/g) || []).length;
+                const inputIds = [...new Set([].concat(...figs0.map(f => f.nodes.filter(n => n.kind === 'input').map(n => n.nodeId))))];
+                const pageOf = gt.key.slice(0, gt.key.lastIndexOf(':')), pg0 = ftaPages.find(p => p.id === pageOf);
+                const all = []; (function w(n) { all.push(n); (n.children || n._children || []).forEach(w); })(pg0.root);
+                const drawn = new Set([].concat(...figs0.map(f => f.nodes.map(n => n.nodeId))));
+                const toolLook = all.every(n => svgAll.indexOf(getShapePath({ data: n })) >= 0) && all.filter(n => n.displayId).every(n => svgAll.indexOf('>' + n.displayId + '<') >= 0) && /P=\d/.test(svgAll) && all.filter(n => n.allocatedDAL).every(n => svgAll.indexOf(dalPrefixForNode(n) + ' ' + n.allocatedDAL) >= 0);
+                if (figs0.some(f => f.svg.indexOf('data-cmt-gate="' + gt.key + '"') < 0) || gateMarks < 1 || figs0.filter(f => f.hasGate).length !== 1 || inputIds.length !== ins.length || !ins.every(i => inputIds.indexOf(i) >= 0)
+                    || !all.every(n => drawn.has(String(n.id))) || !toolLook || !figs0.every(f => f.nodes.every(n => n.label && n.accept))) out.f.bad.push(gt.key + ' gate' + gateMarks + ' inputs' + inputIds.length + '/' + ins.length + ' drawn' + drawn.size + '/' + all.length + ' look' + toolLook);
+                // the size rule: at most 40 nodes and 6 columns a picture; a bigger tree comes in parts that each say where they continue
+                const fg = K.figure(gt.key);
+                if (fg.parts.some(p => p.count > 40) || (fg.parts.length > 1 && !(figs0.every((f, i) => new RegExp(', part ' + String.fromCharCode(65 + i) + '$').test(f.caption)) && /Continues in part B/.test(figs0[0].svg)))) out.f.bad.push(gt.key + ' parts');
+                if (gt.key === 'pg-prp-allout:7086') out.f.split = fg.parts.length > 1 && fg.total === 13 && figs0.length === fg.parts.length;
+                if (gt.key === 'pg-fcs-pitch:7068') out.f.whole = fg.parts.length === 1 && figs0.length === 1;
             });
             const rep0 = reps.find(x => x.id === 'sys:sys-prp');
             Rf.setTab('sys:sys-prp'); await wait(1500);
             const docB = Rf.doc({ report: 'sys:sys-prp' }), figs = docB.filter(b => b.k === 'fig');
-            out.f.numbered = figs.length >= 2 && figs.every((f, i) => f.n === i + 1 || f.n > 0) && figs.some(f => /fault tree around G-7086/.test(f.caption || ''));
+            out.f.numbered = figs.length >= 2 && figs.every((f, i) => f.n === i + 1 || f.n > 0) && figs.some(f => /fault tree "PSSA · Loss of thrust on all four powerplants" around G-7086, part A$/.test(f.caption || ''));
             const html = Rf.fullHtml({ report: 'sys:sys-prp' });
-            out.f.lof = (html.match(/data-cc-lof="1"/g) || []).length >= figs.length && /The fault tree around G-7086/.test(html.slice(0, html.indexOf('data-cc-toc') + 20000));
+            out.f.lof = (html.match(/data-cc-lof="1"/g) || []).length >= figs.length && /The fault tree &quot;PSSA · Loss of thrust on all four powerplants&quot; around G-7086/.test(html.slice(0, html.indexOf('data-cc-toc') + 20000));
             const box = document.querySelector('#ccr-host-cma [data-ccnode*="-g-pg-prp-allout-7086-n7086"]');
             out.f.domFig = !!box;
             if (box) { box.dispatchEvent(new MouseEvent('click', { bubbles: true })); await wait(500); out.f.panel = /critical AND gate/.test((document.querySelector('#ccr-host-cma .ccr-np, #ccr-host-cma [data-cc-panel], .ccr-panel') || {}).innerText || document.getElementById('ccr-host-cma').innerText); }
@@ -212,7 +230,7 @@ const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y
             // ---- [X] Word ----------------------------------------------------------------------------------------------------------------
             const m = Rf.model({ report: 'sys:sys-prp' });
             const texts = m.blocks.filter(b => b.text).map(b => b.text);
-            out.x = { imgs: m.blocks.filter(b => b.k === 'img' && /fault tree around/.test(b.caption || '')).length, html: m.blocks.some(b => b.k === 'html' || /data-cmj/.test(JSON.stringify(b)) || (b.k === 'p' && !(typeof b.text === 'string' && b.text.trim()))),
+            out.x = { imgs: m.blocks.filter(b => b.k === 'img' && /^The fault tree ".+" around G-/.test(b.caption || '')).length, html: m.blocks.some(b => b.k === 'html' || /data-cmj/.test(JSON.stringify(b)) || (b.k === 'p' && !(typeof b.text === 'string' && b.text.trim()))),
                 counts: texts.filter(t => /\b\d+ (of|out of) \d+\b|\b\d+ (gates|categories|concerns|claims|answers)\b/.test(t)).slice(0, 3), dashes: JSON.stringify(m).indexOf('\u2014') >= 0,
                 toc: /data-cc-toc="1"/.test(html) && /List of figures/.test(html) };
             return out;
@@ -236,7 +254,8 @@ const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y
         check('G6 a subset gets its own claim (all four engines, the left pair, the right pair)', r.g.subsetOwn);
         check('G7 the budget tests in words, no shorthand ("as OR: exceeds")', r.g.testsInWords && r.g.everyFlightWords);
         console.log('\n[F] the fault tree pictures');
-        check('F1 each gate shows its tree: the gate highlighted once, each input marked, every box with what it is and how it is accepted', !r.f.bad.length, r.f.bad.slice(0, 6).join('; '));
+        check('F1 each gate shows its whole fault tree as the tool draws it (the canvas symbols, IDs, P line and DAL badges), the gate outlined, each input marked, every box with what it is and how it is accepted; at most 40 nodes and 6 columns a picture', !r.f.bad.length, r.f.bad.slice(0, 6).join('; '));
+        check('F1b a tree within the limit is one picture (G-7068); a wider one comes in parts, each cut naming the part it continues in (G-7086)', r.f.whole && r.f.split);
         check('F2 the figures are numbered and captioned', r.f.numbered);
         check('F3 they are in the list of figures', r.f.lof);
         check('F4 on the page, and a box opens the node panel', r.f.domFig && r.f.panel);
@@ -282,14 +301,16 @@ const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y
             const p = [...document.querySelectorAll('#ccr-host-cma .ccr-prev p')].find(x => x.offsetParent);
             const svg = document.querySelector('#ccr-host-cma svg[data-cmt-gate]');
             const paper = svg ? svg.querySelector('rect').getAttribute('fill') : null;
-            const fills = svg ? [...new Set([...svg.querySelectorAll('text')].map(t => t.getAttribute('fill')))] : [];
-            const rects = svg ? [...new Set([...svg.querySelectorAll('g rect')].map(t => t.getAttribute('fill')))] : [];
+            // each label against what is behind it: the nearest filled box drawn before it in its own group, else the page
+            const behind = t => { let e = t.previousElementSibling; while (e) { if (e.tagName === 'rect' && e.getAttribute('fill') && e.getAttribute('fill') !== 'none') return e.getAttribute('fill'); e = e.previousElementSibling; } return paper; };
+            const fills = svg ? [...new Set([...svg.querySelectorAll('text')].map(t => t.getAttribute('fill') + '|' + behind(t)))] : [];
+            const rects = [];
             const out = { p: p && [rgb(getComputedStyle(p).color), bgOf(p)], paper, fills, rects };
             document.body.classList.remove('theme-dark'); return out;
         }), 60000, 'dark');
         console.log('\n[K] dark mode');
         const okP = dark.p && dark.p[0] && contrast(dark.p[0], dark.p[1]) >= 4.5;
-        const okSvg = dark.paper && lum(dark.paper) < 0.1 && dark.fills.length && dark.fills.every(f => contrast(f, dark.paper) >= 4.5 && dark.rects.every(b => contrast(f, b) >= 4.5));
+        const okSvg = dark.paper && lum(dark.paper) < 0.1 && dark.fills.length && dark.fills.every(f => { const [a, b] = f.split('|'); return contrast(a, b) >= 4.5; });
         check('K1 the dark report text reads at 4.5 or better', okP, JSON.stringify(dark.p));
         check('K2 the dark tree pictures: every label against its box and the page at 4.5 or better', okSvg, JSON.stringify(dark));
 

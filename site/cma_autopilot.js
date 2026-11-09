@@ -42,8 +42,9 @@
 //     (materialize) the first time an answer is given or accepted, never by reading. No duplicates: a row is made only
 //     for a claim no row owns, through SLCmaFlow.create, which takes only free gates.
 //   · each claim's section: what is claimed independent, then per failure condition (most severe first) each gate with
-//     what it is, both budget tests in words (critical_gates.js explain) and the fault tree around it (a numbered figure:
-//     the gate highlighted, its inputs marked), then the common modes: every category with its answer, its reason and
+//     what it is, both budget tests in words (critical_gates.js explain) and its fault tree as the tool's canvas draws it
+//     (SLCmaClaims.figure: numbered figures, the gate outlined, its inputs outlined dashed, a tree over 40 nodes or 6
+//     columns in parts), then the common modes: every category with its answer, its reason and
 //     where the answer comes from. The project data answers what it can (cma_claims.js evidence: fault tree, Items, CAD
 //     zones, particular risks, routing); the rest is the engineer's: "Write it myself" or "Draft with AI" per group of
 //     categories, the draft entering nothing until it is accepted.
@@ -503,14 +504,22 @@
         ctx: 'Shown for context: another input beside the path to the critical gate.',
         below: 'Shown for context: part of what makes up an input claimed independent.'
     };
+    // v1.4 (10 Nov 2026, second pass): the tree as the tool's canvas draws it (SLCmaClaims.figure); a tree over 40 nodes comes
+    // in parts, one numbered figure each, the part holding the gate first said in the lead
     function treeFigure(r, x, gid, opts) {
-        var Kc = K(); if (!Kc) return null;
-        var fg = safe(function () { return Kc.figure(x.key, { C: paletteOf(opts), anchor: gid, nodeG: nodeBox }); }, null);
-        if (!fg) return null;
-        var nodes = fg.nodes.map(function (n) { var o = { id: n.id, kind: n.kind, label: n.label, inputs: n.inputs, outputs: [n.kind === 'gate' ? (x.fcs.length ? listJoin(x.fcs.map(fcWords)) : 'The top event of "' + x.tree + '"') : 'The gate above it in "' + x.tree + '"'], accept: NODE_ACCEPT[n.kind] || NODE_ACCEPT.ctx, cma: r.internalId, nodeId: n.nodeId, pageId: n.pageId }; _nodes[n.id] = o; return o; });
-        var lead = '{N} shows where ' + x.id + ' sits in "' + x.tree + '": ' + (fg.pathLen > 1 ? 'the path from the top event down to the gate, ' : '') + 'the gate itself (highlighted) and its inputs claimed independent (dashed)'
-            + (fg.trimmed ? ', with the branches beside the path and anything more than two levels under an input left out (the whole tree is on the Fault trees page).' : '.');
-        return { type: 'figure', id: gid + '-fig', q: qid(r, 'gates'), lead: lead, caption: T('The fault tree around ' + x.id + (x.name ? ' ' + x.name : '')), svg: fg.svg, w: fg.w, h: fg.h, nodes: nodes, gateKey: x.key };
+        var Kc = K(); if (!Kc) return [];
+        var dark = !!(opts && (opts.dark || (opts.C && opts.C.paper && opts.C.paper.toLowerCase() !== '#ffffff')));
+        var fg = safe(function () { return Kc.figure(x.key, { C: paletteOf(opts), dark: dark, anchor: gid, nodeG: nodeBox }); }, null);
+        if (!fg || !fg.parts || !fg.parts.length) return [];
+        var many = fg.parts.length > 1;
+        return fg.parts.map(function (pt) {
+            var nodes = pt.nodes.map(function (n) { var o = { id: n.id, kind: n.kind, label: n.label, inputs: n.inputs, outputs: [n.kind === 'gate' ? (x.fcs.length ? listJoin(x.fcs.map(fcWords)) : 'The top event of "' + x.tree + '"') : 'The gate above it in "' + x.tree + '"'], accept: NODE_ACCEPT[n.kind] || NODE_ACCEPT.ctx, cma: r.internalId, nodeId: n.nodeId, pageId: n.pageId }; _nodes[n.id] = o; return o; });
+            var last = fg.parts[fg.parts.length - 1].letter, gl0 = fg.parts[fg.gatePart - 1].letter;
+            var lead = !many
+                ? '{N} shows the fault tree "' + x.tree + '" as the tool draws it, with ' + x.id + ' outlined as the critical gate and its inputs claimed independent outlined dashed.'
+                : (pt.part === 1 ? 'The fault tree "' + x.tree + '" is too large to read as one picture, so it is shown in parts A to ' + last + '; each cut point names the part it continues in, and ' + x.id + ' is in part ' + gl0 + '. ' : '') + '{N} shows part ' + pt.letter + (pt.part === fg.gatePart ? ', with ' + x.id + ' outlined as the critical gate and its inputs claimed independent outlined dashed.' : '.');
+            return { type: 'figure', id: gid + '-fig' + (many ? '-p' + pt.part : ''), q: qid(r, 'gates'), lead: lead, caption: T('The fault tree "' + x.tree + '" around ' + x.id + (many ? ', part ' + pt.letter : '')), svg: pt.svg, w: pt.w, h: pt.h, nodes: nodes, gateKey: x.key, part: pt.part, of: fg.parts.length, hasGate: pt.part === fg.gatePart };
+        });
     }
     function fcHead(fc) { return T(fc.id + (fc.name ? ' ' + fc.name : '') + (fc.system ? ', ' + fc.system : '') + ' (' + (safe(function () { return K().sevWords(fc.severity); }, fc.severity) || 'severity not set') + ')'); }
 
@@ -575,7 +584,7 @@
                     else blocks.push(P(gid + '-t', 'This gate is not critical: the failure condition stays inside its budget without this independence.', null, { derived: true }));
                     var dals = ((x.node && (x.node.children || x.node._children)) || []).map(function (k) { return { n: T(k.name || k.displayId || k.id), d: S(k.allocatedDAL || '') }; }).filter(function (k) { return k.d; });
                     if (dals.length >= 2 && dals.some(function (k) { return k.d !== dals[0].d; })) blocks.push(P(gid + '-dal', 'The DAL assignment gives ' + listJoin(dals.map(function (k) { return '"' + k.n + '" DAL ' + k.d; })) + '. The lower DALs rest on this independence: until it is shown, they are not substantiated.', null, { derived: true }));
-                    var fig = treeFigure(r, x, gid, opts); if (fig) blocks.push(fig);
+                    treeFigure(r, x, gid, opts).forEach(function (fig) { blocks.push(fig); });
                 });
             });
         } else blocks.push(P(anchor + '-gates', 'No AND gate is named for this claim yet, so nothing in the fault trees rests on it.', gq));

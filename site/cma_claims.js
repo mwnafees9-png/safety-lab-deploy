@@ -1,4 +1,4 @@
-// cma_claims.js (SLCmaClaims v1.0, 10 Nov 2026): the independence claims of the CMA, worked out from the project data.
+// cma_claims.js (SLCmaClaims v1.1, 10 Nov 2026; v1.0 the same day): the independence claims of the CMA, worked out from the project data.
 //
 // Waqas, 9 Nov 2026, on the CMA page: "why is this table there and not in the report, why are we not showing them images of
 // the fault trees we are talking about and why have we not pre-written the qualitative analyses for them?". On grouping
@@ -25,12 +25,11 @@
 //                        Routing         a routing entry that carries items of more than one input
 //                      Same inputs, same answers, every time. What the data cannot settle is left out: the engineer writes
 //                      it, or accepts an AI draft (cma_autopilot.js).
-//   figure(key, o)     the fault tree around the gate: the path from the top event to the gate (other inputs along the
-//                      path shown as boxes), the gate highlighted, its inputs marked as claimed independent, two levels
-//                      under each input; what is not drawn is counted and said. Squared connectors, never through a box.
+//   figure(key, o)     (v1.1) the fault tree the gate sits in, drawn as the tool's own canvas draws it, the gate and its
+//                      inputs marked; trees over 40 nodes (or wider than 6 columns) cut into parts (see below).
 (function (root) {
     'use strict';
-    var VERSION = '1.0';
+    var VERSION = '1.1';
     function S(v) { return String(v == null ? '' : v); }
     function E(s) { return S(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
     function T(s) { return S(s).replace(/\s*\u2014\s*/g, ', ').replace(/\s+/g, ' ').trim(); }
@@ -292,93 +291,138 @@
         return out;
     }
 
-    // ---- the fault tree around the gate, drawn ------------------------------------------------------------------------------
-    var BW = 176, BH = 50, HG = 18, VG = 34, SYM = 14, M = 14;
-    function wrap(t, n) { var w = S(t).split(/\s+/), L = [], c = ''; w.forEach(function (x) { if ((c + ' ' + x).trim().length > n && c) { L.push(c); c = x; } else c = (c + ' ' + x).trim(); }); if (c) L.push(c); return L; }
+    // ---- v1.1: the fault tree as the tool draws it ---------------------------------------------------------------------------
+    // Waqas, 10 Nov 2026, on v1.0's own sketch: "why are we showing them like these instead of the actual fault trees from the
+    // tool?"; then: trees "over 40 nodes be cut down, cropped and shown as multiple images". So the picture is the canvas's
+    // own drawing, as its Word and PDF picture draws it (SLFtaEdit.exportClone): the canvas layout (d3.tree with the canvas's
+    // node size and separation, avoidNodeOverlap, the engineer's own moves when the tree is drawn whole), its connectors
+    // (down, across, down into the top of the box), its description box, ID box and P per flight / per flight hour line
+    // (formatNodeMetrics), its gate and event symbols and colors (getShapePath, getNodeColors) and its DAL badges. Drawn as
+    // plain SVG (no editing boxes) so it goes to Word and print too. On top: the critical gate outlined and labeled, the
+    // inputs claimed independent outlined dashed and labeled. Up to MAX_NODES the whole tree is one picture; a bigger tree
+    // (or one wider than MAX_COLS columns, the limit the printed fault trees use, which would be unreadable at page width) is cut at its largest branches into
+    // parts, each cut point naming the part it continues in. Parts are lettered (part A, part B): a label, not a count.
+    var MAX_NODES = 40, MAX_COLS = 6, NODE_W = 160, BOX_TOP = 30;   // 6 columns: the same limit as the tool's printed fault trees (fta_print.js), so the text stays readable on a page and in Word
+    // the canvas's own pieces: top-level functions and constants of the app's scripts (shared global scope; no eval, the CSP forbids it)
+    /* global getShapePath, getNodeColors, formatNodeMetrics, avoidNodeOverlap, dalPrefixForNode, DAL_COLORS, _FTA_DESC_BOX_HEIGHT, _ftaNodeVerticalSpacing */
+    function gl(name) {
+        try {
+            switch (name) {
+                case 'getShapePath': return typeof getShapePath !== 'undefined' ? getShapePath : root.getShapePath;
+                case 'getNodeColors': return typeof getNodeColors !== 'undefined' ? getNodeColors : root.getNodeColors;
+                case 'formatNodeMetrics': return typeof formatNodeMetrics !== 'undefined' ? formatNodeMetrics : root.formatNodeMetrics;
+                case 'avoidNodeOverlap': return typeof avoidNodeOverlap !== 'undefined' ? avoidNodeOverlap : root.avoidNodeOverlap;
+                case 'dalPrefixForNode': return typeof dalPrefixForNode !== 'undefined' ? dalPrefixForNode : root.dalPrefixForNode;
+                case 'DAL_COLORS': return typeof DAL_COLORS !== 'undefined' ? DAL_COLORS : root.DAL_COLORS;
+                case '_FTA_DESC_BOX_HEIGHT': return typeof _FTA_DESC_BOX_HEIGHT !== 'undefined' ? _FTA_DESC_BOX_HEIGHT : root._FTA_DESC_BOX_HEIGHT;
+                case '_ftaNodeVerticalSpacing': return typeof _ftaNodeVerticalSpacing !== 'undefined' ? _ftaNodeVerticalSpacing : root._ftaNodeVerticalSpacing;
+            }
+        } catch (_) {}
+        return root[name];
+    }
     function figure(key, o) {
         o = o || {};
         var gn = gateNode(key); if (!gn) return null;
-        var C = o.C || { ink: '#101216', sub: '#3c4350', line: '#5B6270', paper: '#FFFFFF', panel: '#F4F6FA', on: '#1A6EF2', onF: '#E8F0FE', warn: '#9A5B00', warnF: '#FFF4E0' };
-        var anchor = o.anchor || ('cmt-' + fp(key)), nodeG = o.nodeG || function (id, inner) { return '<g data-node="' + E(id) + '">' + inner + '</g>'; };
-        var trimmed = 0, nodes = [], MAXK = 5, DEPTH = 2;
-        // the displayed tree: { n, kind: 'path'|'ctx'|'gate'|'input'|'below'|'more', kids }
-        function below(n, d) {
-            var ks = kids(n); if (isTransfer(n)) return { n: n, kind: 'below', kids: [], transfer: true };
-            if (d >= DEPTH) { trimmed += countUnder(n); return { n: n, kind: 'below', kids: [] }; }
-            var show = ks.slice(0, MAXK).map(function (k) { return below(k, d + 1); });
-            if (ks.length > MAXK) { var rest = ks.slice(MAXK); var c = rest.length + rest.reduce(function (t, k) { return t + countUnder(k); }, 0); trimmed += c; show.push({ kind: 'more', label: rest.length + ' more ' + (rest.length === 1 ? 'input' : 'inputs'), kids: [] }); }
-            return { n: n, kind: 'below', kids: show };
-        }
-        function countUnder(n) { var c = 0; (function w(x) { kids(x).forEach(function (k) { c++; w(k); }); })(n); return c; }
-        var gateTree = { n: gn.node, kind: 'gate', kids: kids(gn.node).map(function (k) { var b = below(k, 1); b.kind = 'input'; return b; }) };
-        var tree = gateTree;
-        for (var i = gn.path.length - 2; i >= 0; i--) {
-            var anc = gn.path[i], child = gn.path[i + 1], sib = kids(anc).filter(function (k) { return k !== child; });
-            var ctx = sib.slice(0, 2).map(function (k) { trimmed += countUnder(k); return { n: k, kind: 'ctx', kids: [] }; });
-            if (sib.length > 2) { var rs = sib.slice(2); trimmed += rs.length + rs.reduce(function (t, k) { return t + countUnder(k); }, 0); ctx.push({ kind: 'more', label: rs.length + ' other ' + (rs.length === 1 ? 'input' : 'inputs'), kids: [] }); }
-            var idx = kids(anc).indexOf(child), list = ctx.slice();
-            list.splice(Math.min(idx, list.length), 0, tree);
-            tree = { n: anc, kind: 'path', kids: list };
-        }
-        // layout: leaf slots left to right, parents centered over their children; a node whose children are all ends is
-        // drawn with them stacked under it (a rail down the left side), so the picture stays narrow enough to read
-        var SB = 40, SG = 8, SI = 18;
-        (function mark(t) { t.stack = t.kids.length > 0 && t.kids.every(function (k) { return !k.kids.length; }) && t.kids.length > 1; t.kids.forEach(mark); })(tree);
-        var slot = 0;
-        (function px(t) { if (!t.kids.length || t.stack) { t.x = slot++; t.kids.forEach(function (k) { k.x = t.x; }); return; } t.kids.forEach(px); t.x = (t.kids[0].x + t.kids[t.kids.length - 1].x) / 2; })(tree);
-        var maxY = 0;
-        (function py(t, y) { t.y = y; maxY = Math.max(maxY, y + BH);
-            if (t.stack) { t.kids.forEach(function (k, i) { k.sy = true; k.y = y + BH + SYM + 14 + i * (SB + SG); maxY = Math.max(maxY, k.y + SB); }); return; }
-            t.kids.forEach(function (k) { py(k, y + BH + VG + SYM); }); })(tree, M + 12);
-        var W = M * 2 + slot * BW + Math.max(0, slot - 1) * HG, H = maxY + 36;
-        var X = function (t) { return M + t.x * (BW + HG); }, Y = function (t) { return t.y; };
-        var body = '';
-        function sym(t, cx, y) {
-            var ty = S(t.n && t.n.gateType).toUpperCase(), w = 22, h = SYM, x = cx - w / 2;
-            var path = ty === 'OR' ? 'M' + x + ',' + (y + h) + ' Q' + cx + ',' + (y + h - 5) + ' ' + (x + w) + ',' + (y + h) + ' Q' + (x + w - 2) + ',' + (y + 3) + ' ' + cx + ',' + y + ' Q' + (x + 2) + ',' + (y + 3) + ' ' + x + ',' + (y + h) + ' Z'
-                : 'M' + x + ',' + (y + h) + ' L' + x + ',' + (y + h / 2) + ' A' + (w / 2) + ',' + (h / 2) + ' 0 0 1 ' + (x + w) + ',' + (y + h / 2) + ' L' + (x + w) + ',' + (y + h) + ' Z';
-            return '<path d="' + path + '" fill="' + C.paper + '" stroke="' + C.line + '" stroke-width="1.2"/>';
-        }
-        (function draw(t) {
-            var x = X(t) + (t.sy ? SI : 0), y = Y(t), bw = t.sy ? BW - SI : BW, bh = t.sy ? SB : BH, cx = X(t) + BW / 2;
-            if (t.kids.length) {
-                var by = y + BH + SYM;
-                body += '<path d="M' + cx + ',' + (y + BH) + ' L' + cx + ',' + by + '" stroke="' + C.line + '" stroke-width="1.2" fill="none"/>' + sym(t, cx, y + BH);
-                if (t.stack) {
-                    var rx = X(t) + 8, last = t.kids[t.kids.length - 1];
-                    body += '<path d="M' + cx + ',' + by + ' L' + cx + ',' + (by + 7) + ' L' + rx + ',' + (by + 7) + ' L' + rx + ',' + (last.y + SB / 2) + '" stroke="' + C.line + '" stroke-width="1.2" fill="none"/>';
-                    t.kids.forEach(function (k) { body += '<path d="M' + rx + ',' + (k.y + SB / 2) + ' L' + (X(k) + SI) + ',' + (k.y + SB / 2) + '" stroke="' + C.line + '" stroke-width="1.2" fill="none"/>'; });
-                } else {
-                    var mid = by + VG / 2, xs = t.kids.map(function (k) { return X(k) + BW / 2; });
-                    body += '<path d="M' + cx + ',' + by + ' L' + cx + ',' + mid + (xs.length > 1 ? ' M' + Math.min.apply(null, xs) + ',' + mid + ' L' + Math.max.apply(null, xs) + ',' + mid : '') + '" stroke="' + C.line + '" stroke-width="1.2" fill="none"/>';
-                    t.kids.forEach(function (k) { var kx = X(k) + BW / 2; body += '<path d="M' + kx + ',' + mid + ' L' + kx + ',' + Y(k) + '" stroke="' + C.line + '" stroke-width="1.2" fill="none"/>'; });
-                }
+        var d3 = root.d3, shape = gl('getShapePath'), colors = gl('getNodeColors'), metrics = gl('formatNodeMetrics');
+        if (!d3 || typeof shape !== 'function' || typeof colors !== 'function') return null;
+        var C = o.C || { ink: '#0f172a', sub: '#475569', line: '#94a3b8', paper: '#ffffff', panel: '#ffffff', on: '#1A6EF2', onF: '#EAF2FE', warn: '#B26A00', warnF: '#FDF1DE' };
+        var dark = !!o.dark, anchor = o.anchor || ('cmt-' + fp(key)), nodeG = o.nodeG || function (id, inner) { return '<g data-node="' + E(id) + '">' + inner + '</g>'; };
+        var page = gn.page, gateN = gn.node, inputs = kids(gateN), pathSet = new Set(gn.path);
+        var DAL_C = gl('DAL_COLORS') || { A: '#dc3545', B: '#f97316', C: '#eab308', D: '#fcd34d', E: '#cbd5e1' }, prefix = gl('dalPrefixForNode');
+        var descDefault = (gl('_FTA_DESC_BOX_HEIGHT') || 100) + 44, vsp = (function () { var f = gl('_ftaNodeVerticalSpacing'); try { return f ? f() : 274; } catch (_) { return 274; } })();
+        // ---- cut the tree into parts --------------------------------------------------------------------------------
+        var sizeOf = new Map();
+        (function sz(n) { var t = 1; kids(n).forEach(function (k) { t += sz(k); }); sizeOf.set(n, t); return t; })(page.root);
+        var parts = [], partOf = new Map();
+        function inPart(rootN, cuts) { var list = []; (function w(n) { list.push(n); if (n !== rootN && cuts.has(n)) return; kids(n).forEach(w); })(rootN); return list; }
+        function leavesIn(rootN, cuts) { var c = 0; (function w(n) { var ks = (n !== rootN && cuts.has(n)) ? [] : kids(n); if (!ks.length) { c++; return; } ks.forEach(w); })(rootN); return c; }
+        (function split(rootN) {
+            var part = { root: rootN, cuts: new Set() }; parts.push(part);
+            for (var guard = 0; guard < 200; guard++) {
+                var list = inPart(rootN, part.cuts);
+                if (list.length <= MAX_NODES && leavesIn(rootN, part.cuts) <= MAX_COLS) break;
+                var sub = function (n) { return inPart(n, part.cuts).length; };
+                var cand = list.filter(function (n) { return n !== rootN && !part.cuts.has(n) && kids(n).length; });
+                if (!cand.length) break;
+                // the largest branch that fits a part of its own; else the largest of all
+                cand.sort(function (a, b) { return sub(b) - sub(a); });
+                var fit = cand.filter(function (n) { return sub(n) <= MAX_NODES && sub(n) > 1; }), pick = fit.length ? fit[0] : cand[0];
+                if (pick === rootN) break;
+                part.cuts.add(pick);
             }
-            var fill = C.panel, stroke = C.line, sw = 1, dash = '', tag = '';
-            if (t.kind === 'gate') { fill = C.onF; stroke = C.on; sw = 2.6; tag = 'The critical gate'; }
-            else if (t.kind === 'input') { fill = C.warnF; stroke = C.warn; sw = 1.8; dash = ' stroke-dasharray="6 3"'; tag = 'Claimed independent'; }
-            else if (t.kind === 'more') { fill = C.paper; dash = ' stroke-dasharray="2 3"'; }
-            var head = t.n ? S(t.n.displayId || ((t.n.type === 'gate' ? 'G-' : 'E-') + t.n.id)) + (t.n.type === 'gate' && !isTransfer(t.n) ? ' ' + S(t.n.gateType || '') : isTransfer(t.n) ? ' continues in another tree' : '') : '';
-            var nl = t.sy ? 1 : 2, chars = t.sy ? 27 : 30, full = t.n ? wrap(T(t.n.name || ''), chars) : [t.label], lines = full.slice(0, nl);
-            if (full.length > nl) lines[nl - 1] = lines[nl - 1].replace(/.{0,3}$/, '') + '...';
-            var inner = '<rect x="' + x + '" y="' + y + '" width="' + bw + '" height="' + bh + '" rx="6" fill="' + fill + '" stroke="' + stroke + '" stroke-width="' + sw + '"' + dash + '/>'
-                + (head ? '<text x="' + (x + 8) + '" y="' + (y + 14) + '" font-size="10.5" font-weight="700" fill="' + C.ink + '">' + E(head) + '</text>' : '')
-                + lines.map(function (l, li) { return '<text x="' + (x + 8) + '" y="' + (y + (head ? 28 : 22) + li * 12) + '" font-size="10.5" fill="' + C.ink + '">' + E(l) + '</text>'; }).join('')
-                + (tag ? '<text x="' + (x + bw - 6) + '" y="' + (y + 14) + '" font-size="9" font-weight="700" text-anchor="end" fill="' + C.ink + '">' + E(tag === 'The critical gate' ? 'Critical' : 'Independent') + '</text>' : '');
-            if (t.n) {
-                var nid = anchor + '-n' + S(t.n.id);
-                body += nodeG(nid, inner, T((t.n.displayId ? t.n.displayId + ' ' : '') + (t.n.name || '')));
-                nodes.push({ id: nid, kind: t.kind, label: T((t.n.displayId ? t.n.displayId + ' ' : '') + (t.n.name || '')), inputs: kids(t.n).map(function (k) { return T((k.displayId ? k.displayId + ' ' : '') + (k.name || '')); }), gateKey: S(key), nodeId: S(t.n.id), pageId: S(gn.page.id) });
-            } else body += inner;
-            t.kids.forEach(draw);
-        })(tree);
-        var ly = H - 14;
-        body += '<rect x="' + M + '" y="' + (ly - 9) + '" width="12" height="10" rx="2" fill="' + C.onF + '" stroke="' + C.on + '" stroke-width="2"/><text x="' + (M + 18) + '" y="' + ly + '" font-size="10" fill="' + C.ink + '">The critical gate</text>'
-            + '<rect x="' + (M + 128) + '" y="' + (ly - 9) + '" width="12" height="10" rx="2" fill="' + C.warnF + '" stroke="' + C.warn + '" stroke-dasharray="4 2" stroke-width="1.6"/><text x="' + (M + 146) + '" y="' + ly + '" font-size="10" fill="' + C.ink + '">An input claimed independent</text>'
-            + '<rect x="' + (M + 330) + '" y="' + (ly - 9) + '" width="12" height="10" rx="2" fill="' + C.panel + '" stroke="' + C.line + '"/><text x="' + (M + 348) + '" y="' + ly + '" font-size="10" fill="' + C.ink + '">Shown for context</text>';
-        W = Math.max(W, M * 2 + 470);
-        var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '" font-family="Arial, Helvetica, sans-serif" role="img" aria-label="' + E('Fault tree around ' + S(gn.node.displayId || gn.node.id)) + '" data-cmt-gate="' + E(key) + '"><rect width="100%" height="100%" fill="' + C.paper + '"/>' + body + '</svg>';
-        return { svg: svg, w: W, h: H, nodes: nodes, trimmed: trimmed, tree: T(gn.page.name || gn.page.id), pathLen: gn.path.length };
+            Array.from(part.cuts).forEach(function (c) { partOf.set(c, null); });
+            // each cut branch is its own part, in the order they appear in the tree
+            var order = []; (function w(n) { if (n !== rootN && part.cuts.has(n)) { order.push(n); return; } kids(n).forEach(w); })(rootN);
+            order.forEach(function (c) { partOf.set(c, parts.length); split(c); });
+        })(page.root);
+        // ---- draw each part ---------------------------------------------------------------------------------------------
+        var out = [], gatePart = -1;
+        parts.forEach(function (part, pi) {
+            var h = d3.hierarchy(part.root, function (n) { return (n !== part.root && part.cuts.has(n)) ? null : (kids(n).length ? kids(n) : null); });
+            d3.tree().nodeSize([165, vsp]).separation(function (a, b) { return a.parent === b.parent ? 1.05 : 1.2; })(h);
+            try { var av = gl('avoidNodeOverlap'); if (typeof av === 'function') av(h); } catch (_) {}
+            if (parts.length === 1) h.each(function (d) { d.x += (d.data.xOffset || 0); d.y += (d.data.yOffset || 0); });
+            var ds = h.descendants(), H = function (d) { return d.data.descBoxHeight || descDefault; };
+            var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+            ds.forEach(function (d) { minX = Math.min(minX, d.x - NODE_W / 2 - 12); maxX = Math.max(maxX, d.x + NODE_W / 2 + 12); minY = Math.min(minY, d.y - BOX_TOP - H(d) - 22); maxY = Math.max(maxY, d.y + 58); });
+            var ox = 16 - minX, oy = 16 - minY, W = Math.ceil(maxX - minX + 32), HH = Math.ceil(maxY - minY + 32 + 24);
+            var body = '', nodes = [], linkC = dark ? '#5b8fb9' : '#94a3b8';
+            h.links().forEach(function (l) {
+                var sx = l.source.x + ox, sy = l.source.y + oy, tx = l.target.x + ox, ty = l.target.y + oy - BOX_TOP - H(l.target), mid = (sy + 25 + ty) / 2;
+                body += '<path d="M ' + sx + ' ' + (sy + 25) + ' V ' + mid + ' H ' + tx + ' V ' + ty + '" fill="none" stroke="' + linkC + '" stroke-width="1.5"/>';
+            });
+            ds.forEach(function (d) {
+                var n = d.data, x = d.x + ox, y = d.y + oy, hh = H(d), descH = Math.max(20, hh - 44), top = y - BOX_TOP - hh;
+                var isGate = n === gateN, isInput = inputs.indexOf(n) >= 0, cut = n !== part.root && part.cuts.has(n);
+                if (isGate) gatePart = pi;
+                var col = safe(function () { return colors({ data: n }, dark); }, { fill: '#8e8e93', stroke: '#6e6e73' });
+                var lines = wrapC(T(n.name || ''), 30, Math.max(1, Math.floor(descH / 12) - 1)), ly0 = top + descH / 2 - (lines.length - 1) * 6 + 3;
+                var m = ''; try { m = typeof metrics === 'function' ? S(metrics({ data: n })) : ''; } catch (_) { m = ''; }
+                var g = '<g transform="translate(' + x + ',' + y + ')">'
+                    + '<rect x="-80" y="' + (-BOX_TOP - hh) + '" width="160" height="' + descH + '" rx="3" fill="' + C.paper + '" stroke="' + C.line + '" stroke-width="1"/>'
+                    + lines.map(function (ln, k) { return '<text x="0" y="' + (ly0 - y + k * 12) + '" text-anchor="middle" font-size="10" fill="' + C.ink + '">' + E(ln) + '</text>'; }).join('')
+                    + '<rect x="-80" y="' + (-BOX_TOP - hh + descH + 3) + '" width="160" height="18" rx="3" fill="' + C.paper + '" stroke="' + (dark ? '#4f78b5' : '#93c5fd') + '" stroke-width="1"/>'
+                    + '<text x="0" y="' + (-BOX_TOP - hh + descH + 16) + '" text-anchor="middle" font-size="10" font-weight="600" fill="' + C.on + '">' + E(S(n.displayId || '')) + '</text>'
+                    + (m ? '<text x="0" y="' + (-BOX_TOP - hh + descH + 37) + '" text-anchor="middle" font-size="9.5" font-family="monospace" fill="' + C.ink + '">' + E(m) + '</text>' : '')
+                    + '<path d="' + E(shape({ data: n })) + '" fill="' + col.fill + '" stroke="' + col.stroke + '"/>'
+                    + (n.allocatedDAL ? '<g transform="translate(35,-22)"><rect x="-27" y="-11" width="54" height="20" rx="5" fill="' + (DAL_C[n.allocatedDAL] || '#9ca3af') + '" stroke="#0f172a" stroke-width="1.25"/><text y="4" text-anchor="middle" font-weight="700" font-size="11" fill="#0f172a">' + E((typeof prefix === 'function' ? safe(function () { return prefix(n); }, 'DAL') : 'DAL') + ' ' + n.allocatedDAL) + '</text></g>' : '')
+                    + (cut ? '<text x="0" y="44" text-anchor="middle" font-size="10.5" font-weight="700" fill="' + C.ink + '">Continues in part ' + partLetter(partOf.get(n)) + '</text>' : '')
+                    + (isTransfer(n) ? '<text x="0" y="44" text-anchor="middle" font-size="10" font-weight="700" fill="' + C.ink + '">' + E('Continues in "' + T((transferPage(n) || {}).name || 'another tree') + '"') + '</text>' : '')
+                    + '</g>';
+                // the marks: the critical gate outlined and labeled, the inputs claimed independent dashed and labeled
+                if (isGate || isInput) {
+                    var mx = x - 84, my = top - 6, mw = 168, mh = (y + 30) - top + 6, lab = isGate ? 'The critical gate' : 'Claimed independent';
+                    g += '<rect data-cmt-mark="' + (isGate ? 'gate' : 'input') + '" x="' + mx + '" y="' + my + '" width="' + mw + '" height="' + mh + '" rx="8" fill="none" stroke="' + (isGate ? C.on : C.warn) + '" stroke-width="' + (isGate ? 3 : 2.2) + '"' + (isGate ? '' : ' stroke-dasharray="7 4"') + '/>'
+                        + '<rect x="' + (mx + 6) + '" y="' + (my - 10) + '" width="' + (lab.length * 6.2 + 12) + '" height="17" rx="4" fill="' + (isGate ? C.on : C.warnF) + '" stroke="' + (isGate ? C.on : C.warn) + '"/>'
+                        + '<text x="' + (mx + 12) + '" y="' + (my + 2) + '" font-size="10.5" font-weight="700" fill="' + (isGate ? (dark ? '#0b1220' : '#ffffff') : C.ink) + '">' + E(lab) + '</text>';
+                }
+                var nid = anchor + '-n' + S(n.id);
+                body += nodeG(nid, g, T((n.displayId ? n.displayId + ' ' : '') + (n.name || '')));
+                nodes.push({ id: nid, kind: isGate ? 'gate' : isInput ? 'input' : pathSet.has(n) ? 'path' : 'ctx', label: T((n.displayId ? n.displayId + ' ' : '') + (n.name || '')), inputs: kids(n).map(function (k) { return T((k.displayId ? k.displayId + ' ' : '') + (k.name || '')); }), gateKey: S(key), nodeId: S(n.id), pageId: S(page.id) });
+            });
+            var ly = HH - 14;
+            body += '<rect x="16" y="' + (ly - 10) + '" width="14" height="11" rx="2" fill="none" stroke="' + C.on + '" stroke-width="2.5"/><text x="36" y="' + ly + '" font-size="10.5" fill="' + C.ink + '">The critical gate</text>'
+                + '<rect x="150" y="' + (ly - 10) + '" width="14" height="11" rx="2" fill="none" stroke="' + C.warn + '" stroke-dasharray="4 2" stroke-width="2"/><text x="170" y="' + ly + '" font-size="10.5" fill="' + C.ink + '">An input claimed independent</text>';
+            W = Math.max(W, 380);
+            out.push({ body: body, W: W, HH: HH, nodes: nodes, part: pi + 1, count: ds.length });
+        });
+        // every part of one tree at the same width, so they read at the same scale
+        var wMax = out.reduce(function (m, p) { return Math.max(m, p.W); }, 0);
+        out = out.map(function (p) {
+            var W = wMax, HH = p.HH, pi = p.part - 1, dx = Math.round((wMax - p.W) / 2), body = '<g transform="translate(' + dx + ',0)">' + p.body + '</g>';
+            var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + HH + '" width="' + W + '" height="' + HH + '" font-family="Helvetica, Arial, sans-serif" role="img" aria-label="' + E('Fault tree ' + T(page.name || page.id) + (parts.length > 1 ? ', part ' + partLetter(pi) : '')) + '" data-cmt-gate="' + E(key) + '" data-cmt-part="' + (pi + 1) + '"><rect width="100%" height="100%" fill="' + C.paper + '"/>' + body + '</svg>';
+            return { svg: svg, w: W, h: HH, nodes: p.nodes, part: p.part, letter: partLetter(p.part - 1), of: parts.length, count: p.count };
+        });
+        return { parts: out, gatePart: gatePart + 1, total: sizeOf.get(page.root), tree: T(page.name || page.id), pathLen: gn.path.length };
+    }
+    // parts are lettered (A, B, ... Z, AA): a figure label, never a count in the report's words
+    function partLetter(i) { var s0 = '', n = i + 1; while (n > 0) { var m = (n - 1) % 26; s0 = String.fromCharCode(65 + m) + s0; n = Math.floor((n - 1) / 26); } return s0; }
+    function wrapC(text, max, lines) {
+        var words = S(text).split(/\s+/).filter(Boolean), out = [], cur = '';
+        words.forEach(function (w) { if ((cur + ' ' + w).trim().length <= max) cur = (cur + ' ' + w).trim(); else { if (cur) out.push(cur); cur = w.length > max ? w.slice(0, max - 1) + '…' : w; } });
+        if (cur) out.push(cur);
+        if (out.length > lines) { out.length = lines; out[lines - 1] = out[lines - 1].slice(0, max - 1) + '…'; }
+        return out;
     }
 
     var api = { VERSION: VERSION, analysis: analysis, gates: gates, gate: gate, gateNode: gateNode, inputs: inputs, claimKey: claimKey, claimedWords: claimedWords, groups: groups, groupOf: groupOf,

@@ -4267,7 +4267,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
     <script src="support_modules.js?v=66.63" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
-    <script src="helpers_modules.js?v=3.67" defer></script>
+    <script src="helpers_modules.js?v=3.68" defer></script>
     <script src="cloud_writer.js?v=1.3" defer></script>
     <script src="severity_axes.js?v=1.36" defer></script>
     <!-- 5 Sep 2026 — levers 2 + 3: escapes per phase; aircraft / crew levels derived from the MAC and the Task Analysis. -->
@@ -4702,7 +4702,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- 31 Oct 2026: iface_reqs.js (SLIfaceReqs): requirements on interfacing systems. The need and its budget come from the trees (an event another system provides); the interfaces stay owned by Sys Lab; ANEM drafts the wording only and the budget must stand in it exactly. After rate_sources.js. -->
     <script src="iface_reqs.js?v=1.0" defer></script>
     <!-- 8 Nov 2026: cma_autopilot.js (SLCmaAuto): the CMA Autopilot. Plain questions per independence claim (the gates, the claim, every common mode category, how each concern is closed), answered through SLCmaFlow into the CMA rows, and the CMA report content (one section per claim), inputs and outputs, and inline Edit / Add a CMA. After cma_flow.js and autopilot_ui.js. -->
-    <script src="cma_claims.js?v=1.0" defer></script>
+    <script src="cma_claims.js?v=1.1" defer></script>
     <script src="cma_autopilot.js?v=1.4" defer></script>
     <script src="cca_models.js?v=1.05" defer></script>
     <!-- Skills V1 — versioned drafting-instruction registry. Loads EAGERLY (tiny,

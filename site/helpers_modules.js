@@ -1,4 +1,5 @@
 // 13 Sep 2026 (R19 hygiene): store writers announce their own writes with scheduleAutosave; see tests/regression_writers_announce.test.js
+// 10 Nov 2026: getNodeColors(d, dark) takes the theme as an optional second argument, so a picture of a tree drawn for Word or print (light) while the page is dark gets the canvas's light colors (cma_claims.js, the CMA report). Without it, the page's theme as before.
 // 16 Oct 2026 (AI Assistant page): renderAiAssistant draws the page (SLAiInputsPage.render, ai_inputs_page.js) above the AI settings.
 // 13 Oct 2026 (late, AutoSave, Waqas: "when a user saves a choice/change it should be autosaving"): _writeAutosave answers whether it wrote (true / false) and leaves its IndexedDB write as window.__slAutosaveIdb so save_state.js v2.0 can wait for it; the autosave meta carries unacked (changes still waiting for an acknowledgement, with the accepted state in its own slot) and cloudPending (accepted work not yet in the cloud) instead of the old unsaved markers; _updateSaveIndicator hands the header to SLSaveState.renderIndicator; snapshot undo is used while anything is held from the live sync.
 // 13 Oct 2026 (night, fix2-J rulings 1-2): app Undo / Redo (fault tree and everywhere) run as COLLECTED changes (SLChangeAck.deferred), acknowledged together on leaving the view, not per press.
@@ -7662,11 +7663,11 @@ function _ftaCcfSuggestModal() {
     });
 }
 
-function getNodeColors(d) {
+function getNodeColors(d, dark) {
     // Vibrant Apple-inspired palette. Dark mode brightens fills + strokes for contrast on
     // the near-black canvas; light mode uses the iOS system shades. Stroke is always 2 steps
     // darker than fill so the shape outline reads cleanly.
-    const isDark = document.body.classList.contains('theme-dark');
+    const isDark = (dark === true || dark === false) ? dark : document.body.classList.contains('theme-dark');
     const L = {
         transfer: { fill: '#af52de', stroke: '#8e3dd1' },     // purple
         pand:     { fill: '#ff6482', stroke: '#e8456a' },     // pink
