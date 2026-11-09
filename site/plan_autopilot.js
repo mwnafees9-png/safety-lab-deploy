@@ -1,5 +1,7 @@
-// plan_autopilot.js (SLPlanAuto v2.0, 6 Nov 2026): the Plan Autopilot. The program's three safety plans, written by
+// plan_autopilot.js (SLPlanAuto v2.3, 10 Nov 2026; v2.0 6 Nov 2026): the Plan Autopilot. The program's three safety plans, written by
 // answering questions, with the same layout as the Sys Lab Planning Autopilot.
+// v2.3 (10 Nov 2026): Waqas: "we also need to fix how we are not using the full width of the page for the text", for all the
+// reports: the page lead runs the full width too (its 980px cap is gone); the plan documents already used the full column.
 //
 // Waqas, 6 Nov 2026: "program planing in safety lab needs to have the same interface as sys lab planing auto-pilot,
 // questions to be in conjunction with DA assurance and the tool linkings ... I want our program planing to replicate"
@@ -28,7 +30,7 @@
 // (program_plan.js doctrine); an expected lane holding work is turned off with a signed tailoring entry naming the answer.
 (function (root) {
     'use strict';
-    var VERSION = '2.2';
+    var VERSION = '2.3';
     function E(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
     function U() { return root.SLAutopilotUI || null; }
     function PP() { return root.PROGRAM_PLAN || null; }
@@ -1719,7 +1721,7 @@
     function _style() {
         if (typeof document === 'undefined' || document.getElementById('pla-style')) return;
         var st = document.createElement('style'); st.id = 'pla-style';
-        st.textContent = '.pla{font-size:13.5px}.pla-lead{font-size:13px;max-width:980px;margin:0 0 14px}'
+        st.textContent = '.pla{font-size:13.5px}.pla-lead{font-size:13px;margin:0 0 14px}'
             + '.pla-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}.pla-card{border:1px solid var(--color-border,#e3e5e8);border-radius:12px;padding:14px 16px;background:var(--color-surface-1,#fff);display:flex;flex-direction:column;gap:8px}'
             + '.pla-ch{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.pla-ch b{font-size:14.5px}.pla-ch .slap-pill{white-space:nowrap;flex:none}.pla-g{font-size:12px}.pla-meta{display:flex;gap:6px;flex-wrap:wrap}.pla-chip{font-size:11.5px;padding:2px 8px;border-radius:10px;background:#ECECEA;color:#101216}'
             + '.pla-cols{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:18px;align-items:start}@media (max-width:1100px){.pla-cols{grid-template-columns:1fr}}'

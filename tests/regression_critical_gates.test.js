@@ -176,7 +176,8 @@ const fc = (id, sev) => ({ internalId: id, fcId: 'FC-' + id, fcDesc: 'cond ' + i
     const iStage = thread.indexOf('STAGE Critical gates warn'), iCC = thread.indexOf('Common cause');
     check('C5: the thread stage is inserted before Common cause and says CHECK for an unreviewed critical gate', iStage >= 0 && iCC > iStage, thread.slice(0, 300));
     check('C5: the thread stage names the gate and the two results', /G-\d+.*if OR.*if certain/.test(thread) && /no common mode review/.test(thread));
-    check('C5: renderCMA still returns its result and draws the panel', sb.renderCMA() === 'rendered' && /Which independence claims carry the budget/.test(els['view-cma'].children[0].innerHTML || ''));
+    // 10 Nov 2026 (critical_gates.js v1.4, the asked-for change): the panel is no longer drawn on the CMA page; every critical gate is in the CMA report
+    check('C5: renderCMA still returns its result and draws no panel on the page (the gates are in the CMA report)', sb.renderCMA() === 'rendered' && !els['critical-gates-panel'] && !(els['view-cma'].children || []).some(c => /Which independence claims carry the budget/.test(c.innerHTML || '')));
     S.startReview('p1:' + g1.id);
     check('C5: startReview ticks the gate and names the claim', cb.checked === true && /Dual hydraulics/.test(claim.value) && /FC-1/.test(claim.value), claim.value);
     // a reviewed critical gate: thread says OK

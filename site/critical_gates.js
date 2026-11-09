@@ -1,7 +1,16 @@
 // 13 Oct 2026 (fix G): SEQ joins the AND family for the critical AND-gate test. See tests/regression_fta_handbuild_20261013b.test.js
 // 13 Oct 2026 (math audit F8): the OR and certain tests compare per-flight-hour rates (SLTopBasis.meets) with the per-flight-hour objective, not per-flight P; the panel shows /FH. See tests/regression_perfh_basis_20261013.test.js
+// 10 Nov 2026 (v1.4): the "if certain" number. Taking a gate as certain often makes the failure condition certain too
+// (P = 1 per flight, for a gate at the top or under OR gates only). The per flight hour conversion is
+// rate = -ln(1 - P) / flight time, which has no value at P = 1: it was clamped at 1 - 1e-15 and gave 34.5 / flight time
+// (11.5 per flight hour on a 3 hour flight), a number with no meaning that the CMA page showed for most gates. Now a P
+// within 1e-9 of 1 is reported as what it is, "on every flight" (everyFlight flags, rate null), and always breaks the
+// objective; any other P converts as before. explain(gate, result) says the two tests in words for the CMA report.
+// Waqas, 9 Nov 2026, on the CMA page: "why is this table there and not in the report": the panel no longer goes on the
+// page (renderPanel removes it); every critical gate is written into the CMA report (cma_autopilot.js v1.4). The API,
+// INV-58 and the Golden Thread stage stay. See tests/regression_cma_report_gates_20261110.test.js
 // ============================================================================
-// critical_gates.js — v1.0 — Q7 (26 Sep 2026): the critical AND-gate test that
+// critical_gates.js v1.4 (Q7, 26 Sep 2026; v1.4 10 Nov 2026): the critical AND-gate test that
 // scopes the common mode analysis.
 //
 // The question a CMA has to answer is "which independence claims actually
@@ -12,8 +21,8 @@
 //   For every AND-family gate (AND, INHIBIT, PAND, SPARE) in the fault tree
 //   linked to a failure condition, two tests against that condition's
 //   probability objective (the same target the Golden Thread budget check uses):
-//     (a) treat the gate as OR   — any single input now passes straight through;
-//     (b) treat the gate as certain — the gate's output is taken as having occurred.
+//     (a) treat the gate as OR: any single input now passes straight through;
+//     (b) treat the gate as certain: the gate's output is taken as having occurred.
 //   If the top event still meets its objective under BOTH, the gate is NOT
 //   critical: independence at that gate is not what keeps the condition inside
 //   its budget, so it needs no common mode review. Otherwise the gate is
@@ -60,7 +69,37 @@
         return (r && typeof r.prob === 'number' && isFinite(r.prob)) ? r.prob : null;
     }
     function _esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-    function _exp(p) { return (p == null) ? '—' : Number(p).toExponential(2); }
+    function _exp(p) { return (p == null) ? 'none' : Number(p).toExponential(2); }
+    // v1.4 (10 Nov 2026): P within this of 1 is "every flight"
+    var EVERY_FLIGHT_TOL = 1e-9;
+    function everyFlight(p) { return p != null && isFinite(Number(p)) && Number(p) >= 1 - EVERY_FLIGHT_TOL; }
+    var SUP = { '-': '\u207B', '0': '\u2070', '1': '\u00B9', '2': '\u00B2', '3': '\u00B3', '4': '\u2074', '5': '\u2075', '6': '\u2076', '7': '\u2077', '8': '\u2078', '9': '\u2079' };
+    // a rate in words: "6.3 × 10⁻³"; a value from 0.01 to 1000 plainly ("0.25")
+    function num(v) {
+        v = Number(v); if (!isFinite(v)) return '';
+        if (v === 0) return '0';
+        if (v >= 0.01 && v < 1000) return String(Number(v.toPrecision(2)));
+        var e = Math.floor(Math.log10(v)), m = v / Math.pow(10, e);
+        if (Number(m.toFixed(1)) >= 10) { m /= 10; e += 1; }
+        var ms = Number(m.toFixed(1)) === 1 ? '' : m.toFixed(1).replace(/\.0$/, '') + ' \u00D7 ';
+        return ms + '10' + String(e).split('').map(function (c) { return SUP[c] || c; }).join('');
+    }
+    function cell(rate, every) { return every ? 'every flight' : _exp(rate); }
+    // the two tests in plain words (the CMA report): what each result means against the objective, and the verdict
+    function explain(g, res) {
+        if (!g || !res) return null;
+        var obj = res.target != null ? num(res.target) + ' per flight hour' : 'its objective';
+        var or = g.orEveryFlight ? 'the failure condition would happen on every flight'
+            : 'the failure condition would be expected about ' + num(g.rateAsOr) + ' times per flight hour';
+        var ce = g.certainEveryFlight ? 'the failure condition would follow on every flight, because nothing else stands between this event and the top of the tree'
+            : 'the failure condition would be expected about ' + num(g.rateCertain) + ' times per flight hour';
+        var t1 = 'If its inputs were not independent, so that any one of them failing were enough (the gate counted as an OR gate), ' + or + (g.orBreaks ? ', above' : ', inside') + ' the objective of ' + obj + '.';
+        var t2 = 'If the gate\'s own event had already happened, ' + ce + (g.certainEveryFlight ? '.' : (g.certainBreaks ? ', above the objective.' : ', inside the objective.'));
+        var v = g.critical
+            ? (g.orBreaks && g.certainBreaks ? 'Both results break the objective' : 'One of these results breaks the objective') + ', so the failure condition stays inside its budget only because the inputs fail independently. That independence must be shown by this common mode analysis.'
+            : 'Both results stay inside the objective, so the budget does not rest on this independence and it needs no common mode review.';
+        return { or: t1, certain: t2, verdict: v, text: t1 + ' ' + t2 + ' ' + v };
+    }
 
     // ---- failure conditions and targets ------------------------------------
     function rows() {
@@ -128,8 +167,10 @@
         // which on a 0.5 h flight let 8e-10 per flight (1.6e-9/FH) pass 1e-9/FH.
         var basis = SLTopBasis.missionHours(page);
         res.missionHours = basis.hours; res.missionSource = basis.source;
-        var rateOf = function (p) { var n = (p == null) ? null : SLTopBasis.perFlightHour(p, page); return n ? n.rate : null; };
-        var breaks = function (p) { if (p == null) return false; var v = SLTopBasis.meets(p, res.target, page); return !!v && !v.pass; };
+        // v1.4: a P within EVERY_FLIGHT_TOL of 1 has no per flight hour rate (the log has no value at 1): it is "every
+        // flight", and it always breaks a positive objective
+        var rateOf = function (p) { if (p == null || everyFlight(p)) return null; var n = SLTopBasis.perFlightHour(p, page); return n ? n.rate : null; };
+        var breaks = function (p) { if (p == null) return false; if (everyFlight(p)) return true; var v = SLTopBasis.meets(p, res.target, page); return !!v && !v.pass; };
         res.rateTop = rateOf(res.pTop);
         c.gates.forEach(function (g) {
             var gt = g.clone.gateType;
@@ -152,6 +193,7 @@
                 key: g.pageId + ':' + g.orig.id, pageId: g.pageId, nodeId: g.orig.id,
                 displayId: g.orig.displayId || ('G-' + g.orig.id), name: g.orig.name || '', gateType: gt,
                 pAsOr: pOr, pCertain: pCert, rateAsOr: rateOf(pOr), rateCertain: rateOf(pCert), orBreaks: orBreaks, certainBreaks: certBreaks,
+                orEveryFlight: everyFlight(pOr), certainEveryFlight: everyFlight(pCert),
                 critical: orBreaks || certBreaks
             });
         });
@@ -216,14 +258,14 @@
                 var rev = reviewedBy(g.key);
                 if (g.critical && rev.length) nRev++;
                 if (!_showAll && !g.critical) return;
-                var why = g.critical ? ((g.orBreaks ? 'as OR: exceeds' : 'as OR: within') + ' · ' + (g.certainBreaks ? 'as certain: exceeds' : 'as certain: within')) : 'within budget both ways';
+                var ex = explain(g, res), why = ex ? _esc(ex.verdict) : '';
                 var revCell = rev.length
                     ? rev.map(function (r) { return _esc(r.cmaId) + ' <span style="color:var(--color-text-secondary);">(' + _esc(r.status) + ')</span>'; }).join('<br>')
                     : (g.critical ? '<span style="color:#9A6200;font-weight:600;">Needs review</span> <button type="button" class="ckpt-m-btn" style="font-size:11px;padding:2px 8px;margin-left:6px;" onclick="SLCriticalGates.startReview(\'' + _esc(g.key) + '\')">Review in CMA</button>' : '<span style="color:var(--color-text-tertiary);">not required</span>');
                 body += '<tr' + (g.critical && !rev.length ? ' style="background:var(--sev-haz-bg, #FFF6E5);"' : '') + '>'
                     + '<td>' + _esc(fcLabel(res)) + '</td><td>' + _esc(res.pageName) + '</td>'
                     + '<td><b>' + _esc(g.displayId) + '</b>' + (g.name ? ' <span style="color:var(--color-text-secondary);">' + _esc(g.name) + '</span>' : '') + ' <span style="color:var(--color-text-tertiary);">' + _esc(g.gateType) + '</span></td>'
-                    + '<td>' + _exp(res.target) + '</td><td title="P = ' + _exp(g.pAsOr) + ' per flight over a ' + Number(res.missionHours).toFixed(3) + ' h flight">' + _exp(g.rateAsOr) + '</td><td title="P = ' + _exp(g.pCertain) + ' per flight over a ' + Number(res.missionHours).toFixed(3) + ' h flight">' + _exp(g.rateCertain) + '</td>'
+                    + '<td>' + _exp(res.target) + '</td><td title="P = ' + _exp(g.pAsOr) + ' per flight over a ' + Number(res.missionHours).toFixed(3) + ' h flight">' + cell(g.rateAsOr, g.orEveryFlight) + '</td><td title="P = ' + _exp(g.pCertain) + ' per flight over a ' + Number(res.missionHours).toFixed(3) + ' h flight">' + cell(g.rateCertain, g.certainEveryFlight) + '</td>'
                     + '<td>' + (g.critical ? '<span style="font-weight:700;color:var(--color-danger);">Critical</span>' : '<span style="color:var(--color-success);">Not critical</span>') + '<div style="font-size:11px;color:var(--color-text-secondary);">' + why + '</div></td>'
                     + '<td>' + revCell + '</td></tr>';
             });
@@ -238,7 +280,14 @@
             + '<div style="font-size:12px;color:var(--color-text-secondary);white-space:nowrap;">' + summary + ' &nbsp; <label style="font-weight:400;"><input type="checkbox" ' + (_showAll ? 'checked' : '') + ' onchange="SLCriticalGates.toggleAll(this.checked)"> show all gates</label></div></div>'
             + '<div style="overflow-x:auto;"><table style="font-size:12px;"><thead><tr><th>Failure condition</th><th>Fault tree</th><th>Gate</th><th title="Probability objective for the linked failure condition, per flight hour">Objective (/FH)</th><th title="Top event rate per flight hour if the gate were an OR gate (per-flight P(top) divided by the flight time, the same conversion the requirement check and the Budget Ledger use)">If OR (/FH)</th><th title="Top event rate per flight hour if the gate’s event had certainly occurred">If certain (/FH)</th><th>Verdict</th><th>Common mode review</th></tr></thead><tbody>' + body + '</tbody></table></div>';
     }
+    // v1.4 (10 Nov 2026): the panel is not drawn on the CMA page any more: every critical gate is in the CMA report.
+    // renderPanel takes away a panel an earlier build left; panelHtml stays for anything that asks for the table.
     function renderPanel() {
+        var d = root.document; if (!d) return;
+        var old = d.getElementById('critical-gates-panel'); if (old && old.parentNode) old.parentNode.removeChild(old);
+        return;
+    }
+    function _renderPanelV13() {
         var d = root.document; if (!d) return;
         var view = d.getElementById('view-cma'); if (!view) return;
         var host = d.getElementById('critical-gates-panel');
@@ -287,7 +336,7 @@
                 crit++;
                 var rev = reviewedBy(g.key);
                 if (!rev.length) unrev++;
-                lines.push('<b>' + _esc(g.displayId) + '</b>' + (g.name ? ' ' + _esc(g.name) : '') + ' · if OR ' + _exp(g.rateAsOr) + '/FH · if certain ' + _exp(g.rateCertain) + '/FH'
+                lines.push('<b>' + _esc(g.displayId) + '</b>' + (g.name ? ' ' + _esc(g.name) : '') + ' · if OR ' + cell(g.rateAsOr, g.orEveryFlight) + (g.orEveryFlight ? '' : '/FH') + ' · if certain ' + cell(g.rateCertain, g.certainEveryFlight) + (g.certainEveryFlight ? '' : '/FH')
                     + ' · ' + (rev.length ? 'reviewed by ' + _esc(rev.map(function (r) { return r.cmaId; }).join(', ')) : '<span style="color:#9A6200;font-weight:600;">no common mode review</span>'));
             });
         });
@@ -326,7 +375,7 @@
     })(50);
 
     var api = { rows: rows, linkedFcs: linkedFcs, targetFor: targetFor, clone: clone, analyzePage: analyzePage, analyzeAll: analyzeAll, reviewedBy: reviewedBy, findings: findings, INV: INV,
-                panelHtml: panelHtml, renderPanel: renderPanel, toggleAll: toggleAll, startReview: startReview, threadStage: threadStage, _wrapThread: _wrapThread, _wrapCma: _wrapCma, AND_FAMILY: AND_FAMILY };
+                panelHtml: panelHtml, renderPanel: renderPanel, explain: explain, everyFlight: everyFlight, num: num, VERSION: '1.4', _renderPanelV13: _renderPanelV13, toggleAll: toggleAll, startReview: startReview, threadStage: threadStage, _wrapThread: _wrapThread, _wrapCma: _wrapCma, AND_FAMILY: AND_FAMILY };
     try { root.SLCriticalGates = api; } catch (_) {}
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

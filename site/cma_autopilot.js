@@ -1,4 +1,4 @@
-// cma_autopilot.js (SLCmaAuto v1.3, 9 Nov 2026; v1.2 v1.1 8 Nov 2026): the CMA Autopilot. The Common Mode Analysis written by answering plain
+// cma_autopilot.js (SLCmaAuto v1.4, 10 Nov 2026; v1.3 9 Nov 2026; v1.2 v1.1 8 Nov 2026): the CMA Autopilot. The Common Mode Analysis written by answering plain
 // questions, one independence claim at a time, with the CMA report built from the answers.
 //
 // Waqas, 8 Nov 2026: "PRA build and ZSA similar to the planing autopilot, ability to see the reports etc. can we do
@@ -32,9 +32,27 @@
 // v1.1 (8 Nov 2026, phase 2): on the frame. Duplicates are asked of no_dupes.js (cmaOwner, cmaClash), the one home of the
 // duplicate rules. The acceptance of the outputs moved to the frame's store, projectConfig.ccaReports.cma.accept, so the
 // frame's "Outputs to accept" and this module read one record; v1.0's projectConfig.cmaAuto.accept is moved there once.
+// v1.4 (10 Nov 2026): every critical gate is in the report, written in advance. Waqas, 9 Nov 2026: "why is this table
+// there and not in the report, why are we not showing them images of the fault trees we are talking about and why have
+// we not pre-written the qualitative analyses for them?"; on grouping: "One CMA per independence claim, listing every
+// gate that relies on it, and each gate keeps its own section and fault tree picture pointing to the shared review"
+// (same claim = exactly the same items or systems claimed independent; cma_claims.js decides). So:
+//   · the claims are the critical gates grouped by what they claim independent, each with the CMA row that owns any of
+//     its gates, plus every CMA row of its own. A claim with no row is written in full all the same; its row is made
+//     (materialize) the first time an answer is given or accepted, never by reading. No duplicates: a row is made only
+//     for a claim no row owns, through SLCmaFlow.create, which takes only free gates.
+//   · each claim's section: what is claimed independent, then per failure condition (most severe first) each gate with
+//     what it is, both budget tests in words (critical_gates.js explain) and the fault tree around it (a numbered figure:
+//     the gate highlighted, its inputs marked), then the common modes: every category with its answer, its reason and
+//     where the answer comes from. The project data answers what it can (cma_claims.js evidence: fault tree, Items, CAD
+//     zones, particular risks, routing); the rest is the engineer's: "Write it myself" or "Draft with AI" per group of
+//     categories, the draft entering nothing until it is accepted.
+//   · the answers from the data are written into row.flow.answers (marked auto with their source) when the row is made
+//     and refreshed on every later answer to that claim; an engineer's answer is never overwritten. A Concern from the data
+//     becomes a concern of the CMA, closed the way any concern is (a requirement, evidence or a written reason).
 (function (root) {
     'use strict';
-    var VERSION = '1.3';   // 1.3 9 Nov 2026: proposed mitigations, path to compliance and conclusion once per report, written or AI drafted and accepted;   // 1.2 9 Nov 2026: one report per system and one at the aircraft level, picked from a dropdown
+    var VERSION = '1.4';   // 1.3 9 Nov 2026: proposed mitigations, path to compliance and conclusion once per report, written or AI drafted and accepted;   // 1.2 9 Nov 2026: one report per system and one at the aircraft level, picked from a dropdown
 
     // ==== THE SWITCH ================================================================================================
     // Flip to true in phase 2, once the CMA report (cca_report.js) is on the page: the CMA table, its hidden entry form
@@ -49,6 +67,7 @@
     function g(name) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(name); if (v !== undefined) return v; } } catch (_) {} try { return root[name]; } catch (_) { return undefined; } }
     function arr(name) { var v = g(name); return Array.isArray(v) ? v : []; }
     function F() { return root.SLCmaFlow || null; }
+    function K() { return root.SLCmaClaims || null; }
     function U() { return root.SLAutopilotUI || null; }
     function rows() { try { if (typeof cmaData !== 'undefined' && Array.isArray(cmaData)) return cmaData; } catch (_) {} return arr('cmaData'); }   // eslint-disable-line no-undef
     function pc() { var v = g('projectConfig'); if (v === undefined) { try { v = projectConfig; } catch (_) {} } return v || null; }   // eslint-disable-line no-undef
@@ -135,7 +154,7 @@
     function pageFcs() {
         return memo('fcs', function () {
             var m = {};
-            safe(function () { return root.SLCriticalGates.analyzeAll(); }, []).forEach(function (r) { m[S(r.pageId)] = (r.fcs || []).map(function (x) { var f = x.fha || {}; return { id: S(f.fcId || ('FC ' + (f.internalId || ''))), name: T(f.fcDesc || f.failureCondition || f.name || ''), severity: S(f.severity || ''), system: x.sysId != null ? S(x.sysName || '') : '' }; }); });
+            safe(function () { return K() ? K().analysis() : root.SLCriticalGates.analyzeAll(); }, []).forEach(function (r) { m[S(r.pageId)] = (r.fcs || []).map(function (x) { var f = x.fha || {}; return { id: S(f.fcId || ('FC ' + (f.internalId || ''))), name: T(f.fcDesc || f.failureCondition || f.name || ''), severity: S(f.severity || ''), system: x.sysId != null ? S(x.sysName || '') : '' }; }); });
             return m;
         });
     }
@@ -156,18 +175,42 @@
     function gatesOf(r) { return r ? ((r.flow ? r.flow.gates : r.linkedGateIds) || []).map(String) : []; }
     function ND() { return root.SLNoDupes && typeof root.SLNoDupes.cmaOwner === 'function' ? root.SLNoDupes : null; }
     function ownerOf(key) { var N = ND(); if (N) return N.cmaOwner(rows(), key); var k = S(key); return rows().find(function (c) { return c && !c.suggested && gatesOf(c).indexOf(k) >= 0; }) || null; }
-    function rowById(iid) { return rows().find(function (c) { return c && S(c.internalId) === S(iid); }) || null; }
-    function isCritical(r) { var cm = critMap(); return gatesOf(r).some(function (k) { return cm[k]; }); }
-    // the claims in report order: those a DAL reduction rests on first, then by CMA id
-    function claims() {
-        return rows().filter(function (c) { return c && !c.suggested; }).map(function (c, i) { return { r: c, i: i, crit: isCritical(c) }; })
-            .sort(function (a, b) { return (b.crit ? 1 : 0) - (a.crit ? 1 : 0) || S(a.r.cmaId).localeCompare(S(b.r.cmaId), undefined, { numeric: true }) || a.i - b.i; })
-            .map(function (x) { return x.r; });
+    function rowById(iid) { var r = rows().find(function (c) { return c && S(c.internalId) === S(iid); }) || null; if (r || S(iid).indexOf('new~') !== 0) return r; var k = S(iid).slice(4), c = claimList().find(function (x) { return S(x.row.internalId) === S(iid) || x.key === k; }); return c ? c.row : null; }
+    function isCritical(r) { var cm = critMap(); return cgates(r).some(function (k) { return cm[k]; }); }
+    // v1.4: the claims. The critical gates grouped by what they claim independent (SLCmaClaims.groups); a group belongs to
+    // the CMA row owning any of its gates; every CMA row is a claim of its own; a group no row owns is a claim with a
+    // stand-in row (internalId 'new~<group key>', flow null, _virtual) until its row is made.
+    function vSubject(gr) { var gi = gateInfo(gr.gates[0]); return 'Independence of the inputs of ' + gi.id + (gi.name ? ' ' + gi.name : ''); }
+    function mkClaim(r, grs) {
+        var gates = r ? gatesOf(r).slice() : [];
+        grs.forEach(function (gr) { gr.gates.forEach(function (k) { if (gates.indexOf(k) < 0) gates.push(k); }); });
+        var key = grs.length ? grs[0].key : 'row:' + S(r.internalId);
+        var row = r || { internalId: 'new~' + key, cmaId: '', subject: vSubject(grs[0]), claim: '', status: 'Open', flow: null, linkedGateIds: gates.slice(), _virtual: true };
+        return { key: key, row: row, real: !!r, groups: grs, gates: gates };
     }
+    function claimList() {
+        return memo('claims', function () {
+            var grs = safe(function () { return K().groups(); }, []) || [], live = rows().filter(function (c) { return c && !c.suggested; });
+            var byRow = new Map(), out = [], cm = critMap();
+            grs.forEach(function (gr) { var r = null; gr.gates.some(function (k) { r = ownerOf(k); return !!r && !r.suggested; }); if (r && live.indexOf(r) >= 0) { var L = byRow.get(r) || []; L.push(gr); byRow.set(r, L); } else out.push(mkClaim(null, [gr])); });
+            live.forEach(function (r) { out.push(mkClaim(r, byRow.get(r) || [])); });
+            var fc0 = function (c) { var x = safe(function () { return K().gate(c.gates[0]); }, null); return x && x.fcs[0] ? x.fcs[0].id : 'zz'; };
+            return out.map(function (c, i) { c.i = i; c.crit = c.gates.some(function (k) { return cm[k]; }); return c; })
+                .sort(function (a, b) { return (b.crit ? 1 : 0) - (a.crit ? 1 : 0) || (a.real ? 0 : 1) - (b.real ? 0 : 1) || S(a.row.cmaId).localeCompare(S(b.row.cmaId), undefined, { numeric: true }) || fc0(a).localeCompare(fc0(b), undefined, { numeric: true }) || a.i - b.i; });
+        });
+    }
+    // a stand-in row whose claim has since got its record finds that claim by its key ('new~<key>')
+    function claimFor(r) { if (!r) return null; var id = S(r.internalId), k = id.indexOf('new~') === 0 ? id.slice(4) : null; return claimList().find(function (c) { return c.row === r || S(c.row.internalId) === id; }) || (k ? claimList().find(function (c) { return c.key === k; }) : null) || null; }
+    // the gates a claim covers: its row's gates and every gate of its groups
+    function cgates(r) { var c = claimFor(r); return c ? c.gates.slice() : gatesOf(r); }
+    // the claims in report order: those a DAL reduction rests on first, then by CMA id, then the claims with no row yet
+    function claims() { return claimList().map(function (c) { return c.row; }); }
     function sysName(id) { var s = arr('systemsData').find(function (x) { return x && S(x.id) === S(id); }); return s ? T(s.name || s.id) : S(id); }
     function draftClaim(r) {
-        var gs = gatesOf(r).map(gateInfo).filter(function (x) { return !x.gone; });
+        var gs = cgates(r).map(gateInfo).filter(function (x) { return !x.gone; });
         if (!gs.length) return '';
+        var c0 = claimFor(r), oneClaim = c0 && c0.groups.length === 1 && c0.gates.every(function (k) { return c0.groups[0].gates.indexOf(k) >= 0; });
+        if (oneClaim && gs.length > 1) { var cw = gs[0].inputs || []; if (cw.length) return 'The inputs ' + listJoin(cw.map(function (n) { return '"' + n + '"'; })) + ' share no single cause that can make them fail together, so ' + listJoin(gs.map(function (x) { return x.id; })) + ' fail only when these inputs fail on their own.'; }
         if (gs.length === 1) { var x = gs[0]; return 'The inputs of ' + x.id + (x.name ? ' (' + x.name + ')' : '') + ', ' + listJoin(x.inputs.map(function (n) { return '"' + n + '"'; })) + ', share no single cause that can make them happen together, so the gate fails only when they fail on their own.'; }
         return 'No single cause can make more than one input fail together at any of ' + listJoin(gs.map(function (x) { return x.id + (x.name ? ' (' + x.name + ')' : ''); })) + '; each gate fails only when its inputs fail on their own.';
     }
@@ -203,15 +246,18 @@
     }
     function whoOf(r, id) { var w = r && r.flow && r.flow.who && r.flow.who[id]; return w ? { by: w.by, at: w.at } : null; }
 
+    // v1.4: one option per claim with no CMA record yet (its first gate stands for it); picking it makes the one record
+    // for the whole claim, every gate relying on it included
     function startQuestion() {
-        var cm = critMap(), free = allGates().filter(function (x) { return cm[x.key] && !ownerOf(x.key); });
-        return { id: 'cma/start', kind: 'multi', group: 'Independence claims', groupIntro: 'Every AND gate a DAL reduction rests on needs a common mode analysis that shows its inputs can fail only on their own.',
-            text: 'Which critical gates still need a common mode analysis?', intro: 'These AND gates have a DAL reduction resting on them and no CMA yet. Pick one to start its analysis; each one picked becomes its own CMA.',
-            options: free.map(function (x) { var gi = gateInfo(x.key); return { id: x.key, label: gi.label, means: 'In "' + gi.tree + '". Its inputs: ' + listJoin(gi.inputs) + '.', changes: 'Starts a CMA for this gate. Until it is substantiated, the gate\'s DAL reduction stays marked CMA pending.', critical: true }; }),
+        var free = claimList().filter(function (c) { return !c.real && c.crit; });
+        return { id: 'cma/start', kind: 'multi', group: 'Independence claims', groupIntro: 'Every AND gate a DAL reduction rests on needs a common mode analysis that shows its inputs can fail only on their own. Gates that claim exactly the same inputs independent share one analysis.',
+            text: 'Which independence claims still need their CMA record?', intro: 'Each claim below is already written in the report from the project data. Pick one to make its CMA record; answering any of its questions does the same.',
+            options: free.map(function (c) { var gs = c.gates.map(gateInfo); return { id: c.gates[0], label: listJoin(gs.map(function (x) { return x.label; })), means: 'In ' + listJoin(uniqS(gs.map(function (x) { return '"' + x.tree + '"'; }))) + '. Inputs claimed independent: ' + listJoin(gs[0].inputs) + '.', changes: 'Makes one CMA for ' + (gs.length > 1 ? 'these gates' : 'this gate') + ', with the answers the project data gives already in it. Until it is substantiated, the DAL reduction stays marked CMA pending.', critical: true }; }),
             picked: [], fields: {}, complete: !free.length, parent: null, depth: 0, cma: null, cmaId: '' };
     }
+    function uniqS(a) { return a.filter(function (x, i) { return a.indexOf(x) === i; }); }
     function questionsFor(r) {
-        var f = r.flow || null, out = [], gi = gatesOf(r), cm = critMap(), cats = catList();
+        var f = r.flow || null, out = [], gi = cgates(r), cm = critMap(), cats = catList();
         var head = T((r.cmaId ? r.cmaId + ' ' : '') + (r.subject || 'Common mode analysis'));
         // the AND gates relying on it
         var opts = gi.map(function (k) { return k; }).concat(allGates().filter(function (x) { return gi.indexOf(x.key) < 0 && !ownerOf(x.key); }).map(function (x) { return x.key; }));
@@ -230,10 +276,10 @@
         // the categories, with their concerns indented under them
         var concerns = (f && f.concerns) || [];
         cats.forEach(function (c) {
-            var a = (f && f.answers && f.answers[c.id]) || {}, id = qid(r, 'cat', c.id);
+            var a = (f && f.answers && f.answers[c.id]) || {}, id = qid(r, 'cat', c.id), ef = effAnswer(r, c.id);
             out.push({ id: id, kind: 'single', group: head + ': common modes, ' + lcFirst(c.group === 'Development / design' ? 'Development and design' : c.group), groupIntro: GROUP_PLAIN[c.group] || '',
-                text: 'Could ' + lcFirst(c.name) + ' fail more than one of the inputs at once?', intro: c.intro, category: c.id, categoryLabel: c.label,
-                options: OPT_CAT, picked: a.a ? [a.a] : [], fields: { why: S(a.why) }, complete: !!(a.a && S(a.why).trim()), parent: null, depth: 0, who: whoOf(r, id) });
+                text: 'Could ' + lcFirst(c.name) + ' fail more than one of the inputs at once?', intro: c.intro + (ef && ef.auto ? ' Answered from the project data (' + ef.source + '): ' + ef.why + ' Pick another answer to put your own in its place.' : ''), category: c.id, categoryLabel: c.label,
+                options: OPT_CAT, picked: ef ? [ef.a] : [], fields: { why: ef ? S(ef.why) : S(a.why) }, complete: !!(ef && S(ef.why).trim()), auto: !!(ef && ef.auto), source: ef ? ef.source : '', parent: null, depth: 0, who: whoOf(r, id) });
             var cc = a.concernId ? concerns.find(function (x) { return x.id === a.concernId; }) : null;
             if (cc) out.push(concernQ(r, cc, id, 1));
         });
@@ -255,6 +301,63 @@
     }
     function question(id) { var p = parseQ(id); if (!p) return null; if (p.kind === 'start') return startQuestion(); return questions(p.iid).find(function (q) { return q.id === S(id); }) || null; }
 
+    // ---- v1.4: the answers the project data gives, and the record made on the first answer ----------------------------------
+    function evidenceOf(r) { return memo('ev:' + S(r && r.internalId), function () { return safe(function () { return K().evidence(cgates(r)); }, {}) || {}; }); }
+    // the answer that stands for a category: the engineer's (written, or an AI draft accepted), else the project data's
+    function effAnswer(r, cat) {
+        var a = r && r.flow && r.flow.answers && r.flow.answers[cat];
+        if (a && a.a && !a.auto) return { a: a.a, why: S(a.why), source: a.src === 'ai' ? 'AI draft accepted by the engineer' : 'Written by the engineer', auto: false };
+        var e = evidenceOf(r)[cat];
+        return e ? { a: e.a, why: e.why, source: e.source, auto: true } : null;
+    }
+    function levelOfKeys(keys) { var ls = {}; keys.forEach(function (k) { ls[levelOfKey(k)] = 1; }); var L = Object.keys(ls); return L.length === 1 ? L[0] : 'aircraft'; }
+    // the claim's CMA record, made once: a claim with a row adopts it into the steps and takes in the claim's other free
+    // gates; a claim with none gets one new row for all its gates (SLCmaFlow.create takes only free gates: no duplicates)
+    function materialize(r) {
+        var c = claimFor(r); if (!c) return r && !r._virtual ? r : null;
+        var row = c.real ? c.row : null, was = c.row.internalId;
+        if (!row) {
+            var lv = levelOfKeys(c.gates), sys = lv.indexOf('sys:') === 0 ? lv.slice(4) : '';
+            row = F().create(c.gates, { subject: c.row.subject, systemId: sys || undefined });
+            applyLevel(row, sys);
+        } else {
+            ensureFlow(row);
+            c.gates.forEach(function (k) { if (row.flow.gates.indexOf(k) < 0) { var o = ownerOf(k); if (!o || o === row) F().addGate(row.internalId, k); } });
+        }
+        forget();
+        if (!S(row.flow.claim).trim()) { var dc = draftClaim(row); if (dc) F().setClaim(row.internalId, dc); }
+        refreshAuto(row);
+        if (S(_ui.sel) === S(was)) _ui.sel = row.internalId;
+        return row;
+    }
+    // the project data's answers written into the record (marked auto, with their source), refreshed on every answer to the
+    // claim: an engineer's answer is never touched; an auto answer the data no longer gives is taken out
+    function refreshAuto(r) {
+        if (!r || !r.flow || !K() || !F()) return;
+        forget();
+        var ev = evidenceOf(r), f = r.flow, did = false, known = {};
+        catList().forEach(function (c) { known[c.id] = 1; });
+        Object.keys(ev).forEach(function (cat) {
+            if (!known[cat]) return;
+            var cur = f.answers[cat], e = ev[cat];
+            if (cur && cur.a && !cur.auto) return;
+            if (cur && cur.a === e.a && S(cur.why) === S(e.why) && cur.auto === e.source) return;
+            F().answer(r.internalId, cat, e.a, e.why);
+            var a = f.answers[cat]; if (!a) return;
+            a.auto = e.source;
+            if (a.concernId) { var cc = (f.concerns || []).find(function (x) { return x.id === a.concernId; }); if (cc && cc.status === 'Open') { cc.from = 'project data'; cc.text = catPlain(cat).name + ': ' + e.why; } }
+            if (!f.who || typeof f.who !== 'object') f.who = {};
+            f.who[qid(r, 'cat', cat)] = { by: 'Project data (' + e.source + ')', at: now() };
+            did = true;
+        });
+        Object.keys(f.answers || {}).forEach(function (cat) {
+            var a = f.answers[cat]; if (!a || !a.auto || ev[cat]) return;
+            if (a.concernId) { var cc = (f.concerns || []).find(function (x) { return x.id === a.concernId; }); if (cc && cc.status === 'Open' && !S(cc.mitigation).trim()) f.concerns = f.concerns.filter(function (x) { return x !== cc; }); }
+            delete f.answers[cat]; did = true;
+        });
+        if (did) { F().sync(r); forget(); }
+    }
+
     // ---- answering ------------------------------------------------------------------------------------------------------
     var _subs = [];
     function subscribe(fn) { if (typeof fn === 'function') _subs.push(fn); return function () { _subs = _subs.filter(function (x) { return x !== fn; }); }; }
@@ -271,23 +374,28 @@
         if (!F()) return no('The common mode analysis is not loaded.');
         if (p.kind === 'start') {
             var keys = Array.isArray(pick) ? pick : [pick], made = [];
-            for (var i = 0; i < keys.length; i++) { var res = addCma({ gates: [keys[i]] }); if (!res.ok) return res; made.push(res.row.internalId); }
+            for (var i = 0; i < keys.length; i++) {
+                var cl = claimList().find(function (c) { return c.gates.indexOf(S(keys[i])) >= 0; });
+                if (cl && !cl.real) { var mr = materialize(cl.row); if (!mr) return no('That claim could not be recorded.'); made.push(mr.internalId); continue; }
+                var res = addCma({ gates: [keys[i]] }); if (!res.ok) return res; made.push(res.row.internalId);
+            }
             changed(id); return { ok: true, created: made };
         }
         var r = rowById(p.iid); if (!r) return no('No such CMA.');
+        if (r._virtual) { var was = r.internalId; r = materialize(r); if (!r) return no('That claim could not be recorded.'); id = id.replace('cma/' + was + '/', 'cma/' + S(r.internalId) + '/'); }
         if (p.kind === 'gates') {
             var want = (Array.isArray(pick) ? pick : S(pick).split('|')).map(String).filter(Boolean);
             for (var j = 0; j < want.length; j++) { var o = ownerOf(want[j]); if (o && o !== r) return no(gateInfo(want[j]).label + ' is already in ' + S(o.cmaId || 'another CMA') + ': one CMA per set of gates.'); if (!gateIndex()[want[j]] && !F().gateOf(want[j])) return no('That gate is not in the fault trees.'); }
             ensureFlow(r);
             r.flow.gates.slice().forEach(function (k) { if (want.indexOf(k) < 0) F().removeGate(r.internalId, k); });
             want.forEach(function (k) { if (r.flow.gates.indexOf(k) < 0) F().addGate(r.internalId, k); });
-            stamp(r, id); changed(id); return { ok: true };
+            stamp(r, id); refreshAuto(r); changed(id); return { ok: true, row: r.internalId };
         }
         if (p.kind === 'claim') {
             var text = pick === 'drafted' ? draftClaim(r) : S(fields.text).trim();
             if (pick !== 'drafted' && pick !== 'own') return no('Pick the drafted claim or write your own.');
             if (!text) return no(pick === 'drafted' ? 'Pick the gates first: the claim is written from them.' : 'Write the claim in one sentence.');
-            ensureFlow(r); F().setClaim(r.internalId, text); stamp(r, id); changed(id); return { ok: true };
+            ensureFlow(r); F().setClaim(r.internalId, text); stamp(r, id); refreshAuto(r); changed(id); return { ok: true, row: r.internalId };
         }
         if (p.kind === 'cat') {
             if (!ANSWER_WORD[pick]) return no('Answer No, Concern or Does not apply.');
@@ -296,10 +404,11 @@
             var prev = r.flow.answers[p.sub] || {};
             var why = fields.why != null ? S(fields.why).trim() : S(prev.why);
             F().answer(r.internalId, p.sub, pick, why);
+            if (fields.src === 'ai' && r.flow.answers[p.sub]) { r.flow.answers[p.sub].src = 'ai'; }
             // the concern's words follow the reason while it is still open
             var a = r.flow.answers[p.sub];
             if (a && a.concernId && fields.why != null) { var cc = r.flow.concerns.find(function (x) { return x.id === a.concernId; }); if (cc && cc.status === 'Open') { cc.text = catPlain(p.sub).name + ': ' + (why || 'to be described'); F().sync(r); } }
-            stamp(r, id); changed(id); return { ok: true, concern: a && a.concernId || '' };
+            stamp(r, id); refreshAuto(r); changed(id); return { ok: true, concern: a && a.concernId || '', row: r.internalId };
         }
         if (p.kind === 'concern') {
             if (!r.flow) return no('No such concern.');
@@ -324,7 +433,7 @@
                 resC = F().setConcern(r.internalId, c.id, { status: 'Accepted' });
             } else return no('Pick how the concern is closed: a requirement, evidence or accepted with the reason.');
             if (resC && resC.ok === false) return no(resC.why || 'That did not close the concern.');
-            stamp(r, id); changed(id); return { ok: true };
+            stamp(r, id); refreshAuto(r); changed(id); return { ok: true, row: r.internalId };
         }
         return no('No such question: ' + id);
     }
@@ -335,6 +444,7 @@
     // ---- status in words (derived, never typed; no counts) ----------------------------------------------------------------
     function statusOf(r) {
         if (!r) return { state: 'none', word: '' };
+        if (r._virtual) return { state: 'new', word: 'Not started' };
         if (!r.flow) return { state: 'earlier', word: 'Not substantiated yet' };
         var st = F().statusOf(r), pr = F().progress(r);
         if (pr.changed.length) return { state: 'reopened', word: 'Reopened' };
@@ -343,6 +453,7 @@
     function statusWords(r) {
         var st = statusOf(r), gs = gatesOf(r).map(gateInfo), real = gs.filter(function (x) { return !x.gone && !x.notGate; });
         var at = 'at ' + listJoin(real.map(function (x) { return x.id; }));
+        if (st.state === 'new') { var cg = cgates(r).map(gateInfo).filter(function (x) { return !x.gone; }); return 'Not started: no answer has been given or accepted for this claim yet. The answers the project data settles are written above; the CMA record is made with the first answer. Until the analysis is complete, the DAL reduction at ' + listJoin(cg.map(function (x) { return x.id; })) + ' rests on the claim alone and is marked CMA pending.'; }
         // what the status means for the DAL: only real AND gates carry a reduction
         var none = gs.length ? 'What it names is not an AND gate in the fault trees today, so no DAL reduction rests on it until its gates are picked again.' : 'No AND gate is named for it yet, so no DAL reduction rests on it.';
         var pending = real.length ? 'the DAL reduction ' + at + ' rests on the claim alone and is marked CMA pending.' : null;
@@ -377,89 +488,131 @@
         return 'Still open: it needs a mitigation, backed by a requirement or evidence, or a written reason to accept it.' + (cc.defeats ? ' Until then it defeats the claim.' : '');
     }
 
-    // ---- the figure: each gate with the inputs claimed independent -------------------------------------------------------
-    var LIGHT = { paper: '#FFFFFF', ink: '#101216', box: '#F4F6FA', edge: '#5B6270', gate: '#E8F0FE', gateEdge: '#1A6EF2', bad: '#B42318', badFill: '#FDECEA', line: '#5B6270' };
-    var DARK = { paper: '#15181E', ink: '#E8EAED', box: '#1E232B', edge: '#9AA1AD', gate: '#1B2A44', gateEdge: '#6AA6FF', bad: '#FF8A80', badFill: '#3A1D1B', line: '#9AA1AD' };
-    function cut(s, n) { s = T(s); return s.length > n ? s.slice(0, n - 1) + '\u2026' : s; }
+    // ---- v1.4: the fault tree around each gate (SLCmaClaims.figure), drawn in the frame's palette ---------------------------
+    var FLIGHT = { ink: '#101216', sub: '#4b5563', line: '#6b7280', paper: '#ffffff', panel: '#F8FAFC', on: '#1A6EF2', onF: '#EAF2FE', warn: '#B26A00', warnF: '#FDF1DE', bad: '#B42318', badF: '#FDECEA' };
+    var FDARK = { ink: '#E8EAED', sub: '#B4BAC4', line: '#9AA1AD', paper: '#15181E', panel: '#1B1F26', on: '#6AA6FF', onF: '#172840', warn: '#E9A94A', warnF: '#33270F', bad: '#FF8A80', badF: '#3A1A17' };
+    function cut(s, n) { s = T(s); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
     // a figure box: the frame's clickable node when the frame is here (it opens the node panel), else a plain group
     var _nodes = {};
-    function nodeBox(id, inner) { var Rf = root.SLCcaReport; return Rf && Rf.nodeG ? Rf.nodeG('cma', id, inner) : '<g data-node="' + E(id) + '" style="cursor:pointer">' + inner + '</g>'; }
-    function paletteOf(opts) {
-        var c = opts && opts.C;
-        if (c && c.ink) return { paper: c.paper, ink: c.ink, box: c.panel, edge: c.line, gate: c.onF, gateEdge: c.on, bad: c.bad, badFill: c.badF, line: c.line };
-        return opts && opts.dark ? DARK : LIGHT;
+    function nodeBox(id, inner, title) { var Rf = root.SLCcaReport; return Rf && Rf.nodeG ? Rf.nodeG('cma', id, inner, title) : '<g data-node="' + E(id) + '" style="cursor:pointer">' + inner + '</g>'; }
+    function paletteOf(opts) { var c = opts && opts.C; if (c && c.ink && c.warnF) return c; return opts && opts.dark ? FDARK : FLIGHT; }
+    var NODE_ACCEPT = {
+        gate: 'Its inputs shown to share no common cause: every common mode category answered with why and every concern closed in the CMA for this claim.',
+        input: 'Fails on its own: no common mode category shared with the other inputs of the gate is left open.',
+        path: 'Shown for context: it lies on the path from the top event down to the critical gate.',
+        ctx: 'Shown for context: another input beside the path to the critical gate.',
+        below: 'Shown for context: part of what makes up an input claimed independent.'
+    };
+    function treeFigure(r, x, gid, opts) {
+        var Kc = K(); if (!Kc) return null;
+        var fg = safe(function () { return Kc.figure(x.key, { C: paletteOf(opts), anchor: gid, nodeG: nodeBox }); }, null);
+        if (!fg) return null;
+        var nodes = fg.nodes.map(function (n) { var o = { id: n.id, kind: n.kind, label: n.label, inputs: n.inputs, outputs: [n.kind === 'gate' ? (x.fcs.length ? listJoin(x.fcs.map(fcWords)) : 'The top event of "' + x.tree + '"') : 'The gate above it in "' + x.tree + '"'], accept: NODE_ACCEPT[n.kind] || NODE_ACCEPT.ctx, cma: r.internalId, nodeId: n.nodeId, pageId: n.pageId }; _nodes[n.id] = o; return o; });
+        var lead = '{N} shows where ' + x.id + ' sits in "' + x.tree + '": ' + (fg.pathLen > 1 ? 'the path from the top event down to the gate, ' : '') + 'the gate itself (highlighted) and its inputs claimed independent (dashed)'
+            + (fg.trimmed ? ', with the branches beside the path and anything more than two levels under an input left out (the whole tree is on the Fault trees page).' : '.');
+        return { type: 'figure', id: gid + '-fig', q: qid(r, 'gates'), lead: lead, caption: T('The fault tree around ' + x.id + (x.name ? ' ' + x.name : '')), svg: fg.svg, w: fg.w, h: fg.h, nodes: nodes, gateKey: x.key };
     }
-    function figure(r, anchor, opts) {
-        var C = paletteOf(opts), gs = gatesOf(r).map(gateInfo).filter(function (x) { return !x.gone && !x.notGate; });
-        if (!gs.length) return null;
-        var openC = ((r.flow && r.flow.concerns) || []).filter(function (c) { return !concernDone(c); });
-        var W = 720, y = 14, body = '', nodes = [], RH = 30;
-        gs.forEach(function (x, gi) {
-            var n = Math.max(1, x.inputs.length), h = n * RH + (n - 1) * 6, gy = y + h / 2 - 18, gid = anchor + '-g' + gi;
-            body += nodeBox(gid, '<rect x="12" y="' + gy + '" width="250" height="36" rx="6" fill="' + C.gate + '" stroke="' + C.gateEdge + '" stroke-width="1.5"/>'
-                + '<text x="22" y="' + (gy + 15) + '" font-size="11.5" font-weight="700" fill="' + C.ink + '">' + E(cut(x.id + ' AND', 34)) + '</text>'
-                + '<text x="22" y="' + (gy + 29) + '" font-size="10.5" fill="' + C.ink + '">' + E(cut(x.name || x.tree, 40)) + '</text>');
-            nodes.push({ id: gid, kind: 'gate', label: x.label, inputs: x.inputs.slice(), outputs: x.fcs.length ? x.fcs.map(fcWords) : ['The top event of "' + x.tree + '"'], accept: 'Its inputs shown to share no common cause: every category answered with why and every concern closed in ' + S(r.cmaId || 'this CMA') + '.' });
-            x.inputs.forEach(function (inp, ii) {
-                var iy = y + ii * (RH + 6), iid = gid + '-i' + ii;
-                body += '<path d="M262,' + (gy + 18) + ' C300,' + (gy + 18) + ' 300,' + (iy + RH / 2) + ' 340,' + (iy + RH / 2) + '" fill="none" stroke="' + C.line + '" stroke-width="1.2"/>'
-                    + nodeBox(iid, '<rect x="340" y="' + iy + '" width="' + (W - 352) + '" height="' + RH + '" rx="5" fill="' + C.box + '" stroke="' + C.edge + '"/>'
-                    + '<text x="350" y="' + (iy + 19) + '" font-size="11" fill="' + C.ink + '">' + E(cut(inp, 56)) + '</text>');
-                nodes.push({ id: iid, kind: 'input', label: inp, inputs: [], outputs: [x.label], accept: 'Fails on its own: no common mode category shared with the other inputs of ' + x.id + ' is left open.' });
-            });
-            y += h + 18;
-        });
-        if (openC.length) {
-            var cy = y, cid = anchor + '-open';
-            body += nodeBox(cid, '<rect x="12" y="' + cy + '" width="' + (W - 24) + '" height="30" rx="5" fill="' + C.badFill + '" stroke="' + C.bad + '" stroke-dasharray="5 3"/>'
-                + '<text x="22" y="' + (cy + 19) + '" font-size="11" fill="' + C.ink + '">' + E(cut('Open: ' + openC.map(function (c) { return c.id + ' ' + c.text; }).join('; '), 104)) + '</text>');
-            nodes.push({ id: cid, kind: 'concern', label: 'Concerns still open', inputs: openC.map(function (c) { return c.id + ': ' + T(c.text); }), outputs: gs.map(function (x) { return x.label; }), accept: 'Each one mitigated (a requirement or evidence) or accepted with the reason.' });
-            y += 44;
-        }
-        var H = y + 4;
-        var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '" font-family="Arial, Helvetica, sans-serif" role="img" aria-label="' + E('Inputs claimed independent, ' + S(r.cmaId)) + '"><rect width="100%" height="100%" fill="' + C.paper + '"/>' + body + '</svg>';
-        nodes.forEach(function (n) { n.cma = r.internalId; _nodes[n.id] = n; });
-        return { type: 'figure', id: anchor + '-fig', q: qid(r, 'gates'), lead: '{N} draws each gate with the inputs claimed independent.', caption: T('The inputs ' + (r.cmaId || 'this CMA') + ' claims independent, gate by gate'), svg: svg, w: W, h: H, nodes: nodes };
-    }
+    function fcHead(fc) { return T(fc.id + (fc.name ? ' ' + fc.name : '') + (fc.system ? ', ' + fc.system : '') + ' (' + (safe(function () { return K().sevWords(fc.severity); }, fc.severity) || 'severity not set') + ')'); }
 
     // ---- the report: one section per independence claim (pure: reads, never writes) ----------------------------------------
     function P(id, text, q, extra) { return Object.assign({ type: 'p', id: id, text: T(text), q: q || null }, extra || {}); }
+    function quoted(a) { return a.map(function (n) { return '"' + n + '"'; }); }
+    // the groups of categories the project data cannot settle for this claim (each answered by the engineer or an accepted
+    // AI draft), in the order of the categories
+    function openGroups(r) {
+        var out = [], by = {};
+        catList().forEach(function (c) { if (effAnswer(r, c.id)) return; if (!by[c.group]) { by[c.group] = { group: c.group, cats: [] }; out.push(by[c.group]); } by[c.group].cats.push(c); });
+        return out;
+    }
+    function groupWord(gname) { return gname === 'Development / design' ? 'Development and design' : gname; }
     function sectionFor(r, opts) {
-        var f = r.flow || null, anchor = 'cma-' + slug(r.cmaId || r.internalId), blocks = [], gq = qid(r, 'gates'), cq = qid(r, 'claim');
-        var gs = gatesOf(r).map(gateInfo);
+        opts = opts || {};
+        var f = r.flow || null, c = claimFor(r), anchor = anchorOf(r), blocks = [], gq = qid(r, 'gates'), cq = qid(r, 'claim');
+        var gs = cgates(r).map(gateInfo), real = gs.filter(function (x) { return !x.gone && !x.notGate; });
+        var lv = r._virtual ? levelOf(r) : (r.scope === 'system' && r.owningSystemId ? 'sys:' + S(r.owningSystemId) : 'aircraft');
+        var lvWords = lv.indexOf('sys:') === 0 ? 'It is assessed for the ' + sysName(lv.slice(4)) + (/\bsystem$/i.test(sysName(lv.slice(4))) ? '.' : ' system.') : 'It is assessed at the aircraft level.';
         // what it is about
-        blocks.push(P(anchor + '-about', S(r.cmaId || 'This CMA') + ' covers ' + lcFirst(T(r.subject || 'an independence claim')) + (/[.!?]$/.test(T(r.subject)) ? '' : '.') + ' ' + (r.scope === 'system' && r.owningSystemId ? 'It is assessed for the ' + sysName(r.owningSystemId) + (/\bsystem$/i.test(sysName(r.owningSystemId)) ? '.' : ' system.') : 'It is assessed at the aircraft level.'), null, { field: 'subject' }));
-        // the AND gates relying on it
+        blocks.push(P(anchor + '-about', (r._virtual ? 'This independence claim has no CMA record yet. Everything below is written from the project data, and the record is made with the first answer given or accepted. ' : S(r.cmaId || 'This CMA') + ' covers ' + lcFirst(T(r.subject || 'an independence claim')) + (/[.!?]$/.test(T(r.subject)) ? '' : '.') + ' ') + lvWords, null, { field: 'subject' }));
+        // what is claimed independent, and which gates rely on it
+        if (real.length) {
+            var oneClaim = c && c.groups.length === 1 && real.every(function (x) { return c.groups[0].gates.indexOf(x.key) >= 0; });
+            var cw = safe(function () { return K().claimedWords(real[0].key); }, []) || [];
+            blocks.push(P(anchor + '-what', oneClaim && cw.length
+                ? 'What is claimed independent: ' + listJoin(quoted(cw)) + '. ' + (real.length > 1 ? listJoin(real.map(function (x) { return x.id; })) + ' all rely on exactly this claim, so this one review covers each of them.' : real[0].id + ' relies on this claim.')
+                : 'Each gate below names the inputs it claims independent; this review covers them together.', gq));
+        }
+        // the claim
+        var claim = T(f ? f.claim : r.claim) || (r._virtual ? T(draftClaim(r)) : '');
+        blocks.push(P(anchor + '-claim', claim ? 'The claim: ' + claim + (/[.!?]$/.test(claim) ? '' : '.') : 'The claim has not been written yet.', cq));
+        // the AND gates relying on it: the table, then gate by gate under each failure condition
         if (gs.length) {
             blocks.push(P(anchor + '-gates', 'These AND gates rely on this claim. Each fails only when all of its inputs fail, so its inputs must not share a cause that can fail them together.' + (gs.some(function (x) { return x.critical; }) ? ' A DAL reduction rests on the gates marked critical.' : ''), gq));
             blocks.push({ type: 'table', id: anchor + '-gates-t', q: gq, lead: '{N} lists them with the fault tree and failure condition each serves and the inputs claimed independent.', caption: T('AND gates relying on ' + (r.cmaId || 'this claim')), columns: ['Gate', 'Fault tree', 'Failure condition', 'Inputs claimed independent', 'DAL reduction rests on it'],
                 rows: gs.map(function (x) { return { q: gq, cells: [x.label, x.tree || 'No longer in the project', x.fcs.length ? x.fcs.map(fcWords).join('; ') : 'Not linked to a failure condition', x.gone ? 'Not known: the gate is gone' : x.notGate ? 'None: it is not an AND gate, so nothing here is claimed independent' : x.inputs.join('; '), x.critical ? 'Yes, critical' : 'No'] }; }) });
             if (gs.some(function (x) { return x.gone || x.notGate; })) blocks.push(P(anchor + '-gates-fix', 'Some of what this claim names is not an AND gate in the fault trees today (it is gone, or it is not an AND gate with two or more inputs). Its gates need to be picked again for the claim to mean something in the trees.', gq));
-            var fig = figure(r, anchor, opts); if (fig) blocks.push(fig);
+            var byFc = {}, order = [];
+            real.forEach(function (x) {
+                var kg = safe(function () { return K().gate(x.key); }, null), fc = kg && kg.fcs[0] ? kg.fcs[0] : (x.fcs[0] || null);
+                var fk = fc ? fc.id + '|' + (fc.system || '') : '-';
+                if (!byFc[fk]) { byFc[fk] = { fc: fc, list: [] }; order.push(fk); }
+                byFc[fk].list.push({ x: x, kg: kg });
+            });
+            order.forEach(function (fk, fi) {
+                var grp = byFc[fk];
+                blocks.push({ type: 'part', id: anchor + '-fc' + fi, text: grp.fc ? fcHead(grp.fc) : 'Gates not linked to a failure condition', level: 1, q: gq });
+                grp.list.forEach(function (o) {
+                    var x = o.x, kg = o.kg, gid = anchor + '-g-' + slug(x.key), fcs = kg ? kg.fcs : x.fcs;
+                    blocks.push({ type: 'part', id: gid + '-h', text: x.id + (x.name ? ' ' + x.name : ''), level: 2, q: gq });
+                    var gt = S(x.node && x.node.gateType || 'AND').toUpperCase();
+                    var kind = gt === 'AND' ? 'An AND gate' : 'A ' + gt + ' gate (in the AND family)';
+                    blocks.push(P(gid + '-is', kind + ' in the fault tree "' + x.tree + '": it fails only when all of its inputs fail, here ' + listJoin(quoted(x.inputs)) + '.' + (fcs.length > 1 ? ' It serves ' + listJoin(fcs.map(fcHead)) + '.' : ''), gq));
+                    if (kg && kg.tests.length) {
+                        // tests that read the same (the same gate tested in the system tree and in the aircraft tree) are said once
+                        var tg = [], tby = {};
+                        kg.tests.forEach(function (t) { if (!t.words) return; var w = t.words.text; if (!tby[w]) { tby[w] = { w: w, fcs: [] }; tg.push(tby[w]); } fcs.filter(function (z) { return t.fcs.indexOf(z.id) >= 0; }).forEach(function (z) { if (tby[w].fcs.indexOf(z) < 0) tby[w].fcs.push(z); }); });
+                        tg.forEach(function (x2, ti) { blocks.push(P(gid + '-t' + ti, 'The budget test' + (x2.fcs.length > 1 ? 's' : '') + ' for ' + (x2.fcs.length ? listJoin(x2.fcs.map(function (z) { return z.id + (z.name ? ' ' + z.name : ''); })) : 'its failure condition') + (x2.fcs.length > 1 ? ' give the same result' : '') + ': ' + x2.w, null, { derived: true })); });
+                    }
+                    else blocks.push(P(gid + '-t', 'This gate is not critical: the failure condition stays inside its budget without this independence.', null, { derived: true }));
+                    var dals = ((x.node && (x.node.children || x.node._children)) || []).map(function (k) { return { n: T(k.name || k.displayId || k.id), d: S(k.allocatedDAL || '') }; }).filter(function (k) { return k.d; });
+                    if (dals.length >= 2 && dals.some(function (k) { return k.d !== dals[0].d; })) blocks.push(P(gid + '-dal', 'The DAL assignment gives ' + listJoin(dals.map(function (k) { return '"' + k.n + '" DAL ' + k.d; })) + '. The lower DALs rest on this independence: until it is shown, they are not substantiated.', null, { derived: true }));
+                    var fig = treeFigure(r, x, gid, opts); if (fig) blocks.push(fig);
+                });
+            });
         } else blocks.push(P(anchor + '-gates', 'No AND gate is named for this claim yet, so nothing in the fault trees rests on it.', gq));
-        // the claim
-        var claim = T(f ? f.claim : r.claim);
-        blocks.push(P(anchor + '-claim', claim ? 'The claim: ' + claim + (/[.!?]$/.test(claim) ? '' : '.') : 'The claim has not been written yet.', cq));
-        // the common modes checked
-        var cats = catList(), ans = (f && f.answers) || {};
-        blocks.push(P(anchor + '-modes', f ? 'Each common mode category was put to the inputs: could it fail more than one of them at once?' : 'This claim was recorded before the common mode questionnaire was used, so the categories have not been put to its inputs yet: could each one fail more than one of them at once?', null));
-        blocks.push({ type: 'table', id: anchor + '-modes-t', q: null, lead: '{N} gives the answer and the reason for each category.', caption: T('Common modes checked for ' + (r.cmaId || 'this claim')), columns: ['Group', 'Category', 'Answer', 'Why'],
-            rows: cats.map(function (c) { var a = ans[c.id] || {}; return { q: qid(r, 'cat', c.id), cells: [c.group === 'Development / design' ? 'Development and design' : c.group, c.name, a.a ? ANSWER_WORD[a.a] : 'Not answered yet', a.a ? (T(a.why) || 'No reason written yet') : ''] }; }) });
+        // the common modes: every category, with its answer, the reason and where the answer comes from
+        var cats = catList(), anyAuto = cats.some(function (cc) { var e = effAnswer(r, cc.id); return e && e.auto; });
+        blocks.push({ type: 'part', id: anchor + '-modes-h', text: 'Common modes checked', level: 1 });
+        blocks.push(P(anchor + '-modes', 'Each common mode category was put to the inputs: could it fail more than one of them at once?' + (anyAuto ? ' Where the project data settles the answer (the fault trees, the item list, where the CAD model places each item, the particular risk assessments and the routing), it is written from that data and names it; the engineer can put another answer in its place.' : '') + (!f && !r._virtual ? ' This claim was recorded before the common mode questionnaire was used, so the categories the data does not settle have not been answered yet.' : ''), null));
+        blocks.push({ type: 'table', id: anchor + '-modes-t', q: null, lead: '{N} gives the answer, the reason and where it comes from for each category.', caption: T('Common modes checked for ' + (r.cmaId || 'this claim')), columns: ['Group', 'Category', 'Answer', 'Why', 'Where the answer comes from'],
+            rows: cats.map(function (cc) { var a = effAnswer(r, cc.id); return { q: qid(r, 'cat', cc.id), cells: [groupWord(cc.group), cc.name, a ? ANSWER_WORD[a.a] : 'Not answered yet', a ? (T(a.why) || 'No reason written yet') : '', a ? a.source : 'To be answered by the engineer'] }; }) });
+        // what the data cannot settle: written by the engineer, or drafted with the AI and accepted
+        var og = openGroups(r);
+        if (og.length) {
+            blocks.push({ type: 'part', id: anchor + '-judge-h', text: 'What the project data cannot settle', level: 1 });
+            blocks.push(P(anchor + '-judge', 'These categories rest on how the inputs are designed, made, installed, maintained and operated, which the project data does not record: ' + listJoin(og.map(function (o) { return lcFirst(groupWord(o.group)); })) + '. Each is answered by the engineer, written by hand or drafted with the AI and accepted, and goes into the table above when it is.', null));
+            blocks.push({ type: 'html', id: anchor + '-judge-box', group: 'all', cma: r.internalId, cats: [].concat.apply([], og.map(function (o) { return o.cats.map(function (x) { return x.id; }); })) });
+        }
         // the concerns, their evidence and mitigations, and how each is closed
-        var concerns = (f && f.concerns) || [];
+        var concerns = (f && f.concerns) || [], ans = (f && f.answers) || {};
         if (f) {
             if (!concerns.length) blocks.push(P(anchor + '-concerns', Object.keys(ans).length ? 'No common mode concern was raised for these inputs.' : 'No concern has been raised yet.', null));
             else {
                 blocks.push(P(anchor + '-concerns', 'The concerns raised, what they do to the claim, and how each is closed:', null));
                 concerns.forEach(function (cc) {
                     var catId = Object.keys(ans).find(function (k) { return ans[k].concernId === cc.id; }) || '', q = qid(r, 'concern', cc.id), qs = catId ? [q, qid(r, 'cat', catId)] : [q];
-                    var from = cc.from === 'live detection' ? ' Found live in the fault trees.' : cc.from === 'added by hand' ? ' Added by hand.' : '';
+                    var from = cc.from === 'live detection' ? ' Found live in the fault trees.' : cc.from === 'added by hand' ? ' Added by hand.' : cc.from === 'project data' ? ' Found in the project data.' : '';
                     blocks.push(P(anchor + '-c-' + slug(cc.id), cc.id + ', ' + T(cc.text) + (/[.!?]$/.test(T(cc.text)) ? '' : '.') + (cc.effect ? ' Effect on the claim: ' + T(cc.effect) + (/[.!?]$/.test(T(cc.effect)) ? '' : '.') : '') + from, catId ? qid(r, 'cat', catId) : q, { qs: qs, concern: cc.id }));
                     blocks.push(P(anchor + '-c-' + slug(cc.id) + '-close', closeWords(r, cc), q, { qs: [q], concern: cc.id }));
                 });
                 var reqs = concerns.filter(function (cc) { return cc.raise && S(cc.reqText).trim(); });
                 if (reqs.length) blocks.push({ type: 'list', id: anchor + '-reqs', q: null, caption: 'Requirements raised from this analysis', items: reqs.map(function (cc) { var rq = raisedReq(r, cc); return { q: qid(r, 'concern', cc.id), text: T(rq ? rq.id + ' ' + rq.text : T(cc.reqText) + ' (waiting to be accepted on the requirements page)') }; }) });
             }
+        } else if (r._virtual) {
+            var found = cats.filter(function (cc) { var e = effAnswer(r, cc.id); return e && e.a === 'concern'; });
+            if (found.length) {
+                blocks.push(P(anchor + '-concerns', 'The project data shows these shared causes. Each becomes a concern of the CMA when its record is made, and is closed by a requirement, by evidence or by a written reason to accept it:', null));
+                blocks.push({ type: 'list', id: anchor + '-found', q: null, caption: 'Concerns found in the project data', items: found.map(function (cc) { return { q: qid(r, 'cat', cc.id), text: T(cc.name + ': ' + effAnswer(r, cc.id).why) }; }) });
+            } else blocks.push(P(anchor + '-concerns', 'The project data shows no shared cause between these inputs.', null));
         } else {
             // an entry logged before the four steps: what it recorded, as it recorded it
             if (T(r.findings)) blocks.push(P(anchor + '-findings', 'Recorded findings: ' + T(r.findings) + (/[.!?]$/.test(T(r.findings)) ? '' : '.'), null, { field: 'findings' }));
@@ -470,7 +623,7 @@
         // the status, in words
         var st = statusOf(r);
         blocks.push(P(anchor + '-status', statusWords(r), null, { derived: true, state: st.state }));
-        return { id: anchor, anchor: anchor, cma: r.internalId, cmaId: S(r.cmaId), title: T((r.cmaId ? r.cmaId + ' ' : '') + (r.subject || 'Independence claim')), state: st.state, stateWord: st.word, critical: isCritical(r), blocks: blocks };
+        return { id: anchor, anchor: anchor, cma: r.internalId, cmaId: S(r.cmaId), claimKey: c ? c.key : '', virtual: !!r._virtual, title: T((r.cmaId ? r.cmaId + ' ' : '') + (r.subject || 'Independence claim')), state: st.state, stateWord: st.word, critical: isCritical(r), blocks: blocks };
     }
     function reportSections(opts) { return claims().map(function (r) { return sectionFor(r, opts || {}); }); }
     // the opening of the report: what the analysis is and how it was done (no counts, no status)
@@ -520,7 +673,7 @@
         claims().forEach(function (r) {
             var qs = questionsFor(r).map(function (q) { return q.id; });
             qs.forEach(function (id) { if (/\/concern\//.test(id)) { allConcern.push(id); var c = question(id); if (c && c.picked[0] === 'req') allReq.push(id); } });
-            var gs = gatesOf(r).map(gateInfo);
+            var gs = cgates(r).map(gateInfo);
             out.push({ id: 'cma.claim.' + S(r.internalId), cma: r.internalId, what: T('Independence ' + (gs.length ? 'at ' + listJoin(gs.map(function (x) { return x.id; })) : 'claimed') + ' substantiated (' + (r.cmaId ? r.cmaId + ' ' : '') + (r.subject || '') + ')'), to: ['The DAL assignment', 'The system safety assessments (SSA)'],
                 accept: 'Every common mode category answered with its reason, every concern mitigated or accepted, reviewed and signed by the safety reviewer.', qids: qs });
         });
@@ -599,12 +752,14 @@
         if (S(values.references).trim()) r.references = S(values.references).trim();
         if (S(values.summary).trim()) r.flow.summary = S(values.summary).trim();
         F().sync(r);
+        forget(); refreshAuto(r);
         changed('cma/' + S(r.internalId)); return { ok: true, row: r };
     }
     function saveEdit(iid, values) {
         values = values || {};
         var r = rowById(iid); if (!r) return no('No such CMA.');
         if (values.subject != null && !S(values.subject).trim()) return no('Say what this analysis is about.');
+        if (r._virtual) { r = materialize(r); if (!r) return no('That claim could not be recorded.'); }
         var c = clash({ gates: values.gates || [], subject: values.subject != null ? values.subject : '' }, r); if (c) return Object.assign(no(c.why), { existing: c.existing && c.existing.internalId });
         ensureFlow(r);
         if (values.subject != null) r.subject = S(values.subject).trim();
@@ -619,7 +774,7 @@
         if (values.level != null) applyLevel(r, values.level);
         if (values.references != null) r.references = S(values.references).trim();
         if (values.summary != null) r.flow.summary = S(values.summary).trim();
-        F().sync(r);
+        F().sync(r); forget(); refreshAuto(r);
         try { if (typeof propagateDalAllRoots === 'function') propagateDalAllRoots(); } catch (_) {}   // eslint-disable-line no-undef
         changed('cma/' + S(r.internalId)); return { ok: true, row: r };
     }
@@ -641,7 +796,8 @@
         + '.cmq-gapt{font-size:12px;font-weight:600;color:#9A3412}.cmq-err{font-size:12.5px;font-weight:600;color:#B42318;margin-top:6px}'
         + 'body.theme-dark .cmq{color:#E8EAED}body.theme-dark .cmq-claim,body.theme-dark .cmq-q,body.theme-dark .cmq-opt,body.theme-dark .cmq textarea,body.theme-dark .cmq input[type=text],body.theme-dark .cmq-btn{background:#1E232B !important;color:#E8EAED !important;border-color:#3A414C}'
         + 'body.theme-dark .cmq-claim.on,body.theme-dark .cmq-opt.on{background:rgba(106,166,255,.10) !important;border-color:#6AA6FF}body.theme-dark .cmq-opt.on .cmq-mk{border-color:#6AA6FF;background:#6AA6FF;box-shadow:inset 0 0 0 2.5px #15181E}body.theme-dark .cmq-mk{border-color:#9AA1AD}'
-        + 'body.theme-dark .cmq-gapt{color:#FFB37A}body.theme-dark .cmq-err{color:#FF8A80}body.theme-dark .cmq-btn.p{background:#1A6EF2 !important;color:#fff !important}';
+        + '.cmj-gh{font-weight:700;font-size:12.5px;margin:12px 0 2px;text-transform:none}.cmj-cat{margin:6px 0 10px}.cmj-cn{font-weight:600;font-size:13px}.cmj-ci{font-size:12.5px;margin:2px 0 4px}.cmj-opts{display:flex;gap:14px;flex-wrap:wrap;font-size:13px}.cmj textarea{font:inherit;font-size:13px;padding:6px 8px;border-radius:7px;border:1px solid var(--color-border-strong,#c7cbd1);width:100%;box-sizing:border-box;margin-top:4px;background:var(--color-surface-1,#fff);color:inherit}'
+        + 'body.theme-dark .cmj textarea{background:#1E232B !important;color:#E8EAED !important;border-color:#3A414C}body.theme-dark .cmq-gapt{color:#FFB37A}body.theme-dark .cmq-err{color:#FF8A80}body.theme-dark .cmq-btn.p{background:#1A6EF2 !important;color:#fff !important}';
     function style() { var d = root.document; if (!d || d.getElementById('cmq-css')) return; var s = d.createElement('style'); s.id = 'cmq-css'; s.textContent = CSS; (d.head || d.documentElement).appendChild(s); }
     var _ui = { showAll: {}, err: {} };
     function jsq(s) { return E(S(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'")); }
@@ -694,7 +850,7 @@
         _ui.sel = r ? r.internalId : null; return r;
     }
     function select(iid) { var r = rowById(iid); if (!r) return false; _ui.sel = r.internalId; var R = frame(); if (R && document.getElementById('ccr-host-cma')) R.answered('sec:' + anchorOf(r)); if (_host) redraw(); return true; }
-    var PILL = { closed: 'ok', substantiated: 'ok', progress: 'open', open: 'todo', earlier: 'todo', reopened: 'open' };
+    var PILL = { closed: 'ok', substantiated: 'ok', progress: 'open', open: 'todo', earlier: 'todo', reopened: 'open', 'new': 'todo' };
     // v1.2 (9 Nov 2026): one CMA report per system and one at the aircraft level (Waqas: "CMAs should be per system and 1 at
     // the aircraft level"; "they get a drop down on which CMA wanna work on Aircraft or which system, and that only shows the
     // analysis for that particular system"). A claim belongs where its gates sit: all in one system's trees -> that system;
@@ -702,8 +858,7 @@
     function pageOfKey(k) { k = S(k); var pid = k.slice(0, k.lastIndexOf(':')); return arr('ftaPages').find(function (q) { return q && S(q.id) === pid; }) || null; }
     function levelOfKey(k) { var pg = pageOfKey(k); return pg && pg.treeLevel === 'system' && pg.systemId ? 'sys:' + S(pg.systemId) : 'aircraft'; }
     function levelOf(r) {
-        var ls = {}; gatesOf(r).forEach(function (k) { ls[levelOfKey(k)] = 1; });
-        var L = Object.keys(ls); return L.length === 1 ? L[0] : 'aircraft';
+        return levelOfKeys(cgates(r));
     }
     function sysCode(sy, used) {
         var c = S(sy.code || sy.abbr || sy.shortName || '').replace(/[^A-Za-z0-9-]/g, '').toUpperCase();
@@ -735,7 +890,125 @@
         return '<div class="cmq" data-cmq-left="1">' + picker + startHtml + '</div>' + body;
     }
 
+    // ---- v1.4: what the data cannot settle, answered by the engineer: "Write it myself" or "Draft with AI" per group ----------
+    // A draft is kept in projectConfig.ccaReports.cma.judge[claimKey][group] = { lines: [{ cat, a, why }], at, model, flags }
+    // and enters nothing until the engineer accepts it; accepting answers each category through answer() (which makes the
+    // CMA record the first time) with src 'ai', so the report names it "AI draft accepted by the engineer".
+    var A_WORD = { no: 'No', concern: 'Concern', na: 'Does not apply' };
+    function jStore(write) { var s0 = store(); if (!s0.judge || typeof s0.judge !== 'object') { if (!write) return {}; s0.judge = {}; } return s0.judge; }
+    function jDraft(ck, grp) { var m = jStore(false)[ck]; return m && m[grp] ? m[grp] : null; }
+    function jKey(ck, grp) { return ck + '|' + grp; }
+    function judgeHtml(b) {
+        var r = rowById(b.cma); if (!r) return '';
+        var c = claimFor(r); if (!c) return '';
+        var grp = b.group, k = jKey(c.key, grp), cats = catList().filter(function (x) { return b.cats.indexOf(x.id) >= 0; });
+        var btn = function (fn, label, extra) { return '<button type="button" class="slap-btn" data-cmj="' + E(fn) + '" onclick="SLCmaAuto.ui.' + fn + '(\'' + jsq(r.internalId) + '\',\'' + jsq(grp) + '\', this)"' + (extra || '') + '>' + E(label) + '</button>'; };
+        var h = '<div class="ccr-auth cmj" data-cmj-box="' + E(k) + '"><div class="ccr-authh">' + E(grp === 'all' ? 'Answers the engineer gives for this claim' : groupWord(grp)) + '</div>';
+        var lastG = null, gHead = function (x) { if (x.group === lastG) return ''; lastG = x.group; return '<div class="cmj-gh">' + E(groupWord(x.group)) + '</div>'; };
+        var d = jDraft(c.key, grp), seed = _ui.jSeed && _ui.jSeed.k === k ? _ui.jSeed.lines : null;
+        if (_ui.jEdit === k) {
+            h += cats.map(function (x) {
+                var sv = seed ? seed.find(function (l) { return l.cat === x.id; }) : null, a0 = sv ? sv.a : '';
+                return gHead(x) + '<div class="cmj-cat" data-cmj-cat="' + E(x.id) + '"><div class="cmj-cn">' + E(x.name) + '</div><div class="cmj-ci">' + E(x.intro) + '</div><div class="cmj-opts">'
+                    + ['no', 'concern', 'na'].map(function (a) { return '<label><input type="radio" name="cmj-' + E(k + '-' + x.id) + '" value="' + a + '"' + (a0 === a ? ' checked' : '') + '> ' + E(A_WORD[a]) + '</label>'; }).join('')
+                    + '</div><textarea rows="2" data-cmj-why="1" placeholder="Why (it goes into the report as written)">' + E(sv ? sv.why : '') + '</textarea></div>';
+            }).join('') + (_ui.jErr && _ui.jErr[k] ? '<div class="cmq-err">' + E(_ui.jErr[k]) + '</div>' : '') + '<div class="ccr-authbar">' + btn('judgeSave', 'Save') + btn('judgeCancel', 'Cancel') + '</div>';
+        } else if (d) {
+            h += '<div class="ccr-authdraft" data-cmj-draft="' + E(k) + '"><div class="ccr-authh">AI draft: not in the analysis until you accept it</div>'
+                + d.lines.map(function (l) { var x = cats.find(function (y) { return y.id === l.cat; }) || { name: l.cat }; return gHead(x) + '<div class="ccr-authdt"><b>' + E(x.name) + ': ' + E(A_WORD[l.a] || l.a) + '.</b> ' + E(l.why) + '</div>'; }).join('')
+                + '<div class="ccr-authwhy"><b>What it rests on:</b> the gates and their inputs, the items realizing them with their type, DAL and description, where the CAD model places them, and the answers the project data already gives for this claim.</div>'
+                + (d.flags && d.flags.length ? '<div class="ccr-authflag"><b>Check before accepting:</b> ' + d.flags.map(E).join('; ') + '</div>' : '')
+                + '<div class="ccr-authbar">' + btn('judgeAccept', 'Accept') + btn('judgeAcceptEdit', 'Edit, then accept') + btn('judgeDiscard', 'Discard') + '</div></div>';
+        } else {
+            h += '<div class="ccr-authbar">' + (_ui.jBusy === k ? '<button type="button" class="slap-btn slab-ai-stop" data-cmj="stop" onclick="try{window.slabAiStop&&window.slabAiStop()}catch(_){}">&#9632; Stop</button><span class="ccr-authwait">Drafting with the AI...</span>'
+                : btn('judgeWrite', 'Write it myself') + btn('judgeAi', 'Draft with AI')) + '</div>'
+                + '<div class="ccr-authhint">Still to answer: ' + E(listJoin(cats.map(function (x) { return lcFirst(x.name); }))) + '.</div>'
+                + (_ui.jErr && _ui.jErr[k] ? '<div class="cmq-err">' + E(_ui.jErr[k]) + '</div>' : '');
+        }
+        return h + '</div>';
+    }
+    function jRedraw() { var R = frame(); if (R && root.document && root.document.getElementById('ccr-host-cma')) R.render(); if (_host) redraw(); }
+    // answers several categories of one claim; the record is made by the first one; returns { ok, why?, row }
+    function answerMany(r, lines, src) {
+        var cur = r, done = 0;
+        for (var i = 0; i < lines.length; i++) {
+            var l = lines[i], res = answer(qid(cur, 'cat', l.cat), l.a, { why: l.why, src: src || undefined });
+            if (!res.ok) return { ok: false, why: res.why, done: done };
+            if (res.row) cur = rowById(res.row) || cur;
+            done++;
+        }
+        return { ok: true, row: cur ? cur.internalId : null, done: done };
+    }
+    // the AI draft for one group: grounded in the claim's facts and the answers the data already gives
+    async function judgeDraft(iid, grp) {
+        var r = rowById(iid); if (!r) throw new Error('That claim is no longer in the project.');
+        var c = claimFor(r), AI = root.SafetyLabAI, RA = root.SLReportAI;
+        if (!AI || typeof AI.complete !== 'function' || !RA) throw new Error('The AI is not set up in this project. Write these answers yourself, or set the AI up in Settings.');
+        var ogs = openGroups(r).filter(function (o) { return grp === 'all' || o.group === grp; });
+        var og = { cats: [].concat.apply([], ogs.map(function (o) { return o.cats; })) }; if (!og.cats.length) throw new Error('Every category is already answered.');
+        var purpose = 'For each common mode category listed, say whether it could fail more than one of the inputs at once: No, Concern or Does not apply, with one or two sentences of why that rest only on the facts given. Where the facts do not settle it, answer Concern and say what must be shown. Write exactly one line per category: <category id> | <No, Concern or Does not apply> | <why>.';
+        var system = RA.systemPrompt('CMA', { name: 'Common Mode Analysis' }, { heading: 'Common modes the project data cannot settle', prose: purpose });
+        var settled = catList().map(function (x) { var e = effAnswer(r, x.id); return e ? x.name + ': ' + A_WORD[e.a] + ', ' + e.why : ''; }).filter(Boolean);
+        var msg = 'Independence claim: ' + (T(r.flow ? r.flow.claim : r.claim) || draftClaim(r)) + '\n\nThe gates and their inputs:\n' + (safe(function () { return K().facts(cgates(r)); }, []) || []).join('\n')
+            + '\n\nAnswers already settled for this claim:\n' + (settled.join('\n') || 'None.') + '\n\nCategories to answer:\n' + og.cats.map(function (x) { return x.id + ' | ' + x.name + ': ' + x.intro; }).join('\n');
+        var res = await AI.complete({ feature: 'report.section.draft', system: system, messages: [{ role: 'user', content: msg }], maxTokens: 3200 });
+        var text = S((res && (res.text || (res.raw && res.raw.content && res.raw.content[0] && res.raw.content[0].text))) || '').trim();
+        var want = og.cats.map(function (x) { return x.id; }), lines = [];
+        text.split(/\n+/).forEach(function (ln) {
+            var m = /^\s*[-*]?\s*([a-z]{2}-[a-z0-9-]+)\s*\|\s*(no|concern|does not apply|n\/a)\s*\|\s*(.+?)\s*$/i.exec(ln); if (!m) return;
+            var cat = m[1].toLowerCase(); if (want.indexOf(cat) < 0 || lines.some(function (l) { return l.cat === cat; })) return;
+            var w = m[2].toLowerCase(); lines.push({ cat: cat, a: w === 'no' ? 'no' : w === 'concern' ? 'concern' : 'na', why: T(m[3]) });
+        });
+        if (!lines.length) throw new Error('The AI draft did not answer the categories in the expected form. Try again, or write them yourself.');
+        var flags = []; try { flags = (RA.guard(lines.map(function (l) { return l.why; }).join(' '), {}) || []).map(function (x) { return S(x.why || x.token || x); }); } catch (_) {}
+        var missing = want.filter(function (id) { return !lines.some(function (l) { return l.cat === id; }); });
+        if (missing.length) flags.push('The draft leaves out ' + listJoin(missing.map(function (id) { return catPlain(id).name; })) + ': answer those yourself.');
+        var m0 = jStore(true); if (!m0[c.key] || typeof m0[c.key] !== 'object') m0[c.key] = {};
+        m0[c.key][grp] = { lines: lines, at: now(), model: (res && res.model) || '', flags: flags };
+        save();
+        return m0[c.key][grp];
+    }
+    function jDrop(ck, grp) { var m = jStore(false)[ck]; if (m && m[grp]) { delete m[grp]; if (!Object.keys(m).length) delete jStore(false)[ck]; save(); } }
+
     var ui = {
+        judgeWrite: function (iid, grp) { var c = claimFor(rowById(iid)); if (!c) return; _ui.jEdit = jKey(c.key, grp); _ui.jSeed = null; if (_ui.jErr) delete _ui.jErr[_ui.jEdit]; jRedraw(); },
+        judgeCancel: function () { _ui.jEdit = null; _ui.jSeed = null; jRedraw(); },
+        judgeSave: function (iid, grp, btn) {
+            var r = rowById(iid), c = claimFor(r); if (!c) return { ok: false };
+            var k = jKey(c.key, grp), box = btn && btn.closest ? btn.closest('[data-cmj-box]') : null, lines = [], err = null;
+            if (!_ui.jErr) _ui.jErr = {};
+            if (box) Array.prototype.forEach.call(box.querySelectorAll('[data-cmj-cat]'), function (el) {
+                var cat = el.getAttribute('data-cmj-cat'), on = el.querySelector('input[type=radio]:checked'), why = S((el.querySelector('[data-cmj-why]') || {}).value).trim();
+                if (!on && !why) return;
+                if (!on) { err = err || 'Pick No, Concern or Does not apply for ' + catPlain(cat).name + '.'; return; }
+                if (!why) { err = err || 'Write why for ' + catPlain(cat).name + '.'; return; }
+                lines.push({ cat: cat, a: on.value, why: why });
+            });
+            if (!err && !lines.length) err = 'Answer at least one category, or Cancel.';
+            if (err) { _ui.jErr[k] = err; jRedraw(); return { ok: false, why: err }; }
+            var src = _ui.jSeed && _ui.jSeed.k === k ? 'ai' : null;
+            var res = answerMany(r, lines, src);
+            if (!res.ok) { _ui.jErr[k] = res.why; jRedraw(); return res; }
+            delete _ui.jErr[k]; _ui.jEdit = null; _ui.jSeed = null; if (src) jDrop(c.key, grp);
+            if (res.row) _ui.sel = res.row;
+            jRedraw(); return res;
+        },
+        judgeAi: function (iid, grp) {
+            var c = claimFor(rowById(iid)); if (!c) return Promise.resolve(null);
+            var k = jKey(c.key, grp); if (!_ui.jErr) _ui.jErr = {}; delete _ui.jErr[k];
+            _ui.jBusy = k; jRedraw();
+            return judgeDraft(iid, grp).then(function (d) { _ui.jBusy = null; jRedraw(); return d; }, function (e) { _ui.jBusy = null; _ui.jErr[k] = (e && e.message) || String(e); jRedraw(); return null; });
+        },
+        judgeAccept: function (iid, grp) {
+            var r = rowById(iid), c = claimFor(r); if (!c) return { ok: false };
+            var d = jDraft(c.key, grp); if (!d) return { ok: false, why: 'No draft to accept.' };
+            var res = answerMany(r, d.lines, 'ai'), k = jKey(c.key, grp);
+            if (!_ui.jErr) _ui.jErr = {};
+            if (!res.ok) { _ui.jErr[k] = res.why; jRedraw(); return res; }
+            jDrop(c.key, grp); if (res.row) _ui.sel = res.row; jRedraw(); return res;
+        },
+        judgeAcceptEdit: function (iid, grp) { var c = claimFor(rowById(iid)); if (!c) return; var d = jDraft(c.key, grp); var k = jKey(c.key, grp); _ui.jEdit = k; _ui.jSeed = { k: k, lines: d ? d.lines.slice() : [] }; jRedraw(); },
+        judgeDiscard: function (iid, grp) { var c = claimFor(rowById(iid)); if (!c) return; jDrop(c.key, grp); jRedraw(); },
         select: function (iid) { return select(iid); },
         pick: function (id, opt) {
             var q = question(id); if (!q) return; delete _ui.err[id];
@@ -769,7 +1042,9 @@
         if (b.type === 'table') return [{ k: 'table', name: b.id, title: b.caption, lead: b.lead, q: b.q || undefined, rowQ: b.rows.map(function (rw) { return rw.q || ''; }),
             rows: b.rows.map(function (rw) { var o = {}; b.columns.forEach(function (c, i) { o[c] = S(rw.cells[i]); }); return o; }) }];
         if (b.type === 'figure') return [{ k: 'fig', name: b.id, title: b.caption, lead: b.lead, svg: b.svg, w: b.w, h: b.h }];
-        if (b.type === 'list') return [{ k: 'part', text: b.caption }].concat(b.items.map(function (it) { return { k: 'p', text: it.text, q: it.q || undefined }; }));
+        if (b.type === 'list') return [{ k: 'part', text: b.caption, level: 2 }].concat(b.items.map(function (it) { return { k: 'p', text: it.text, q: it.q || undefined }; }));
+        if (b.type === 'part') return [{ k: 'part', text: b.text, level: b.level === 2 ? 2 : undefined }];
+        if (b.type === 'html') return [{ k: 'html', html: judgeHtml(b) }];
         return [];
     }
     function frameSections(ctx) {
@@ -780,7 +1055,7 @@
     function nodePanel(id) {
         if (!_nodes[id]) frameSections({});
         var n = _nodes[id]; if (!n) return { title: id };
-        var does = { gate: 'An AND gate: it fails only when all its inputs fail, so this CMA must show the inputs share no single cause.', input: 'An input of the gate, claimed to fail on its own.', concern: 'The concerns still open in this CMA. Each defeats or holds back the claim until it is closed.' }[n.kind] || '';
+        var does = { gate: 'The critical AND gate: it fails only when all its inputs fail, so this CMA must show the inputs share no single cause.', input: 'An input of the gate, claimed to fail on its own.', concern: 'The concerns still open in this CMA. Each defeats or holds back the claim until it is closed.', path: 'On the path from the top event down to the critical gate.', ctx: 'Another input beside the path to the critical gate, shown for context.', below: 'Part of what makes up an input claimed independent.' }[n.kind] || '';
         return { title: n.label, does: does, inputs: n.inputs, outputs: (n.outputs || []).map(function (w) { return { what: w, accept: n.accept }; }), tab: n.kind === 'concern' ? '' : 'fta' };
     }
     function nodeLive(id) { if (!_nodes[id]) frameSections({}); var n = _nodes[id]; var r = n && rowById(n.cma); return r ? S(r.cmaId) + ': ' + lcFirst(statusOf(r).word) : ''; }
@@ -885,7 +1160,7 @@
         questions: questions, question: question, answer: answer, setWhy: setWhy, toggleGate: toggleGate, subscribe: subscribe,
         claims: claims, statusOf: statusOf, statusWords: statusWords, draftClaim: draftClaim, ownerOf: ownerOf, gateInfo: gateInfo, categoriesPlain: catList,
         reportSections: reportSections, reportIntro: reportIntro, reportIO: reportIO, reportOutputs: reportOutputs, blocksFor: blocksFor,
-        acceptance: acceptance, acceptOutput: acceptOutput, unacceptOutput: unacceptOutput,
+        acceptance: acceptance, acceptOutput: acceptOutput, unacceptOutput: unacceptOutput, claimList: claimList, materialize: materialize, refreshAuto: refreshAuto, effAnswer: effAnswer, openGroups: openGroups, judgeDraft: judgeDraft, answerMany: answerMany,
         editFields: editFields, addCma: addCma, saveEdit: saveEdit,
         questionsHtml: questionsHtml, leftHtml: leftHtml, mount: mount, redraw: redraw, ui: ui, forget: forget,
         selected: function () { var r = selected(); return r ? r.internalId : null; }, select: select, anchorOf: anchorOf, frame: frame, defineFrame: defineFrame, node: nodePanel };

@@ -1,4 +1,8 @@
-// cca_report.js (SLCcaReport v1.7, 9 Nov 2026; v1.6 9 Nov 2026; v1.5 9 Nov 2026; v1.4 9 Nov 2026; v1.3 9 Nov 2026; v1.2 8 Nov 2026): the shared report frame of the PRA, ZSA and CMA Autopilots.
+// cca_report.js (SLCcaReport v1.8, 10 Nov 2026; v1.7 9 Nov 2026; v1.6 9 Nov 2026; v1.5 9 Nov 2026; v1.4 9 Nov 2026; v1.3 9 Nov 2026; v1.2 8 Nov 2026): the shared report frame of the PRA, ZSA and CMA Autopilots.
+// v1.8 (10 Nov 2026): Waqas: "we also need to fix how we are not using the full width of the page for the text", for all the
+// reports. Paragraphs, leads, lists, captions and the written parts now run the full width of the document column, the
+// same width as the tables (the 78ch and 980px caps are gone). A section may carry { k:'html', html } (preview only, never in
+// Word or print): the CMA uses it for its "Write it myself" / "Draft with AI" boxes on the categories the data cannot settle.
 // v1.4 (9 Nov 2026, the PRA tells the whole story): Waqas: "where we have multiple impact zones, we should have 1 image per
 // cone like in the rotor burst PRA 1 per engine and the cones be different distinct colors"; "yeah needs to look clean and
 // legible". A section can place a picture where its story needs it ({ k:'shotslot', view, fallback }); a view SLCadShots
@@ -56,6 +60,7 @@
 //                         { k:'fig', name, title, svg, w, h, lead }   standalone svg; use ctx.C colors; boxes made
 //                                                       with SLCcaReport.nodeG(key, id, inner) are clickable
 //                         { k:'act', label, onclick }   a button in the preview only (never in Word or print)
+//                         { k:'html', html }            (v1.8) the module's own markup, in the preview only (never in Word or print)
 //                         { k:'part', text, level: 2 }  (v1.4) a smaller heading one level down inside a part
 //                         { k:'shotslot', view, fallback }   (v1.4) the 3D picture spec.shots offers as view id 'view', placed
 //                                                       here when it is ticked (and nowhere else); when the 3D model cannot
@@ -109,7 +114,7 @@
 // text (live counts appear only in the panel when asked), plain words, no em dashes.
 (function (root) {
     'use strict';
-    var VERSION = '1.7';   // 1.7 9 Nov 2026: column diagrams with squared connectors in their own lanes, never through a box, lit on hover (flow);   // 1.6 9 Nov 2026: the parts the engineer writes (spec.authored): write it or draft it with the AI, accepted by a person;   // 1.5 9 Nov 2026: every subject its own report, picked from one dropdown, with a register (spec.reports)   // 1.4 9 Nov 2026: pictures placed in the story (shotslot), per-source pictures ticked by default; 1.3: 3D model pictures (spec.shots)
+    var VERSION = '1.8';   // 1.8 10 Nov 2026: text the full width of the document column; { k:'html' } preview-only blocks;   // 1.7 9 Nov 2026: column diagrams with squared connectors in their own lanes, never through a box, lit on hover (flow);   // 1.6 9 Nov 2026: the parts the engineer writes (spec.authored): write it or draft it with the AI, accepted by a person;   // 1.5 9 Nov 2026: every subject its own report, picked from one dropdown, with a register (spec.reports)   // 1.4 9 Nov 2026: pictures placed in the story (shotslot), per-source pictures ticked by default; 1.3: 3D model pictures (spec.shots)
     function E(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
     function J(v) { return E(JSON.stringify(v)); }
     function g(name) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(name); if (v !== undefined) return v; } } catch (_) {} try { return root[name]; } catch (_) { return undefined; } }
@@ -580,6 +585,7 @@
                 }
                 if (b.k === 'part') { out += '<h4 class="ccr-part' + (b.level === 2 ? ' l2' : '') + '">' + E(b.text) + '</h4>'; return; }
                 if (b.k === 'p') { out += '<p' + (b.q ? ' data-ccq="' + E(b.q) + '"' : '') + (/^Not decided yet|^To be decided/.test(b.text) ? ' class="ccr-tbd"' : '') + '>' + E(b.text).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>') + '</p>'; return; }
+                if (b.k === 'html') { if (forPage) out += '<div class="ccr-html" data-cc-html="1">' + (b.html || '') + '</div>'; return; }
                 if (b.k === 'act') { if (forPage) out += '<div class="ccr-act"><button type="button" class="slap-btn" data-cc-act="1" onclick="' + E(b.onclick) + '">' + E(b.label) + '</button></div>'; return; }
                 if (b.k === 'fig') { out += '<div class="ccr-fig" data-cc-a="f' + b.n + '">' + b.svg + '</div><div class="ccr-cap">' + E(b.caption) + '</div>'; return; }
                 if (b.k === 'shot') { out += '<div class="ccr-fig ccr-shotfig" data-cc-a="f' + b.n + '" data-ccshotfig="' + E(b.shotOf || '') + '"' + (b.color ? ' data-ccshotcolor="' + E(b.color) + '"' : '') + '><img alt="' + E(b.title) + '" src="' + b.png + '" width="' + b.w + '" height="' + b.h + '"></div><div class="ccr-cap">' + (b.color ? '<i class="ccr-swatch" style="background:' + E(b.color) + '"></i>' : '') + E(b.caption) + (b.colors && b.colors.length ? '<div class="ccr-legend" data-cc-legend="1">' + b.colors.map(function (c) { return '<span><i class="ccr-swatch" style="background:' + E(c.hex) + '"></i>' + E(c.label) + ' (' + E(c.name) + ')</span>'; }).join('') + '</div>' : '') + '</div>'; return; }
@@ -609,7 +615,7 @@
             } finally { C = C0; }
         }
         function wordBlocks(bl) {
-            return bl.filter(function (b) { return b.k !== 'act' && b.k !== 'auth' && !b.pend; }).map(function (b) {
+            return bl.filter(function (b) { return b.k !== 'act' && b.k !== 'auth' && b.k !== 'html' && !b.pend; }).map(function (b) {
                         if (b.k === 'fig') return { k: 'img', caption: b.title, svg: b.svg, w: b.w, h: b.h };
                         if (b.k === 'shot') return { k: 'img', caption: b.title, dataUrl: b.png, w: b.w, h: b.h, shot: true };
                         if (b.k === 'table') { var t = { k: 'table', name: b.name, title: b.title, rows: b.rows }; if (b.rows && b.rows[0] && Object.keys(b.rows[0]).length >= 4) t.small = true; return t; }
@@ -652,7 +658,7 @@
                 + '.ccr-shotwait{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;color:#101216}.ccr-shotlab{display:flex;gap:7px;align-items:flex-start;margin-top:6px;font-size:12.5px}.ccr-shotlab .ccr-oe{display:block;font-weight:400}'
                 + '.ccr .ccr-shot,.ccr .ccr-shot:hover,.ccr .ccr-shot:focus,.ccr .ccr-shot:active{background:var(--color-surface-1,#fff)!important;background-image:none!important;color:var(--color-text-primary,#101216)!important;box-shadow:none!important;transform:none!important}.ccr .ccr-shot:focus-visible{outline:2px solid #1A6EF2;outline-offset:2px}'
                 + '.ccr-shot .ccr-mk.sq{border-radius:3px}.ccr-shot.on .ccr-mk{background:#1A6EF2;border-color:#1A6EF2}.ccr-shotfig img{max-width:100%;height:auto;display:block;background:#fff}'
-                + '.ccr{font-size:13.5px;color:var(--color-text-primary,#101216)}.ccr-lead{font-size:13px;max-width:980px;margin:4px 0 12px}'
+                + '.ccr{font-size:13.5px;color:var(--color-text-primary,#101216)}.ccr-lead{font-size:13px;margin:4px 0 12px}'
                 + '.ccr-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:18px;align-items:start}@media (max-width:1100px){.ccr-cols{grid-template-columns:minmax(0,1fr)}}.ccr-left,.ccr-right{min-width:0;max-width:100%}'
                 + '.ccr-right{position:sticky;top:8px}.ccr-left .slap-grid{grid-template-columns:1fr}.ccr-left .slap-rail{max-height:260px}.ccr-left .slap-card{margin-top:0}'
                 // the document: its own colors in both themes, so the app's dark rules cannot reach in
@@ -660,7 +666,7 @@
                 + 'body.theme-dark .ccr .ccr-prev{--cp-bg:#15181E;--cp-ink:#E8EAED;--cp-line:#3A404A;--cp-hair:#2E333C;--cp-th:#1F2A3A;--cp-link:#8DBBFF;--cp-tbd:#F2925F;--cp-rule:#9AA1AD;--cp-flash:#5A4A12}'
                 + '.ccr .ccr-prev{max-height:80vh;overflow:auto;border:1px solid var(--cp-hair);border-radius:10px;padding:16px 20px;background:var(--cp-bg);color:var(--cp-ink);font-size:12.5px;line-height:1.5;position:relative}'
                 + '.ccr .ccr-prev h3,.ccr .ccr-prev h4,.ccr .ccr-prev p,.ccr .ccr-prev li,.ccr .ccr-prev b,.ccr .ccr-prev div,.ccr .ccr-prev label,.ccr .ccr-prev span{color:var(--cp-ink)}'
-                + '.ccr .ccr-prev h3{font-size:15px;margin:16px 0 6px;background:none;display:flex;gap:10px;align-items:center;flex-wrap:wrap}.ccr .ccr-prev h3.l2{font-size:13.5px}.ccr .ccr-prev .ccr-part{font-size:13px;margin:16px 0 5px;padding-bottom:3px;border-bottom:1px solid var(--cp-hair)}.ccr .ccr-prev .ccr-part.l2{font-size:12.5px;margin:12px 0 4px;border-bottom:none}.ccr .ccr-prev p{margin:0 0 7px;max-width:78ch}.ccr .ccr-prev .ccr-tbd{color:var(--cp-tbd);font-style:italic}'
+                + '.ccr .ccr-prev h3{font-size:15px;margin:16px 0 6px;background:none;display:flex;gap:10px;align-items:center;flex-wrap:wrap}.ccr .ccr-prev h3.l2{font-size:13.5px}.ccr .ccr-prev .ccr-part{font-size:13px;margin:16px 0 5px;padding-bottom:3px;border-bottom:1px solid var(--cp-hair)}.ccr .ccr-prev .ccr-part.l2{font-size:12.5px;margin:12px 0 4px;border-bottom:none}.ccr .ccr-prev p{margin:0 0 7px;max-width:none}.ccr .ccr-prev .ccr-tbd{color:var(--cp-tbd);font-style:italic}'
                 + '.ccr-fig svg.ccr-hl .ccr-edge{opacity:.1}.ccr-fig svg.ccr-hl .ccr-edge.on{opacity:1;stroke-width:2.4}.ccr-fig svg.ccr-hl .ccr-node{opacity:.3}.ccr-fig svg.ccr-hl .ccr-node.on{opacity:1}.ccr-edge{transition:opacity .12s}'
                 + '.ccr-auth{margin:4px 0 12px;padding:8px 10px;border:1px dashed var(--cp-line,#c7cbd1);border-radius:8px}.ccr-auth textarea{width:100%;box-sizing:border-box;font:inherit;font-size:13px;padding:6px;border:1px solid var(--cp-line,#c7cbd1);border-radius:6px;background:var(--cp-bg,#fff);color:var(--cp-ink,#101216)}'
                 + '.ccr-authbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px}.ccr-authhint,.ccr-authwhy,.ccr-authflag{font-size:12.5px;margin-top:6px}.ccr-authflag{color:var(--cp-tbd,#9A3412)}.ccr-authh{font-weight:700;font-size:12.5px;margin-bottom:4px}.ccr-authdt{font-size:13px;line-height:1.5}.ccr-authwait{font-size:12.5px}'

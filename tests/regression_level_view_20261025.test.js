@@ -250,7 +250,10 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
             R.dots.stripped = dotsHave();
             await wait(3300);
             R.dots.after = dotsHave();
-            const gatePages = () => [...document.querySelectorAll('#critical-gates-panel tbody tr')].map(tr => (tr.children[1] || {}).textContent).filter(Boolean);
+            // 10 Nov 2026 (the asked-for change): the critical gates panel left the CMA page; the gates are in the CMA report of
+            // their level (one per system, one at the aircraft level), so the check reads the report for the level on screen
+            const gatePages = () => { const v = LV.view(), rid = v == null ? 'aircraft' : 'sys:' + v, rep = SLCcaReport.get('cma').reports().find(x => x.id === rid) || { sections: [] };
+                return [].concat(...SLCmaAuto.claimList().filter(c => rep.sections.indexOf(SLCmaAuto.anchorOf(c.row)) >= 0 && c.crit).map(c => c.gates)).map(k => (ftaPages.find(p => String(p.id) === k.slice(0, k.lastIndexOf(':'))) || {}).name).filter(Boolean); };
             const pageLevel = name => { const p = ftaPages.find(x => x.name === name); return p ? LV.sysOfPage(p) : 'missing'; };
             SLNavAreas.goto(sid, 'cma'); await wait(900);
             R.gates = { sys: [...new Set(gatePages().map(pageLevel))] };

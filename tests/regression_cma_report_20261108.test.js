@@ -50,7 +50,7 @@ const MUTS = {
     flowowner:   ['cma_flow.js', "    function cmaForGate(key) {\n", "    function cmaForGate(key) { return _cma().find(function (c) { return c && c.flow && (c.flow.gates || []).map(String).indexOf(S(key)) >= 0; }) || null;\n"],
     rowq:        ['cca_report.js', "var q = rowQ && rowQ[i];", "var q = null;"],
     notag:       ['cma_autopilot.js', "function P(id, text, q, extra) { return Object.assign({ type: 'p', id: id, text: T(text), q: q || null }, extra || {}); }", "function P(id, text, q, extra) { return { type: 'p', id: id, text: T(text), q: null }; }"],
-    pure:        ['cma_autopilot.js', "        var f = r.flow || null, anchor = 'cma-' + slug(r.cmaId || r.internalId)", "        ensureFlow(r); var f = r.flow || null, anchor = 'cma-' + slug(r.cmaId || r.internalId)"],
+    pure:        ['cma_autopilot.js', "        var f = r.flow || null, c = claimFor(r), anchor = anchorOf(r)", "        if (!r._virtual) ensureFlow(r); var f = r.flow || null, c = claimFor(r), anchor = anchorOf(r)"],   // 10 Nov 2026: the builder's first line moved
     emdash:      ['cma_autopilot.js', "function T(s) { return S(s).replace(/\\s*\\u2014\\s*/g, ', ').replace(/\\s+/g, ' ').trim(); }", "function T(s) { return S(s).replace(/\\s+/g, ' ').trim(); }"]
 };
 if (MUT && !MUTS[MUT]) { console.error('unknown mutation ' + MUT); process.exit(3); }
@@ -104,7 +104,7 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
             // ---- [B] the builder on the demo as it ships -------------------------------------------------------------
             const before = JSON.stringify(cmaData) + JSON.stringify(projectConfig.cmaAuto || null);
             const secs = A.reportSections();
-            R.b = { n: secs.length, want: live().length, ids: new Set(secs.map(s => s.id)).size, titled: secs.every(s => s.cmaId && s.title.indexOf(s.cmaId) === 0), pure: JSON.stringify(cmaData) + JSON.stringify(projectConfig.cmaAuto || null) === before, critFirst: secs.findIndex(s => !s.critical) < 0 || secs.slice(secs.findIndex(s => !s.critical)).every(s => !s.critical) };
+            R.b = { n: secs.length, want: A.claimList().length, rows: live().length, ids: new Set(secs.map(s => s.id)).size, titled: secs.every(s => s.cmaId ? s.title.indexOf(s.cmaId) === 0 : (s.virtual && /^Independence of the inputs of G-/.test(s.title))), pure: JSON.stringify(cmaData) + JSON.stringify(projectConfig.cmaAuto || null) === before, critFirst: secs.findIndex(s => !s.critical) < 0 || secs.slice(secs.findIndex(s => !s.critical)).every(s => !s.critical) };
             const s1 = secs.find(s => s.cmaId === 'CMA-001');
             const gt = s1.blocks.find(b => b.type === 'table' && /-gates-t$/.test(b.id));
             R.b.gateRow = gt && gt.rows[0].cells;
@@ -150,13 +150,15 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
             const c0 = cats[0].id, qcat = 'cma/' + row.internalId + '/cat/' + c0;
             const ca = A.answer(qcat, 'concern', { why: 'Both lanes take power from the same essential bus.' });
             const qsAfter = A.questions(row.internalId);
-            const fu = qsAfter.find(q => /\/concern\/C-1$/.test(q.id));
-            R.w.concern = ca.ok && ca.concern === 'C-1' && !!fu && fu.parent === qcat && fu.depth === 1 && qsAfter.indexOf(fu) === qsAfter.findIndex(q => q.id === qcat) + 1;
-            R.w.onlyUnderConcern = qsAfter.filter(q => q.depth).length === 1;
+            // 10 Nov 2026 (cma_autopilot 1.4): the project data's concerns are in the record too, so the engineer's concern takes the next free id
+            const cid = ca.concern, cslug = String(cid).toLowerCase();
+            const fu = qsAfter.find(q => q.id === 'cma/' + row.internalId + '/concern/' + cid);
+            R.w.concern = ca.ok && /^C-\d+$/.test(cid) && !!fu && fu.parent === qcat && fu.depth === 1 && qsAfter.indexOf(fu) === qsAfter.findIndex(q => q.id === qcat) + 1;
+            R.w.onlyUnderConcern = qsAfter.filter(q => q.depth).length === Object.keys(row.flow.answers).filter(k => row.flow.answers[k].concernId).length && qsAfter.filter(q => q.depth).every(q => /\/concern\//.test(q.id) && /\/cat\//.test(q.parent));
             R.w.who = !!(row.flow.who && row.flow.who[qcat] && row.flow.who[qcat].by && row.flow.who[qcat].at);
             // the answer's paragraph carries its question id
             const sNow = A.reportSections().find(s => s.cma === row.internalId);
-            const cPara = sNow.blocks.find(b => b.type === 'p' && b.concern === 'C-1' && /same essential bus/.test(b.text));
+            const cPara = sNow.blocks.find(b => b.type === 'p' && b.concern === cid && /same essential bus/.test(b.text));
             R.w.tagged = !!cPara && (cPara.q === qcat || (cPara.qs || []).indexOf(qcat) >= 0) && A.blocksFor(qcat).indexOf(cPara.id) >= 0 && A.blocksFor(qcat).some(x => /-modes-t:0$/.test(x)) && A.blocksFor(qc).indexOf(sNow.anchor + '-claim') >= 0;
             R.w.claimPara = (sNow.blocks.find(b => b.id === sNow.anchor + '-claim') || {}).q === qc;
             // the rest answered; the concern closed by a requirement
@@ -165,17 +167,17 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
             recalc();
             R.w.stillHeld = !noShall.ok && /shall/.test(noShall.why || '') && !gnode._cmaSubstantiatedBy && F.statusOf(row) === 'In Progress';
             const inProg = A.reportSections().find(s => s.cma === row.internalId);
-            R.w.progressWords = inProg.state === 'progress' && /concern C-1 is still open/.test(inProg.blocks[inProg.blocks.length - 1].text) && /CMA pending/.test(inProg.blocks[inProg.blocks.length - 1].text);
+            R.w.progressWords = inProg.state === 'progress' && new RegExp('concern ' + cid + ' is still open').test(inProg.blocks[inProg.blocks.length - 1].text) && /CMA pending/.test(inProg.blocks[inProg.blocks.length - 1].text);
             const okReq = A.answer(fu.id, 'req', { text: 'The design shall supply rudder lane B from the second essential bus.' });
             recalc();
             R.w.substantiated = okReq.ok && F.statusOf(row) === 'Mitigated' && gnode._cmaSubstantiatedBy === row.cmaId;
             const sub = A.reportSections().find(s => s.cma === row.internalId);
             R.w.subWords = sub.state === 'substantiated' && /^Substantiated: /.test(sub.blocks[sub.blocks.length - 1].text) && /stands/.test(sub.blocks[sub.blocks.length - 1].text);
-            R.w.pendingReq = (sub.blocks.find(b => /-c-c-1-close$/.test(b.id)) || {}).text || '';
+            R.w.pendingReq = (sub.blocks.find(b => b.id === sub.anchor + '-c-' + cslug + '-close') || {}).text || '';
             // the requirement accepted on the requirements page: the report gives its ID and words
             ['ac'].concat((systemsData || []).map(s => 'sys-' + s.id)).forEach(sc => { try { const m = AutoReq.generate({ gateIndependence: true }, sc); m.isNew = m.isNew.filter(c => c.reqSource && c.reqSource.generator === 'cma-concern'); m.isUpdated = []; m.orphaned = []; AutoReq.applyMerge(m, { acceptNew: true, acceptUpdates: false, acceptOrphanRemoval: false }); } catch (e) { R.w.genErr = String(e); } });
             const sub2 = A.reportSections().find(s => s.cma === row.internalId);
-            const close2 = (sub2.blocks.find(b => /-c-c-1-close$/.test(b.id)) || {}).text || '';
+            const close2 = (sub2.blocks.find(b => b.id === sub2.anchor + '-c-' + cslug + '-close') || {}).text || '';
             const list2 = sub2.blocks.find(b => b.type === 'list');
             R.w.reqClose = close2; R.w.reqNamed = /^Closed by requirement (REQ-\S+): "The design shall supply rudder lane B from the second essential bus\." /.test(close2) && !!list2 && /^REQ-\S+ The design shall supply rudder lane B/.test(list2.items[0].text);
             // typed status is never read: a second CMA with nothing answered and a typed "Closed"
@@ -183,7 +185,8 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
             const row2 = A.addCma({ gates: [free2] }).row;
             row2.status = 'Closed \u2014 Accepted';
             const s2 = A.reportSections().find(s => s.cma === row2.internalId);
-            R.w.typedIgnored = s2.state === 'open' && /^Open: /.test(s2.blocks[s2.blocks.length - 1].text) && !/Closed/.test(s2.blocks[s2.blocks.length - 1].text);
+            // 10 Nov 2026: the record is made with the project data's answers in it, so it can read Open or In progress, never the typed Closed
+            R.w.typedIgnored = (s2.state === 'open' || s2.state === 'progress') && /^(Open|In progress): /.test(s2.blocks[s2.blocks.length - 1].text) && !/Closed/.test(s2.blocks[s2.blocks.length - 1].text);
             F.sync(row2);
             // an earlier entry: adopted on its first answer, never a second row
             const leg = cmaData.find(c => c.cmaId === 'CMA-006'), nL = live().length, legGates = leg.linkedGateIds.join(',');
@@ -233,16 +236,17 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
             const q2cat = 'cma/' + row2.internalId + '/cat/' + c0;
             cardSel(q2cat + '|concern').click(); await wait(80);
             const afterClick = row2.flow.answers[c0];
-            const fuBox = host.querySelector('[data-cmqbox="cma/' + row2.internalId + '/concern/C-1"]');
+            const cid2 = afterClick && afterClick.concernId, c2 = () => row2.flow.concerns.find(x => x.id === cid2) || {};
+            const fuBox = host.querySelector('[data-cmqbox="cma/' + row2.internalId + '/concern/' + cid2 + '"]');
             R.u = { clicked: !!afterClick && afterClick.a === 'concern' && cardSel(q2cat + '|concern').classList.contains('on'), indented: !!fuBox && fuBox.getAttribute('data-cmqdepth') === '1' && parseInt(fuBox.style.marginLeft, 10) > 0 && fuBox.classList.contains('sub'),
                 leftAligned: getComputedStyle(cardSel(q2cat + '|no')).justifyContent === 'flex-start' };
             // an answer that needs words shows its boxes before anything is written
-            host.querySelector('[data-cmqopt="cma/' + row2.internalId + '/concern/C-1|evidence"]').click(); await wait(80);
-            const boxes = host.querySelectorAll('[data-cmq-fields="cma/' + row2.internalId + '/concern/C-1"] textarea');
-            R.u.boxesFirst = boxes.length === 2 && row2.flow.concerns[0].status === 'Open';
+            host.querySelector('[data-cmqopt="cma/' + row2.internalId + '/concern/' + cid2 + '|evidence"]').click(); await wait(80);
+            const boxes = host.querySelectorAll('[data-cmq-fields="cma/' + row2.internalId + '/concern/' + cid2 + '"] textarea');
+            R.u.boxesFirst = boxes.length === 2 && c2().status === 'Open';
             boxes[0].value = 'Lane B moved to its own bus.'; boxes[1].value = 'Wiring diagram WD-40 rev A';
-            host.querySelector('[data-cmq-save="cma/' + row2.internalId + '/concern/C-1"]').click(); await wait(80);
-            R.u.saved = row2.flow.concerns[0].status === 'Mitigated' && row2.flow.concerns[0].backedBy === 'Wiring diagram WD-40 rev A';
+            host.querySelector('[data-cmq-save="cma/' + row2.internalId + '/concern/' + cid2 + '"]').click(); await wait(80);
+            R.u.saved = c2().status === 'Mitigated' && c2().backedBy === 'Wiring diagram WD-40 rev A';
             // dark mode: the cards stay readable
             const lum = c => { const m = c.match(/\d+(\.\d+)?/g).map(Number); const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(m[0]) + 0.7152 * f(m[1]) + 0.0722 * f(m[2]); };
             const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
@@ -263,7 +267,7 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
         }), 240000, 'the browser step');
 
         console.log('\n[B] the builder');
-        check('[B] one section per independence claim, each with its own anchor, titled by its CMA id', r.b.n === r.b.want && r.b.n >= 14 && r.b.ids === r.b.n && r.b.titled, JSON.stringify(r.b).slice(0, 300));
+        check('[B] one section per independence claim (every CMA row, and since 10 Nov every critical claim with no row yet), each with its own anchor, titled by its CMA id', r.b.n === r.b.want && r.b.n > r.b.rows && r.b.rows >= 14 && r.b.ids === r.b.n && r.b.titled, JSON.stringify(r.b).slice(0, 300));
         check('[B] building the report writes nothing (no adopt, no store)', r.b.pure);
         check('[B] claims a DAL reduction rests on come first', r.b.critFirst);
         check('[B] a gate is named with its tree and failure condition (CMA-001: G-7068 Loss of both elevator actuation lanes)', r.b.gateRow && /^G-7068 Loss of both elevator actuation lanes$/.test(r.b.gateRow[0]) && /FCS loss of pitch output/.test(r.b.gateRow[1]) && /^FC-\S+ \S/.test(r.b.gateRow[2]) && /lane A/.test(r.b.gateRow[3]) && r.b.gateRow[4] === 'Yes, critical', JSON.stringify(r.b.gateRow));
@@ -284,14 +288,14 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
         check('[W] an em dash typed in the subject never reaches the report (it reads as a comma)', r.w.cleanTitle);
         check('[W] its DAL reduction stays held back (CMA pending, not substantiated) while the claim is open', r.w.heldBack && r.w.stillHeld, JSON.stringify(r.w));
         check('[W] the drafted claim is written from the gate and its inputs', r.w.claimDrafted);
-        check('[W] a Concern opens C-1 and its follow-up, indented right under its category; follow-ups only there', r.w.concern && r.w.onlyUnderConcern, JSON.stringify(r.w));
+        check('[W] a Concern opens its concern (the next free id) and its follow-up, indented right under its category; follow-ups only there', r.w.concern && r.w.onlyUnderConcern, JSON.stringify(r.w));
         check('[W] who answered and when is kept on the CMA', r.w.who);
         check('[W] the paragraphs an answer wrote carry its question id (the frame lights them up)', r.w.tagged && r.w.claimPara);
         check('[W] a requirement must say "shall"; until the concern is closed the status says so in words', r.w.stillHeld && r.w.progressWords, JSON.stringify(r.w));
         check('[W] every category answered and the concern closed: Substantiated, and the gate\'s reduction is given back by this CMA', r.w.substantiated && r.w.subWords, JSON.stringify(r.w));
         check('[W] a raised requirement waiting for acceptance is said in words', /waiting on the requirements page/.test(r.w.pendingReq), r.w.pendingReq);
         check('[W] accepted on the requirements page, the report gives the requirement\'s ID and its words', r.w.reqNamed, r.w.reqClose + ' ' + (r.w.genErr || ''));
-        check('[W] a typed "Closed" on an unanswered CMA is ignored: the report says Open', r.w.typedIgnored);
+        check('[W] a typed "Closed" on a CMA not substantiated is ignored: the report says Open or In progress', r.w.typedIgnored);
         check('[W] an earlier entry is adopted on its first answer, its gates kept, no second row', r.w.adopted);
         console.log('\n[E] Edit and Add a CMA');
         check('[E] Add refuses a second CMA on the same gate, the same subject, or an earlier entry\'s gate', r.e.dupGate && r.e.dupSubject && r.e.dupLegacy && r.e.oneRow, JSON.stringify(r.e));
@@ -347,10 +351,10 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
             const cp = pv().querySelector('p[data-ccq="' + qc + '"]');
             X.r2.see = !!see && !!cp && cp.classList.contains('ccr-flash') && /^The claim: /.test(cp.textContent);
             // a figure box opens its panel
-            const box = pv().querySelector('[data-ccnode^="' + A.anchorOf(row) + '-g0"][data-cckey="cma"]');
+            const box = pv().querySelector('[data-ccnode^="' + A.anchorOf(row) + '-g-"][data-cckey="cma"]');   // 10 Nov 2026: the tree picture's boxes
             if (box) box.dispatchEvent(new MouseEvent('click', { bubbles: true })); await wait(400);
             const panel = host.querySelector('[data-cc-node]');
-            X.r3 = { box: !!box, panel: panel ? panel.textContent.slice(0, 400) : '' };
+            X.r3 = { box: !!box, panel: panel ? panel.textContent.slice(0, 1600) : '' };
             // outputs accepted in the frame by role, reopened by a changed answer; one store
             const oid = 'cma.claim.' + row.internalId;
             SLCcaReport.act('cma', 'unaccept', oid); await wait(200);
