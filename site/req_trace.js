@@ -1,5 +1,5 @@
 // ============================================================================
-// req_trace.js (SLReqTrace v1.0, 10 Nov 2026): every requirement's ID, type, level and where it is driven from.
+// req_trace.js (SLReqTrace v1.1, 10 Nov 2026: several levels per type and flow-down; v1.0 the same day): every requirement's ID, type, level and where it is driven from.
 //
 // Waqas, 10 Nov 2026 (the PASA and PSSA Autopilots):
 //   "Requirement derivation level is asked once per requirement type. Each answer is aircraft, system or item, and applies
@@ -27,7 +27,7 @@
 // ============================================================================
 (function (root) {
     'use strict';
-    var VERSION = '1.0';
+    var VERSION = '1.1';   // 1.1 10 Nov 2026: several levels per type (PASA aircraft and/or systems, PSSA systems and/or items), flow-down rows traced to their parent
     function g(n) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(n); if (v !== undefined) return v; } } catch (_) {} try { return root[n]; } catch (_) { return undefined; } }
     function arr(v) { return Array.isArray(v) ? v : []; }
     function E(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -46,7 +46,7 @@
         { id: 'crew', name: 'Crew and operational', what: 'What the crew must do, see and have time for, and the assumptions the analysis makes about them.', gens: ['hf-op-action', 'hf-op-info', 'hf-op-timing', 'assumption', 'usoc-info'] },
         { id: 'ifc', name: 'Interface', what: 'What one system expects of another at the interface between them.', gens: ['fta-resource-iface'] }
     ];
-    var LEVELS = [{ id: 'aircraft', label: 'Aircraft', code: 'L1' }, { id: 'system', label: 'System', code: 'L2' }, { id: 'item', label: 'Item', code: 'L3' }];
+    var LEVELS = [{ id: 'aircraft', label: 'Aircraft', code: 'L1' }, { id: 'system', label: 'Systems', code: 'L2' }, { id: 'item', label: 'Items', code: 'L3' }];
     var GEN_TYPE = {}; TYPES.forEach(function (t) { t.gens.forEach(function (x) { GEN_TYPE[x] = t.id; }); });
     function genOf(r) {
         var rs = r && r.reqSource; if (!rs) return '';
@@ -55,32 +55,71 @@
         if (gname === 'gate-indep') return /:gate-indep:/.test(S(rs.sourceId)) && rs.context && /^(OR|XOR|VOTING)$/i.test(S(rs.context.gateType)) ? 'gate-indep-or' : 'gate-indep-and';
         return gname;
     }
-    function typeOf(r) { var x = genOf(r); return x ? (GEN_TYPE[x] || (/^gate-indep/.test(x) ? 'ind' : null)) : null; }
+    function typeOf(r) { var x = genOf(r); if (x === 'flow-down') return (r.reqSource.context && r.reqSource.context.parentType) || null; return x ? (GEN_TYPE[x] || (/^gate-indep/.test(x) ? 'ind' : null)) : null; }
     function typeDef(id) { return TYPES.filter(function (t) { return t.id === id; })[0] || null; }
 
-    // ---- levels -----------------------------------------------------------------------------------------------------
+    // ---- levels (v1.1, 10 Nov 2026) ---------------------------------------------------------------------------------
+    // Waqas: "requirements can be driven at multiple levels, why are we only allowing them to select one"; "at the aircraft
+    // level the options should only be aircraft, and/or systems". The PASA ticks aircraft and/or system per type (report wide,
+    // then per aircraft function); the PSSA ticks system and/or item per type (per system, then per system function), and
+    // shows what the PASA ticked. Stored as arrays: projectConfig.reqLevels = { types: { <type>: ['aircraft','system'] },
+    // fn: { <subId>: { <type>: [...] } }, sys: { <sysId>: { <type>: ['system','item'] } }, sysfn: { <sysId>|<funcId>: {...} } }.
+    // A value written by v1.0 (one string) reads as that one level.
+    var PASA_LEVELS = ['aircraft', 'system'], PSSA_LEVELS = ['system', 'item'];
     function lstore(write) {
-        var p = pc(); if (!p) return { types: {}, fc: {}, sys: {} };
-        if (!p.reqLevels || typeof p.reqLevels !== 'object') { if (!write) return { types: {}, fc: {}, sys: {} }; p.reqLevels = {}; }
-        var L = p.reqLevels; ['types', 'fc', 'sys'].forEach(function (k) { if (!L[k] || typeof L[k] !== 'object') L[k] = {}; });
+        var p = pc(), empty = { types: {}, fn: {}, sys: {}, sysfn: {}, fc: {} };
+        if (!p) return empty;
+        if (!p.reqLevels || typeof p.reqLevels !== 'object') { if (!write) return empty; p.reqLevels = {}; }
+        var L = p.reqLevels; ['types', 'fn', 'sys', 'sysfn', 'fc'].forEach(function (k) { if (!L[k] || typeof L[k] !== 'object') L[k] = {}; });
         return L;
     }
-    function levelFor(type, o) {
-        o = o || {}; var L = lstore(false);
-        if (o.sysId != null && L.sys[S(o.sysId)] && L.sys[S(o.sysId)][type]) return { level: L.sys[S(o.sysId)][type], from: 'system' };
-        if (o.fcId && L.fc[S(o.fcId)] && L.fc[S(o.fcId)][type]) return { level: L.fc[S(o.fcId)][type], from: 'failure condition' };
-        if (L.types[type]) return { level: L.types[type], from: 'report' };
-        return { level: null, from: null };
+    function asList(v, allowed) {
+        if (v == null) return null;
+        var a = Array.isArray(v) ? v : [v];
+        a = a.map(function (x) { return x === 'item' && allowed === PASA_LEVELS ? 'system' : String(x); }).filter(function (x, i, arr2) { return allowed.indexOf(x) >= 0 && arr2.indexOf(x) === i; });
+        return a.length ? allowed.filter(function (x) { return a.indexOf(x) >= 0; }) : null;
     }
-    // where: 'types' (report wide), { fc: id }, { sys: id }; value null clears an override
-    function setLevel(type, value, where) {
+    // the PASA's levels for a type: the aircraft function's own, else the report's
+    function pasaLevels(type, fnId) {
+        var L = lstore(false);
+        var f = fnId != null && L.fn[S(fnId)] ? asList(L.fn[S(fnId)][type], PASA_LEVELS) : null; if (f) return { levels: f, from: 'function' };
+        var r = asList(L.types[type], PASA_LEVELS); if (r) return { levels: r, from: 'report' };
+        return { levels: [], from: null };
+    }
+    // the PSSA's levels for a type in one system: the system function's own, else the system's, else what the PASA ticked
+    // (a PASA "system" tick means the system requirement is written; the items are the PSSA's own choice)
+    function pssaLevels(type, sysId, funcId) {
+        var L = lstore(false), k = S(sysId) + '|' + S(funcId);
+        var f = funcId != null && L.sysfn[k] ? asList(L.sysfn[k][type], PSSA_LEVELS) : null; if (f) return { levels: f, from: 'function' };
+        var y = sysId != null && L.sys[S(sysId)] ? asList(L.sys[S(sysId)][type], PSSA_LEVELS) : null; if (y) return { levels: y, from: 'system' };
+        var pa = pasaLevels(type, null).levels;
+        if (pa.indexOf('system') >= 0) return { levels: ['system'], from: 'pasa' };
+        return { levels: [], from: null };
+    }
+    // where: 'types' | { fn } (PASA) | { sys } | { sys, fn } (PSSA); levels: an array (empty or null clears the override)
+    function setLevels(type, levels, where) {
         if (!typeDef(type)) throw new Error('No such requirement type.');
-        if (value != null && !LEVELS.some(function (l) { return l.id === value; })) throw new Error('A level is aircraft, system or item.');
-        var L = lstore(true), m = !where || where === 'types' ? L.types : where.fc ? (L.fc[S(where.fc)] = L.fc[S(where.fc)] || {}) : (L.sys[S(where.sys)] = L.sys[S(where.sys)] || {});
-        if (value == null) delete m[type]; else m[type] = value;
-        syncLevels(); save();
+        var pssa = where && where.sys != null, allowed = pssa ? PSSA_LEVELS : PASA_LEVELS;
+        var list = asList(levels, allowed);
+        if (levels && levels.length && !list) throw new Error(pssa ? 'A system requirement level is system or item.' : 'An aircraft requirement level is aircraft or system.');
+        var L = lstore(true), m;
+        if (!where || where === 'types') m = L.types;
+        else if (pssa && where.fn != null) { var k = S(where.sys) + '|' + S(where.fn); m = L.sysfn[k] = L.sysfn[k] || {}; }
+        else if (pssa) m = L.sys[S(where.sys)] = L.sys[S(where.sys)] || {};
+        else m = L.fn[S(where.fn)] = L.fn[S(where.fn)] || {};
+        if (!list) delete m[type]; else m[type] = list;
+        save();
         return true;
     }
+    function toggleLevel(type, level, where) {
+        var pssa = where && where.sys != null, cur = pssa ? pssaLevels(type, where.sys, where.fn).levels : pasaLevels(type, where && where.fn).levels;
+        var next = cur.indexOf(level) >= 0 ? cur.filter(function (x) { return x !== level; }) : cur.concat([level]);
+        if (!next.length) throw new Error('Keep at least one level: a requirement has to be written somewhere.');
+        return setLevels(type, next, where || 'types');
+    }
+    // v1.0 callers: the first level
+    function levelFor(type, o) { o = o || {}; var r = o.sysId != null ? pssaLevels(type, o.sysId, o.funcId) : pasaLevels(type, o.fnId); return { level: r.levels[0] || null, levels: r.levels, from: r.from }; }
+    function setLevel(type, value, where) { return setLevels(type, value == null ? null : [value], where && where.fc ? { fn: where.fc } : where); }
     function levelLabel(id) { var l = LEVELS.filter(function (x) { return x.id === id; })[0]; return l ? l.label : ''; }
     function codeOf(id) { var l = LEVELS.filter(function (x) { return x.id === id; })[0]; return l ? l.code : ''; }
 
@@ -115,21 +154,48 @@
         if (n) save();
         return n;
     }
+    // a row's level is where it is written: the aircraft requirements L1, a system's requirements L2, an item's (a basic event
+    // of a system tree, a flowed-down item row) L3
+    var ITEM_GENS = ['fta-event', 'fta-interval', 'fta-interval-monitor'];
+    // a system requirement written for one item of the tree (a basic event's probability, check or assurance level)
+    function atItem(r) { var g0 = genOf(r); return ITEM_GENS.indexOf(g0) >= 0 || (g0 === 'dalgebra' && !!(r.reqSource.context && r.reqSource.context.type === 'basic')); }
     function syncLevels() {
         var n = 0;
         stores().forEach(function (st) {
             st.reqs.forEach(function (r) {
                 if (!live(r) || !r.reqSource) return;
-                var t = typeOf(r); if (!t) return;
-                var f = fcOf(r), lv = levelFor(t, { fcId: f ? f.fcId : null, sysId: st.sys ? st.sys.id : null }).level;
-                if (!lv) return;
-                var code = codeOf(lv);
+                var g0 = genOf(r); if (!g0 || g0 === 'reqif' || g0 === 'assumption') return;
+                var code = !st.sys ? 'L1' : atItem(r) ? 'L3' : 'L2';
                 if (r.level !== code) { r.level = code; n++; }
-                if (r.derivedTo !== lv) { r.derivedTo = lv; n++; }
             });
         });
         return n;
     }
+
+    // ---- flowing a requirement down (v1.1) -------------------------------------------------------------------------------
+    // A requirement written at the aircraft and ticked "system" is restated for each system that carries it (the systems the
+    // interdependence answers show feeding the failure condition), in that system's requirements, traced to the aircraft one
+    // (parentReqId once it is in the register). One row per system and parent (sourceId sys-<id>:flow:<parent source>), so
+    // accepting again updates it, never doubles it. The probability one carries the system's own budget when its tree has one.
+    // (A system requirement ticked "items" needs no restating: AutoReq already writes the item rows from the tree, and the
+    // PSSA takes them, traced to the system row; see atItem.)
+    function flowDown(cand, o) {
+        o = o || {}; var out = [], t = typeOf(cand), ps = S(cand.reqSource && cand.reqSource.sourceId);
+        arr(o.systems).forEach(function (sy) {
+            var name = S(sy.name || sy.sysId), text;
+            if (t === 'prob' && sy.budget != null) text = 'The probability that the ' + name + ' causes or contributes to ' + S(o.fcId) + ' (' + lc(S(o.fcDesc)) + ') shall not exceed ' + Number(sy.budget).toExponential(1) + ' per flight hour.';
+            else if (t === 'spf') text = 'No single failure in the ' + name + ' shall cause ' + S(o.fcId) + ' (' + lc(S(o.fcDesc)) + ').';
+            else text = 'The ' + name + ' shall meet, for its part in ' + S(o.fcId) + ': ' + lc(S(cand.text)).replace(/\.$/, '') + '.';
+            out.push({ sysId: S(sy.sysId), cand: {
+                text: text,
+                rat: 'Flowed down from the aircraft requirement for ' + S(o.fcId) + ' because the ' + name + ' feeds it' + (sy.how ? ' (' + S(sy.how) + ')' : '') + '. ' + (t === 'prob' && sy.budget != null ? 'The budget is the one its fault tree is given (' + Number(sy.budget).toExponential(1) + ' per flight hour).' : 'The system has to meet its part for the aircraft requirement to hold.'),
+                level: 'L2', type: cand.type || 'Safety', analysis: cand.analysis || '', verifMethod: cand.verifMethod || 'Analysis', traceId: S(o.fcId), derivationType: 'derived',
+                reqSource: { generator: 'flow-down', sourceId: 'sys-' + S(sy.sysId) + ':flow:' + ps, context: { parentSourceId: ps, parentType: t, fcId: S(o.fcId), sysId: S(sy.sysId), budget: sy.budget != null ? sy.budget : null }, fingerprint: 'flow|' + ps + '|' + text, generatedAt: Date.now() }
+            } });
+        });
+        return out;
+    }
+    function lc(x) { x = S(x); return /^[A-Z]{2}/.test(x) ? x : x.charAt(0).toLowerCase() + x.slice(1); }
 
     // ---- where a requirement is driven from -------------------------------------------------------------------------
     var _ix = null, _ixGen = -2;
@@ -211,6 +277,12 @@
         } else if (gname === 'usoc-info') {
             analysis('Unsafe operating condition', ctx.usoc || parts[parts.length - 1], '', 'usoc');
             if (ctx.fc) push(fcEntry(fhaByFcId(ctx.fc)));
+        } else if (gname === 'flow-down') {
+            // a flowed-down row: the aircraft failure condition, the requirement it comes from, the system
+            if (ctx.fcId) push(fcEntry(fhaByFcId(ctx.fcId, null) || fhaByFcId(ctx.fcId)));
+            var par = null; stores().some(function (st) { return st.reqs.some(function (x) { if (x && x.reqSource && S(x.reqSource.sourceId) === S(ctx.parentSourceId)) { par = x; return true; } return false; }); });
+            if (par) analysis('Parent requirement', par.id || par.traceId || ('REQ-' + par.internalId), S(par.text).slice(0, 80), par.reqSource && /^sys-/.test(S(par.reqSource.sourceId)) ? '' : 'ac-req');
+            if (ctx.sysId) { var sy0 = systems().filter(function (x) { return S(x.id) === S(ctx.sysId); })[0]; analysis('System', sy0 ? (sy0.name || sy0.id) : ctx.sysId, '', 'sys:' + S(ctx.sysId) + ':pssa'); }
         } else if (gname === 'reqif') {
             if (r.parentReqId) analysis('Parent requirement', r.parentReqId, '', '');
         }
@@ -303,7 +375,7 @@
         if ((ok < 2 || !AR) && tries > 0) setTimeout(function () { hook(tries - 1); }, 100);
     })(60);
 
-    var api = { VERSION: VERSION, TYPES: TYPES, LEVELS: LEVELS, typeOf: typeOf, typeDef: typeDef, genOf: genOf, levelFor: levelFor, setLevel: setLevel, levelLabel: levelLabel,
+    var api = { VERSION: VERSION, TYPES: TYPES, LEVELS: LEVELS, PASA_LEVELS: PASA_LEVELS, PSSA_LEVELS: PSSA_LEVELS, pasaLevels: pasaLevels, pssaLevels: pssaLevels, setLevels: setLevels, toggleLevel: toggleLevel, flowDown: flowDown, atItem: atItem, typeOf: typeOf, typeDef: typeDef, genOf: genOf, levelFor: levelFor, setLevel: setLevel, levelLabel: levelLabel,
         syncLevels: syncLevels, ensureIds: ensureIds, sysCode: function (s) { return s ? codes()[S(s.id)] || sysCode(s) : 'AC'; }, drivenFrom: drivenFrom, drivenText: drivenText, drivenHtml: drivenHtml, fcOf: fcOf,
         rationale: rationale, panelHtml: panelHtml, decorate: decorate, open: open, stores: stores };
     try { root.SLReqTrace = api; } catch (_) {}

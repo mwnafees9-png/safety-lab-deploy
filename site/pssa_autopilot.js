@@ -1,25 +1,34 @@
-// pssa_autopilot.js (SLPssaAuto v1.0, 10 Nov 2026): the PSSA Autopilot. One Preliminary System Safety Assessment per system:
+// pssa_autopilot.js (SLPssaAuto v2.0, 10 Nov 2026): the PSSA Autopilot. One Preliminary System Safety Assessment per system:
 // the front of the report for the system (scope, the system, the method, its failure conditions, its requirement levels, what
-// the appendices found, the conclusion) and one appendix per system failure condition the engineer picks.
+// the appendices found, the conclusion) and one appendix per function, holding every failure condition of that function rated
+// Minor or above.
 //
 // Waqas, 10 Nov 2026: "the PSSA one per system level cover page meat in the per failure condition report"; "the PSSA page is
-// already pretty trimmed down": the Autopilot goes into the system's PSSA tab. Each appendix starts from the system FHA entry
-// and what the aircraft hands down ("if two aircraft failure conditions set a budget, the stricter applies, worked out"); no
-// interdependence, no common resources, no CoFFE. The tree goes down to items, then what it says, the numbers, item assurance
-// levels, hidden failures and their checks (candidate maintenance requirements), independence claims handed to the CMA
-// Autopilot, the AutoReq requirements, the path to compliance and the conclusion. Questions: whether to claim independence to
-// set item assurance levels lower; check intervals for hidden failures; the requirement level per type (the PASA's, which one
-// system may override; asked here when the PASA has not set it). The tree picture is the system tree from the tool's own
-// renderer, chrome stripped. Same frame (cca_report.js 2.0), same AI drafting and live comments as the other Autopilots.
+// already pretty trimmed down": the Autopilot goes into the system's PSSA tab. Each failure condition starts from the system
+// FHA entry and what the aircraft hands down ("if two aircraft failure conditions set a budget, the stricter applies, worked
+// out"); no interdependence, no common resources, no CoFFE. The tree goes down to items, then what it says, the numbers, item
+// assurance levels, hidden failures and their checks (candidate maintenance requirements), independence claims handed to the
+// CMA Autopilot, the AutoReq requirements, the path to compliance and the conclusion. Questions: whether to claim independence
+// to set item assurance levels lower; check intervals for hidden failures; the requirement levels.
 //
-// Kept here: projectConfig.pssaAuto = { picks: { <sysId>: [fcId] }, front: { <sysId>: { scope, scopeNote, desc, descText,
-//   method } }, fc: { <sysId>|<fcId>: { indep: 'yes'|'no', hid: { <lid>: 'evident'|'hidden' } } } }
+// v2.0 (Waqas, 10 Nov 2026, after v1): "same for PSSA, function not failure condtion, each appendix containing all its
+// applicable failure conditions". No picking: every function of the system with a failure condition rated Minor or above has an
+// appendix; No Safety Effect is in the register only. Minor is qualitative; the 1309 chart routes Major and above; a chart not
+// answered stays quantitative and is an open item. The function of a system FHA row is the system function whose ID it carries;
+// where it carries an aircraft function instead, the appendix is that aircraft function as this system carries it.
+// "requirements can be driven at multiple levels": the levels here are systems and/or items, ticked for the system with an
+// override per function. AutoReq already writes both: rows for the system, and rows for one item of the tree (req_trace.js
+// atItem); the ticks decide which are taken, and each item row is traced to its system row. The front shows the front only;
+// each appendix is built when opened and memoized per data generation.
+//
+// Kept here: projectConfig.pssaAuto = { front: { <sysId>: { scope, scopeNote, desc, descText, method } },
+//   fc: { <sysId>|<fcId>: { indep: 'yes'|'no', hid: { <lid>: 'evident'|'hidden' } } } }
 // Written where it lives: the tree's own gates (dalIndependence, then the DAL allocation of that tree) and events (repairModel
-// 'periodic' and tau for a check), the requirement levels (projectConfig.reqLevels.sys, req_trace.js), the registers
+// 'periodic' and tau for a check), the requirement levels (projectConfig.reqLevels, req_trace.js), the registers
 // (AutoReq.applyMerge). Numbers from SLTopBasis and the trees. window.SLPssaAuto.
 (function (root) {
     'use strict';
-    var VERSION = '1.0';
+    var VERSION = '2.0';
     function g(n) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(n); if (v !== undefined) return v; } } catch (_) {} try { return root[n]; } catch (_) { return undefined; } }
     function L() { return root.SLPasaAuto && root.SLPasaAuto.lib; }
     function S(v) { return v == null ? '' : String(v); }
@@ -40,11 +49,41 @@
     function F() { return root.SLFcTrees || null; }
     function groups(sy) { return sy && F() ? (safe(function () { return F().groups(sy); }, []) || []) : []; }
     function treeOf(gr) { return gr && F() ? safe(function () { return F().treeFor(gr); }, null) : null; }
-    function candidates(sy) { var l = L(); return groups(sy).filter(function (gr) { return gr && gr.fcId && l.rank(gr.gov.severity) >= l.SEV_RANK.Major && !!treeOf(gr); }); }
+    // v2.0: every failure condition rated Minor or above is applicable (its governing row, the worst case), with or without a tree
+    function candidates(sy) { var l = L(); return groups(sy).filter(function (gr) { return gr && gr.fcId && l.rank(gr.gov.severity) >= l.SEV_RANK.Minor; }); }
     function groupOf(sy, fcId) { return groups(sy).filter(function (gr) { return gr.fcId === S(fcId); })[0] || null; }
-    function picks(sy) { var c = candidates(sy).map(function (x) { return x.fcId; }); return arr(store().picks[S(sy.id)]).filter(function (id) { return c.indexOf(id) >= 0; }); }
-    function sid(fcId) { return 'fc:' + fcId; }
-    function fcOfSid(s) { return S(s).indexOf('fc:') === 0 ? S(s).slice(3) : null; }
+    function picks(sy) { return candidates(sy).map(function (x) { return x.fcId; }); }
+    // the function of a system FHA row: the system function whose ID it carries, else the aircraft function it carries
+    function fnKey(sy, gr) { var k = S(gr.gov.subId || arr(gr.gov.subIds)[0] || ''); return k || '(no function)'; }
+    function fnInfo(sy, key) {
+        var l = L(), sf = arr(sy.functions).filter(function (x) { return x && S(x.funcId) === S(key); })[0];
+        if (sf) return { id: S(key), name: l.T(sf.funcName || ''), def: l.T(sf.funcDef || ''), kind: 'system', carriers: [] };
+        var af = arr(g('acFunctionsData')).filter(function (x) { return x && S(x.subId) === S(key); })[0];
+        var car = arr(sy.functions).filter(function (x) { return x && arr(x.traceIds).map(S).indexOf(S(key)) >= 0; });
+        if (af) return { id: S(key), name: l.T(af.subName || af.funcName || ''), def: l.T(af.subDef || af.funcDef || ''), kind: 'aircraft', carriers: car };
+        return { id: S(key), name: '', def: '', kind: 'none', carriers: car };
+    }
+    function fnTitle(f) { return f ? f.id + (f.name ? ' ' + f.name : '') : ''; }
+    function fnGroups(sy, key) { return candidates(sy).filter(function (gr) { return fnKey(sy, gr) === S(key); }); }
+    // the appendices: the system's own functions first, in its order, then any other function its failure conditions carry
+    function appendices(sy) {
+        var keys = [], c = candidates(sy);
+        arr(sy.functions).forEach(function (f) { var k = S(f && f.funcId); if (k && keys.indexOf(k) < 0 && c.some(function (gr) { return fnKey(sy, gr) === k; })) keys.push(k); });
+        c.forEach(function (gr) { var k = fnKey(sy, gr); if (keys.indexOf(k) < 0) keys.push(k); });
+        return keys;
+    }
+    function appendixOf(sy, gr) { return appendices(sy).indexOf(fnKey(sy, gr)); }
+    // quantitative or qualitative, from the 1309 chart: Minor is always qualitative; a chart not answered stays quantitative
+    function routeOf(gr) {
+        var l = L(); if (l.rank(gr.gov.severity) < l.SEV_RANK.Major) return 'qual';
+        var r = F() ? safe(function () { return F().route(gr.gov); }, 'quant') : 'quant';
+        return r === 'similarity' ? 'similarity' : r === 'qual' ? 'qual' : r === 'unanswered' ? 'unanswered' : 'quant';
+    }
+    function isQuant(gr) { var r = routeOf(gr); return r === 'quant' || r === 'unanswered'; }
+    function routeWords(gr) { return isQuant(gr) ? 'quantitative' : 'qualitative'; }
+    function memoGen() { var dc = root.SLDataChange; return dc && dc.gen ? dc.gen() : -1; }
+    function sid(key) { return 'fn:' + key; }
+    function fnOfSid(s) { return S(s).indexOf('fn:') === 0 ? S(s).slice(3) : null; }
     function fcName(gr) { return gr ? gr.fcId + ' ' + L().T(gr.gov.fcDesc || '') : ''; }
     function TB() { return root.SLTopBasis || null; }
 
@@ -79,7 +118,14 @@
     function lidOf(n) { return S(n.logicalId != null ? n.logicalId : n.id); }
     function hiddenOf(sy, gr) { var page = treeOf(gr), rec = fcRec(sy, gr.fcId); if (!page) return []; return leaves(page).filter(function (n) { return rec.hid[lidOf(n)] === 'hidden' || n.repairModel === 'periodic' || n.exposureMode === 'latent'; }); }
     function andGates(page) { var out = [], l = L(); l.walk(page.root, function (n) { if (n.type === 'gate' && /^(AND|INHIBIT|PAND|SPARE|SEQ|VOTING)$/.test(S(n.gateType)) && l.kids(n).length > 1) out.push(n); }); return out; }
+    var _fx = { gen: -2, map: {} };
     function facts(sy, gr) {
+        var G = memoGen(), k = S(sy.id) + '|' + gr.fcId;
+        if (_fx.gen !== G || G === -1) _fx = { gen: G, map: {} };
+        if (Object.prototype.hasOwnProperty.call(_fx.map, k)) return _fx.map[k];
+        return (_fx.map[k] = factsRaw(sy, gr));
+    }
+    function factsRaw(sy, gr) {
         var page = treeOf(gr), l = L(), B = TB(); if (!page) return null;
         var cs = l.cutsets(page), out = { page: page };
         out.singles = cs ? cs.filter(function (c) { return c.length === 1; }).map(function (c) { return l.nodeName(c[0]); }) : null;
@@ -129,21 +175,44 @@
         _rq = { k: k, merge: m }; return m;
     }
     function stored(sy, sourceId) { return arr(sy.req).filter(function (r) { return r && r.reqSource && S(r.reqSource.sourceId) === S(sourceId) && !r.deleted; })[0] || null; }
+    // the requirement levels of one system function, and what each requirement becomes at them: the system row (ticked
+    // "systems", or nothing decided yet) and, ticked "items", the rows flowed down to each item in the tree
+    // AutoReq writes both levels for a system: rows for the system (from the system FHA and the tree's gates) and rows for one
+    // item of the tree (a basic event's probability, check or assurance level; req_trace.js atItem). The levels ticked decide
+    // which are taken (nothing decided yet: both are shown); each item row is traced to the system row of its type.
     function reqsFor(sy, gr) {
         var m = merge(sy), RT = root.SLReqTrace, page = treeOf(gr); if (!m || !RT) return [];
-        var list = [];
+        var list = [], key = fnKey(sy, gr);
         arr(m.isNew).forEach(function (c) { list.push({ cand: c, row: null, state: 'new' }); });
         arr(m.isUpdated).forEach(function (u) { list.push({ cand: u.next, row: stored(sy, u.next.reqSource.sourceId), state: 'changed' }); });
         arr(m.unchanged).forEach(function (u) { list.push({ cand: u.next, row: stored(sy, u.next.reqSource.sourceId), state: 'in' }); });
         var pid = S(page && page.id);
-        return list.filter(function (x) {
+        var mine = list.filter(function (x) {
             var d = RT.drivenFrom(x.row || x.cand);
-            var mine = d.some(function (e) { return /failure condition$/.test(e.what) && e.id === gr.fcId; });
+            var own = d.some(function (e) { return /failure condition$/.test(e.what) && e.id === gr.fcId; });
             var trees = d.filter(function (e) { return /^fta:/.test(e.tab || '') && (e.what === 'Gate' || e.what === 'Event'); });
             if (trees.length) return trees.some(function (e) { return e.tab.split(':')[1] === pid; });
-            return mine;
-        }).map(function (x) { var r = x.row || x.cand, t = RT.typeOf(r); return { r: r, cand: x.cand, state: x.state, type: t, level: RT.levelFor(t, { sysId: sy.id }).level }; })
-            .sort(function (a, b) { var o = RT.TYPES.map(function (t) { return t.id; }); return o.indexOf(a.type) - o.indexOf(b.type); });
+            return own;
+        }).map(function (x) {
+            var r = x.row || x.cand, t = RT.typeOf(r), lv = RT.pssaLevels(t, sy.id, key).levels, it = RT.atItem(x.cand);
+            return { r: r, cand: x.cand, state: x.state, type: t, levels: lv, at: it ? 'item' : 'system', on: !lv.length || lv.indexOf(it ? 'item' : 'system') >= 0 };
+        });
+        // the system row an item row is traced to: the one of its type written from the system FHA, else the first of its type
+        mine.forEach(function (x) { if (x.at !== 'item') return; var ps = mine.filter(function (y) { return y.at === 'system' && y.type === x.type; }); x.parent = ps.filter(function (y) { return /^fha-/.test(S(y.cand.reqSource.generator)); })[0] || ps[0] || null; });
+        var o = RT.TYPES.map(function (t) { return t.id; });
+        return mine.sort(function (a, b) { return (o.indexOf(a.type) - o.indexOf(b.type)) || ((a.at === 'item') - (b.at === 'item')); });
+    }
+    function reqEntries(rq) {
+        return rq.filter(function (x) { return x.on; }).map(function (x) {
+            var id = x.r.id ? S(x.r.id) : 'New';
+            return { x: x, r: x.r, label: x.at === 'item' && x.parent && x.parent.on ? '↳ ' + id : id, item: x.at === 'item', state: x.state };
+        });
+    }
+    function levelWords(lv) { return lv && lv.length ? L().listJoin(lv.map(function (x) { return x === 'system' ? 'the system' : 'each item'; })) : 'Not decided yet'; }
+    // what the PASA flowed down into this system for the aircraft failure conditions this one is traced to
+    function flowedIn(sy, gr) {
+        var ac = acRowsTraced(gr).map(function (a) { return S(a.fcId); });
+        return arr(sy.req).filter(function (r) { return r && !r.deleted && r.reqSource && r.reqSource.generator === 'flow-down' && ac.indexOf(S(r.reqSource.context && r.reqSource.context.fcId)) >= 0; });
     }
 
     // ---- what is still open --------------------------------------------------------------------------------------------
@@ -152,21 +221,26 @@
         if (!f.scope) left.push('What does this PSSA cover?');
         if (!f.desc) left.push('Is this the system the PSSA assesses?');
         if (!f.method) left.push('Which method and numbers does the PSSA use?');
-        if (!picks(sy).length) left.push('Which failure conditions get an appendix?');
-        if (RT) RT.TYPES.forEach(function (t) { if (!RT.levelFor(t.id, { sysId: sy.id }).level) left.push('At what level are ' + L().lc(t.name) + ' requirements derived? (not set in the PASA)'); });
+        if (RT) RT.TYPES.forEach(function (t) { if (!RT.pssaLevels(t.id, sy.id, null).levels.length) left.push('At what level are ' + L().lc(t.name) + ' requirements derived in this system?'); });
         return left;
     }
     function fcLeft(sy, gr) {
         var left = [], rec = fcRec(sy, gr.fcId), page = treeOf(gr);
-        if (page && andGates(page).length && !rec.indep) left.push('Use independence to set the item assurance levels for ' + gr.fcId + '?');
-        if (page) leaves(page).forEach(function (n) { var k = lidOf(n), st = rec.hid[k]; if (!st && !(n.repairModel === 'periodic' || n.exposureMode === 'latent')) left.push('Would ' + L().nodeName(n) + ' show itself when it fails?'); else if (st === 'hidden' && !(n.repairModel === 'periodic' && n.tau)) left.push('How often is ' + L().nodeName(n) + ' checked?'); });
+        if (!isQuant(gr) || !page) return left;
+        if (andGates(page).length && !rec.indep) left.push('Use independence to set the item assurance levels for ' + gr.fcId + '?');
+        leaves(page).forEach(function (n) { var k = lidOf(n), st = rec.hid[k]; if (!st && !(n.repairModel === 'periodic' || n.exposureMode === 'latent')) left.push('Would ' + L().nodeName(n) + ' show itself when it fails?'); else if (st === 'hidden' && !(n.repairModel === 'periodic' && n.tau)) left.push('How often is ' + L().nodeName(n) + ' checked?'); });
         return left;
     }
+    function fnLeft(sy, key) { var out = []; fnGroups(sy, key).forEach(function (gr) { out = out.concat(fcLeft(sy, gr)); }); return out; }
     function openItems(sy, gr) {
-        var out = [], fx = facts(sy, gr), l = L();
+        var out = [], l = L(), r0 = routeOf(gr), page = treeOf(gr);
+        if (r0 === 'unanswered') out.push('The 1309 chart for ' + gr.fcId + ' is not answered in the system FHA yet, so it is assessed quantitatively until it is.');
+        if (isQuant(gr) && !page) { out.push('No fault tree is generated for ' + gr.fcId + ' yet: generate it in the Fault trees tab.'); return out; }
+        if (!isQuant(gr)) return out;
+        var fx = facts(sy, gr);
         if (fx && fx.meets && !fx.meets.pass) out.push('The fault tree is above its budget: ' + l.sci(fx.rate) + ' per flight hour against ' + l.sci(fx.budget) + '.');
         if (fx && fx.cg) fx.cg.gates.filter(function (x) { return x.critical; }).forEach(function (x) { if (!l.cmas().some(function (c) { return arr(c.linkedGateIds).map(S).indexOf(S(x.key)) >= 0; })) out.push('Gate ' + x.displayId + (x.name ? ' ' + l.T(x.name) : '') + ' carries the budget and has no common mode review yet.'); });
-        var ap = applies(gr), page = treeOf(gr);
+        var ap = applies(gr);
         if (ap && page && page.targetP != null && Number(page.targetP) > ap.rate * (1 + 1e-6)) out.push('The tree\'s target (' + l.sci(Number(page.targetP)) + ' per flight hour) is looser than the stricter budget handed down (' + l.sci(ap.rate) + ').');
         return out;
     }
@@ -181,122 +255,180 @@
         b.push(H(1, 'The system'));
         b.push(P(f.desc === 'own' && f.descText ? l.T(f.descText) : f.desc === 'project' ? 'The ' + l.T(sy.name || sy.id) + (fns.length ? ' performs ' + l.listJoin(fns.map(function (x) { return l.lc(l.T(x.funcName || x.funcId)); })) + '.' : '.') : 'Not decided yet: the description of the system.', 'pssa.desc'));
         b.push(H(1, 'Method'));
-        b.push(P(f.method === 'std' ? 'The assessment follows ARP4761A and ARP4754B, with the objectives of ' + l.acRef() + ' (' + l.regulation() + '). Each system failure condition takes the stricter of the budgets the aircraft hands down and its own class objective; the tree goes down to items, and the item assurance levels come from the tree.' : f.method === 'own' && f.methodText ? l.T(f.methodText) : 'Not decided yet: the method.', 'pssa.method'));
+        b.push(P(f.method === 'std' ? 'The assessment follows ARP4761A and ARP4754B, with the objectives of ' + l.acRef() + ' (' + l.regulation() + '). Each function of the system with a failure condition rated Minor or above has its own appendix. The 1309 chart in the system FHA decides whether each failure condition is assessed quantitatively or qualitatively; a Minor one is qualitative. Each quantitative one takes the stricter of the budgets the aircraft hands down and its own class objective; the tree goes down to items, and the item assurance levels come from the tree.' : f.method === 'own' && f.methodText ? l.T(f.methodText) : 'Not decided yet: the method.', 'pssa.method'));
         var RT = root.SLReqTrace;
-        if (RT) b.push({ k: 'table', name: 'levels', title: 'The level each type of requirement is derived at for this system', q: 'pssa.lvl', rows: RT.TYPES.map(function (t) { var x = RT.levelFor(t.id, { sysId: sy.id }); return { 'Requirement type': t.name, 'Derived at': x.level ? RT.levelLabel(x.level) : 'Not decided yet', From: x.from === 'system' ? 'Set for this system' : x.from === 'report' ? 'The PASA' : '' }; }), lead: '{N} lists the level of each type of requirement for this system: the PASA\'s, unless this system sets its own.' });
+        if (RT) b.push({ k: 'table', name: 'levels', title: 'The levels each type of requirement is written at in this system', q: 'pssa.lvl', rows: RT.TYPES.map(function (t) { var x = RT.pssaLevels(t.id, sy.id, null); return { 'Requirement type': t.name, 'Written at': levelWords(x.levels), From: x.from === 'system' ? 'Set for this system' : x.from === 'pasa' ? 'The PASA (systems ticked)' : '' }; }), lead: '{N} lists where each type of requirement is written in this system: the system, its items, or both. A function may set its own.' });
         b.push(H(1, 'The failure conditions'));
-        var pk = picks(sy);
-        b.push({ k: 'table', name: 'register', title: 'System failure conditions and where each is assessed', q: 'pssa.fcs', rows: groups(sy).map(function (gr) { var i = pk.indexOf(gr.fcId); return { 'Failure condition': fcName(gr), Severity: S(gr.gov.severity), 'Assessed in': i >= 0 ? 'Appendix ' + letter(i) : l.rank(gr.gov.severity) < l.SEV_RANK.Major ? 'No appendix: below Major' : !treeOf(gr) ? 'No appendix: no fault tree generated' : 'Not picked for this issue' }; }), lead: '{N} lists every failure condition in the system FHA.' });
+        var apx = appendices(sy);
+        b.push({ k: 'table', name: 'register', title: 'System failure conditions and where each is assessed', q: 'pssa.fcs', rows: groups(sy).map(function (gr) { var i = apx.indexOf(fnKey(sy, gr)); var on = l.rank(gr.gov.severity) >= l.SEV_RANK.Minor; return { 'Failure condition': fcName(gr), Function: fnTitle(fnInfo(sy, fnKey(sy, gr))), Severity: S(gr.gov.severity), 'Assessed in': on && i >= 0 ? 'Appendix ' + letter(i) + ', ' + routeWords(gr) + (routeOf(gr) === 'unanswered' ? ' (1309 chart not answered)' : '') : 'No appendix: no safety effect' }; }), lead: '{N} lists every failure condition in the system FHA, its function and where it is assessed.' });
         return b;
     }
     function letter(i) { var R0 = root.SLCcaReport && root.SLCcaReport.get('pssa'); return R0 && R0.appxLetter ? R0.appxLetter(i) : String.fromCharCode(65 + i); }
     function after(ctx) {
         var sy = sysNow(), l = L(); if (!sy || !l) return [];
-        var b = [H(1, 'What the appendices found')], pk = picks(sy);
-        if (!pk.length) b.push(P('No failure condition is picked for an appendix yet.'));
-        else b.push({ k: 'table', name: 'found', title: 'What each appendix found', rows: pk.map(function (id, i) { var gr = groupOf(sy, id), fx = gr ? facts(sy, gr) : null, o = gr ? openItems(sy, gr) : []; return { Appendix: letter(i), 'Failure condition': fcName(gr), 'Against the budget': fx && fx.meets ? (fx.meets.pass ? 'Within' : 'Above') + ' (' + l.sci(fx.rate) + ' against ' + l.sci(fx.budget) + ' per flight hour)' : 'Not worked out', Findings: o.length ? o.join(' ') : 'None' }; }), lead: '{N} sums up each appendix.' });
+        var b = [H(1, 'What the appendices found')], apx = appendices(sy), rows = [];
+        apx.forEach(function (k, i) { fnGroups(sy, k).forEach(function (gr) { var q = isQuant(gr), fx = q ? facts(sy, gr) : null, o = openItems(sy, gr); rows.push({ Appendix: letter(i), 'Failure condition': fcName(gr), Assessment: routeWords(gr), 'Against the budget': !q ? 'Qualitative: no number' : fx && fx.meets ? (fx.meets.pass ? 'Within' : 'Above') + ' (' + l.sci(fx.rate) + ' against ' + l.sci(fx.budget) + ' per flight hour)' : 'Not worked out', Findings: o.length ? o.join(' ') : 'None' }); }); });
+        if (!rows.length) b.push(P('No failure condition of this system is rated Minor or above.'));
+        else b.push({ k: 'table', name: 'found', title: 'What each appendix found', rows: rows, lead: '{N} sums up each failure condition in each appendix.' });
         b.push({ k: 'rauth', asHeading: 1 });
         return b;
     }
-    function section(sy, gr, ctx) {
-        var l = L(), fc = gr.gov, f = fc.fcId, q = function (x) { return 'fc.' + f + '.' + x; }, b = [], t = l.target(fc.severity), fx = facts(sy, gr) || {}, page = treeOf(gr), rec = fcRec(sy, f);
+    function fcPart(sy, gr, ctx) {
+        var l = L(), fc = gr.gov, f = fc.fcId, q = function (x) { return 'fc.' + f + '.' + x; }, b = [], t = l.target(fc.severity), fx = isQuant(gr) ? (facts(sy, gr) || {}) : {}, page = treeOf(gr), rec = fcRec(sy, f);
         var acs = acRowsTraced(gr);
-        b.push(H(2, 'What is being evaluated'));
+        b.push(H(2, fcName(gr) + ' (' + routeWords(gr) + ')'));
+        b.push(H(3, 'What is being evaluated'));
         b.push(P(f + ' is ' + l.lc(l.T(fc.fcDesc)) + ' in the ' + l.T(sy.name || sy.id) + '. The system FHA rates it ' + S(fc.severity) + (acs.length ? ', and it feeds ' + l.listJoin(acs.map(function (a) { return S(a.fcId) + ' ' + l.T(a.fcDesc || ''); })) + ' at the aircraft level' : '') + '.'));
         b.push(P('This appendix shows how the system is built to keep that from happening, what each item must promise, and what has to be checked so the backups are really there when needed.'));
-        b.push(H(2, 'The system FHA entry'));
+        b.push(H(3, 'The system FHA entry'));
         b.push({ k: 'table', name: 'sfha-' + f, title: f + ' as the system FHA records it', rows: [{ Item: 'Failure condition', Entry: fcName(gr) }, { Item: 'Flight phases', Entry: l.T(fc.phases || 'Every phase') }, { Item: 'Effect', Entry: l.T(fc.effAc || 'Not recorded') }, { Item: 'Severity', Entry: S(fc.severity) }, { Item: 'Feeds aircraft failure conditions', Entry: acs.length ? acs.map(function (a) { return S(a.fcId) + ' ' + l.T(a.fcDesc || ''); }).join('; ') : 'None traced' }], lead: '{N} is the system FHA entry for the worst case of ' + f + '.' });
-        b.push(H(2, 'What the aircraft hands down'));
+        b.push(H(3, 'What the aircraft hands down'));
         var hd = handedDown(gr), ap = applies(gr);
         if (!hd.length) b.push(P('Nothing is handed down from the aircraft yet: ' + f + ' is not traced to an aircraft failure condition, so its own class objective applies (' + (t.prob != null ? l.sci(t.prob) + ' per flight hour' : 'not set') + ').'));
         else {
             b.push({ k: 'table', name: 'hand-' + f, title: 'The budgets the aircraft sets for ' + f, rows: hd.map(function (x) { return { From: x.from, Budget: l.sci(x.rate) + ' per flight hour', How: x.how }; }).concat([{ From: 'Applies (the stricter)', Budget: l.sci(ap.rate) + ' per flight hour', How: 'The strictest of the above' }]), lead: '{N} lists each budget handed down and the one that applies.' });
             if (hd.length > 1) b.push(P('More than one budget is set for the same system failure. The system has to meet the stricter one; this is worked out, not chosen.'));
         }
-        b.push(H(2, 'The fault tree'));
+        var fin = flowedIn(sy, gr);
+        if (fin.length) b.push({ k: 'table', name: 'in-' + f, title: 'Requirements the PASA flowed down to the ' + l.T(sy.name || sy.id) + ' for ' + f, rows: fin.map(function (r) { return { ID: r.id ? S(r.id) : 'New', Requirement: l.T(r.text), 'From the aircraft failure condition': S(r.reqSource.context.fcId) }; }), lead: '{N} lists what the aircraft asks of this system, as the PASA wrote it into the system requirements.' });
+        if (isQuant(gr) && !page) b.push(P(f + ' is assessed quantitatively, but no fault tree is generated for it yet. Its tree, numbers and item assurance levels appear here once it is.'));
+        else if (!isQuant(gr)) b = b.concat(qualBlocks(sy, gr, page));
+        else {
+        b.push(H(3, 'The fault tree'));
         var K = root.SLCmaClaims, figs = [];
         if (page && K && K.figure) { var res = safe(function () { return K.figure(page.id + ':' + page.root.id, { page: page, noMarks: true, C: ctx.C, dark: ctx.dark, metrics: l.metricsOf(page), anchor: 'pssa-' + f, nodeG: function (id, inner, title) { return root.SLCcaReport.nodeG('pssa', id, inner, title); } }); }, null); if (res && res.parts) { var many = res.parts.length > 1; figs = res.parts.map(function (pt) { return { k: 'fig', name: 'tree-' + f + (many ? '-' + pt.letter : ''), title: fcName(gr) + ', fault tree as the tool generated it, down to items' + (many ? ', part ' + pt.letter : ''), svg: pt.svg, w: pt.w, h: pt.h }; }); } }
         if (figs.length) { b.push(P((figs.length > 1 ? 'The figures below are' : 'The figure below is') + ' the fault tree for ' + f + ' as the tool generated it, down to items, with the probability per flight (P), the rate per flight hour (λ) and the assurance level the tool allocated to each.')); figs.forEach(function (x) { b.push(x); }); }
         else b.push(P('The fault tree for ' + f + ' could not be drawn just now.'));
-        b.push(H(2, 'What the tree says'));
+        b.push(H(3, 'What the tree says'));
         if (fx.singles) b.push(P(fx.singles.length ? 'A single failure can cause ' + f + ': ' + l.listJoin(fx.singles) + '.' : 'No single failure causes ' + f + '. It takes ' + fx.shortest + ' things together' + (fx.shortestEx.length ? ': ' + l.listJoin(fx.shortestEx) : '') + '.'));
         b.push(P(fx.ands && fx.ands.length ? 'The design rests on independence at ' + l.listJoin(fx.ands) + ': the result is only as good as the claim that what sits under each cannot fail together.' : 'The tree has no AND gate: no independence claim carries ' + f + '.'));
         var hid = hiddenOf(sy, gr);
         b.push(P(hid.length ? 'Some inputs sit unused until they are needed: ' + l.listJoin(hid.map(l.nodeName)) + '. If one has failed silently, the tree is thinner than it appears; how often each is checked decides how much it protects.' : 'No input of the tree is marked as a failure that could stay hidden.', q('hid')));
-        b.push(H(2, 'The numbers'));
+        b.push(H(3, 'The numbers'));
         b.push({ k: 'table', name: 'num-' + f, title: 'The numbers for ' + f, rows: [
             { Quantity: 'Budget', Value: fx.budget != null ? l.sci(fx.budget) + ' per flight hour' : 'Not set' },
             { Quantity: 'Hidden failures', Value: hid.length ? hid.map(function (n) { return l.nodeName(n) + (n.tau ? ': checked every ' + n.tau + ' hours' : ': check not set'); }).join('; ') : 'None marked' },
             { Quantity: 'Top event', Value: fx.rate != null ? l.sci(fx.rate) + ' per flight hour (' + l.sci(fx.pTop) + ' per flight)' : 'Not worked out' },
             { Quantity: 'Result', Value: fx.meets ? (fx.meets.pass ? 'Within the budget' : 'Above the budget') : 'Not worked out' }], lead: '{N} checks the tree against the budget.' });
-        b.push(H(2, 'Items and their assurance levels'));
+        b.push(H(3, 'Items and their assurance levels'));
         var its = page ? items(page) : [];
         b.push(its.length ? { k: 'table', name: 'items-' + f, title: 'Items and their assurance levels for ' + f, q: q('dal'), rows: its.map(function (n) { var lvl = (n.type === 'gate' ? 'FDAL ' : 'IDAL ') + n.allocatedDAL; return { Item: l.T(n.name || ''), 'In the tree': S(n.displayId || n.id), Level: lvl, Why: n._dalPending ? 'Lower than the function\'s level because of independence: rests on a common mode analysis showing it (pending)' : rec.indep === 'no' ? 'No independence claim used: the function\'s level' : 'From the tree' }; }), lead: '{N} lists the assurance level the tool allocated to each item.' } : P('No assurance level is allocated in the tree for ' + f + ' yet.', q('dal')));
-        b.push(H(2, 'Hidden failures and their checks'));
+        b.push(H(3, 'Hidden failures and their checks'));
         b.push(hid.length ? { k: 'table', name: 'hid-' + f, title: 'Hidden failures and their checks for ' + f, q: q('hid'), rows: hid.map(function (n) { var every = n.tau && fx.hours && Math.abs(Number(n.tau) - fx.hours) < 1e-6; return { Item: l.nodeName(n), Check: n.tau ? (every ? 'Tested before every flight' : 'Checked every ' + n.tau + ' flight hours') : 'Not set yet', 'Candidate maintenance requirement': n.tau && !every ? 'Yes: a scheduled task' : n.tau ? 'No: a test before each flight' : 'To be decided' }; }), lead: '{N} lists each failure that could stay hidden and how often it is checked.' } : P('No failure in the tree for ' + f + ' could stay hidden.', q('hid')));
-        b.push(H(2, 'Independence claims sent to the CMA'));
+        b.push(H(3, 'Independence claims sent to the CMA'));
         var crit = fx.cg ? fx.cg.gates.filter(function (x) { return x.critical; }) : [];
         b.push(P(crit.length ? crit.map(function (x) { var rv = l.cmas().filter(function (c) { return arr(c.linkedGateIds).map(S).indexOf(S(x.key)) >= 0; }); return 'Gate ' + x.displayId + (x.name ? ' ' + l.T(x.name) : '') + ' carries the budget: ' + (rv.length ? 'its independence is shown in ' + rv.map(function (c) { return S(c.cmaId) + (c.subject ? ' ' + l.T(c.subject) : ''); }).join(', ') : 'it goes to the CMA Autopilot as a claim to show') + '.'; }).join(' ') : 'No gate of the tree carries the budget, so no independence claim goes to the CMA.'));
-        b.push(H(2, 'Requirements'));
+        }
+        b.push(H(3, 'Requirements'));
         var rq = reqsFor(sy, gr), RT = root.SLReqTrace;
         if (!rq.length) b.push(P('AutoReq has no requirement for ' + f + ' yet.'));
         else {
             b.push(P('Generated by AutoReq from this analysis. These are the mitigations.'));
-            b.push({ k: 'table', name: 'req-' + f, title: 'Requirements for ' + f, q: q('req'), rows: rq.map(function (x) { return { ID: x.r.id ? S(x.r.id) : 'New', Requirement: l.T(x.r.text), Rationale: l.T(x.r.rat) || 'Rationale missing', 'Driven from': RT.drivenText(x.r), 'Derived to': x.level ? RT.levelLabel(x.level) : 'Not decided yet' }; }), lead: '{N} lists every requirement AutoReq generates for ' + f + '.' });
-            if (rq.some(function (x) { return x.state !== 'in'; })) b.push(P('Requirements shown as New are not in the system requirements yet; they go in when accepted.'));
+            var ents = reqEntries(rq);
+            b.push({ k: 'table', name: 'req-' + f, title: 'Requirements for ' + f, q: q('req'), rows: ents.map(function (e) { return { ID: e.label, Requirement: l.T(e.r.text), Rationale: l.T(e.r.rat) || 'Rationale missing', 'Driven from': RT.drivenText(e.r), 'Written at': e.item ? 'Item' : 'System', 'Levels ticked': levelWords(e.x.levels) }; }), lead: '{N} lists every requirement for ' + f + ' at the levels ticked: for each type, the system requirement first, then those for each item, traced to it.' });
+            if (reqEntries(rq).some(function (e) { return e.state !== 'in'; })) b.push(P('Requirements shown as New are not in the system requirements yet; they go in when accepted.'));
         }
-        b.push(H(2, 'Path to compliance'));
-        b.push(rq.length ? { k: 'table', name: 'path-' + f, title: 'How each requirement for ' + f + ' will be closed', rows: rq.map(function (x) { var c = l.CLOSE[x.type] || l.CLOSE.prob, cm = x.type === 'ind' ? (RT.drivenFrom(x.r).filter(function (e) { return e.what === 'Common mode analysis'; }).map(function (e) { return e.id; })[0] || 'A common mode analysis') : ''; return { Requirement: (x.r.id ? S(x.r.id) : 'New') + ' ' + l.T(x.r.text).slice(0, 90) + (l.T(x.r.text).length > 90 ? '...' : ''), 'Closed by': c.how, In: cm || (x.type === 'crew' ? 'Human factors evaluation' : x.type === 'inst' ? 'ZSA and PRA' : 'SSA ' + l.T(sy.name || sy.id)) }; }), lead: '{N} is built from the requirements: ' + f + ' is shown when each is closed.' } : P('The path to compliance is built from the requirements, and there are none yet.'));
+        b.push(H(3, 'Path to compliance'));
+        b.push(rq.length ? { k: 'table', name: 'path-' + f, title: 'How each requirement for ' + f + ' will be closed', rows: reqEntries(rq).map(function (e) { var x = e.x, c = l.CLOSE[x.type] || l.CLOSE.prob, cm = x.type === 'ind' ? (RT.drivenFrom(x.r).filter(function (d) { return d.what === 'Common mode analysis'; }).map(function (d) { return d.id; })[0] || 'A common mode analysis') : ''; var t0 = l.T(e.r.text); return { Requirement: e.label + ' ' + t0.slice(0, 90) + (t0.length > 90 ? '...' : ''), 'Closed by': c.how, In: cm || (x.type === 'crew' ? 'Human factors evaluation' : x.type === 'inst' ? 'ZSA and PRA' : 'SSA ' + l.T(sy.name || sy.id)) }; }), lead: '{N} is built from the requirements: ' + f + ' is shown when each is closed.' } : P('The path to compliance is built from the requirements, and there are none yet.'));
         return b;
     }
-    function sections(ctx) { var sy = sysNow(); if (!sy || !L()) return []; return picks(sy).map(function (id) { var gr = groupOf(sy, id); return gr ? { id: sid(id), title: fcName(gr), blocks: section(sy, gr, ctx), edit: false } : null; }).filter(Boolean); }
+    function qualBlocks(sy, gr, page) {
+        var l = L(), fc = gr.gov, f = fc.fcId, cp = fc.chartProps || {}, r0 = routeOf(gr), b = [];
+        var why = l.rank(fc.severity) < l.SEV_RANK.Major ? 'it is Minor, and a Minor failure condition is assessed qualitatively'
+            : r0 === 'similarity' ? 'the 1309 chart records it as similar to a design already shown in service'
+            : cp.isSimpleConventional ? 'the 1309 chart records the design as simple and conventional'
+            : (cp.isSimple && cp.isRedundant) ? 'the 1309 chart records the design as simple and redundant'
+            : 'the 1309 chart sets a qualitative assessment for it';
+        b.push(H(3, 'The qualitative assessment'));
+        b.push(P(f + ' is assessed qualitatively because ' + why + '. No number is worked out for it; the argument below and the requirements after it carry the case.'));
+        var cs = page ? l.cutsets(page) : null;
+        if (cs) { var one = cs.filter(function (c) { return c.length === 1; }).map(function (c) { return l.nodeName(c[0]); }); b.push(P(one.length ? 'Its fault tree shows a single failure can cause it: ' + l.listJoin(one) + '.' : 'Its fault tree shows no single failure causes it.')); }
+        b.push(P(r0 === 'similarity' ? 'It is shown by the service experience of the similar design and by showing the differences do not change the effect.' : 'It is shown by a design and installation appraisal of the ' + l.T(sy.name || sy.id) + ', its failure modes and effects, and the requirements below.'));
+        return b;
+    }
+    // one appendix per function: the function, then each of its applicable failure conditions (worked out once per change)
+    var _secMemo = { gen: -2, map: {} };
+    function fnSection(sy, key, ctx) {
+        var l = L(), G = memoGen(), k = S(sy.id) + '|' + key + '|' + (ctx.dark ? 1 : 0) + (ctx.forExport ? 1 : 0);
+        if (_secMemo.gen !== G || G === -1) _secMemo = { gen: G, map: {} };
+        if (_secMemo.map[k]) return _secMemo.map[k];
+        var fi = fnInfo(sy, key), grs = fnGroups(sy, key), b = [H(2, 'The function')];
+        b.push(P(fnTitle(fi) + (fi.def ? ': ' + l.lc(fi.def).replace(/\.$/, '') + '.' : '.') + (fi.kind === 'aircraft' ? ' It is an aircraft function, as the ' + l.T(sy.name || sy.id) + ' carries it' + (fi.carriers.length ? ' through ' + l.listJoin(fi.carriers.map(function (c) { return S(c.funcId) + ' ' + l.T(c.funcName || ''); })) : '') + '.' : '') + ' Its failure conditions with a safety effect: ' + l.listJoin(grs.map(function (gr) { return fcName(gr) + ' (' + S(gr.gov.severity) + ', ' + routeWords(gr) + ')'; })) + '.'));
+        grs.forEach(function (gr) { b = b.concat(fcPart(sy, gr, ctx)); });
+        _secMemo.map[k] = b;
+        return b;
+    }
+    function section(sy, gr, ctx) { return fcPart(sy, gr, ctx); }
+    // the section's blocks are a getter: worked out only when its appendix is drawn (the front lists the appendices only)
+    function sections(ctx) {
+        var sy = sysNow(); if (!sy || !L()) return [];
+        return appendices(sy).map(function (key) {
+            var fi = fnInfo(sy, key), o = { id: sid(key), title: fnTitle(fi), tabLabel: { id: key, name: fi.name }, edit: false }, cache = null;
+            Object.defineProperty(o, 'blocks', { enumerable: true, get: function () { if (!cache) cache = fnSection(sy, key, ctx); return cache; } });
+            return o;
+        });
+    }
 
     // ---- the left pane --------------------------------------------------------------------------------------------------
     var ui = { open: {} };
     function Q(q) { return root.SLAutopilotUI ? root.SLAutopilotUI.question(q, 'SLPssaAuto.ui.pick') : ''; }
     function card(qid, body, done) { return '<div class="paq-card' + (done ? ' done' : '') + '" data-paq="' + L().E(qid) + '">' + body + '</div>'; }
     function textBox(qid, label, val) { var E = L().E, id = 'psq-ta-' + qid.replace(/[^A-Za-z0-9_-]/g, '_'); return '<div class="paq-x">' + E(label) + '</div><textarea class="paq-ta" id="' + E(id) + '">' + E(val || '') + '</textarea><button type="button" class="paq-b on" onclick="SLPssaAuto.ui.text(' + L().J(qid) + ',' + L().J(id) + ')">Save</button>'; }
+    function lvlButtons(t, cur, fnArg) {
+        var l = L(), E = l.E, J = l.J, RT = root.SLReqTrace;
+        return RT.PSSA_LEVELS.map(function (x) { var on = cur.indexOf(x) >= 0; return '<button type="button" role="checkbox" aria-checked="' + on + '" class="paq-b' + (on ? ' on' : '') + '" data-psq-lvl="' + E(t.id + ':' + x) + '" onclick="SLPssaAuto.ui.level(' + J(t.id) + ',' + J(x) + (fnArg != null ? ',' + J(fnArg) : '') + ')">' + (on ? '✓ ' : '') + E(x === 'system' ? 'Systems' : 'Items') + '</button>'; }).join('');
+    }
     function leftFront(sy) {
-        var l = L(), E = l.E, J = l.J, f = frontOf(sy), h = '', RT = root.SLReqTrace;
-        h += '<div class="paq-h">The front of the report: ' + E(l.T(sy.name || sy.id)) + '</div><div class="paq-x">What the aircraft asks of this system arrives from the PASA. These answers write the front of the system\'s PSSA.</div>';
+        var l = L(), E = l.E, f = frontOf(sy), h = '', RT = root.SLReqTrace;
+        h += '<div class="paq-h">The front of the report: ' + E(l.T(sy.name || sy.id)) + '</div><div class="paq-x">What the aircraft asks of this system arrives from the PASA. These answers write the front of the system\'s PSSA. Every function with a failure condition rated Minor or above has its own appendix; the 1309 chart decides quantitative or qualitative.</div>';
         h += card('pssa.scope', Q({ id: 'pssa.scope', text: 'What does this PSSA cover?', picked: f.scope || null, options: [{ id: 'all', label: 'Every function and failure condition in the system FHA', impact: 'The report says it covers the whole system FHA.' }, { id: 'part', label: 'Only part of it', impact: 'You say what is left out and why.' }] }) + (f.scope === 'part' ? textBox('pssa.scopeNote', 'What is left out, and why', f.scopeNote) : ''), !!f.scope);
         h += card('pssa.desc', Q({ id: 'pssa.desc', text: 'Is this the system the PSSA assesses?', why: 'From the project: ' + l.T(sy.name || sy.id) + ' and its functions.', picked: f.desc || null, options: [{ id: 'project', label: 'Yes, describe it from its functions', impact: 'The report names the system and what it does.' }, { id: 'own', label: 'I will write the description', impact: 'The report uses your words.' }] }) + (f.desc === 'own' ? textBox('pssa.descText', 'The system, in a few sentences', f.descText) : ''), !!f.desc);
         h += card('pssa.method', Q({ id: 'pssa.method', text: 'Which method and numbers does the PSSA use?', why: l.regulation() + ', objectives from ' + l.acRef() + '.', picked: f.method || null, options: [{ id: 'std', label: 'ARP4761A and ARP4754B, with the budgets the PASA hands down', impact: 'The report states the method.' }, { id: 'own', label: 'I will write the method', impact: 'The report uses your words.' }] }) + (f.method === 'own' ? textBox('pssa.methodText', 'The method', f.methodText) : ''), !!f.method);
-        var pk = picks(sy), cand = candidates(sy).filter(function (gr) { return pk.indexOf(gr.fcId) < 0; });
-        h += card('pssa.fcs', '<div class="slap-q">Which failure conditions get an appendix?</div><div class="paq-x">Each is taken at its worst case. Only failure conditions rated Major or worse with a generated fault tree are offered.</div>'
-            + (pk.length ? '<table class="paq-t"><tbody>' + pk.map(function (id, i) { var gr = groupOf(sy, id); return '<tr><td>Appendix ' + E(letter(i)) + '</td><td>' + E(fcName(gr)) + '</td><td>' + E(gr.gov.severity) + '</td><td><button type="button" class="paq-b" onclick="SLPssaAuto.ui.unpick(' + J(id) + ')">Remove</button></td></tr>'; }).join('') + '</tbody></table>' : '')
-            + (cand.length ? '<select class="paq-sel" data-psq-addfc="1" onchange="SLPssaAuto.ui.addPick(this.value)"><option value="">Add a failure condition...</option>' + cand.map(function (gr) { return '<option value="' + E(gr.fcId) + '">' + E(fcName(gr) + ' (' + gr.gov.severity + ')') + '</option>'; }).join('') + '</select>' : ''), pk.length > 0);
         if (RT) {
-            var lv = '<div class="slap-q">Requirement levels for this system</div><div class="paq-x">Set in the PASA for the whole aircraft. Change one here only if this system needs it; a type the PASA has not set must be set here.</div><table class="paq-t"><tbody>';
-            RT.TYPES.forEach(function (t) { var base = RT.levelFor(t.id, {}).level, own = safe(function () { return pc().reqLevels.sys[S(sy.id)][t.id]; }, null); lv += '<tr><td>' + E(t.name) + '</td><td style="white-space:nowrap">' + (base ? '<button type="button" class="paq-b' + (!own ? ' on' : '') + '" onclick="SLPssaAuto.ui.level(' + J(t.id) + ',null)">As the PASA (' + E(RT.levelLabel(base)) + ')</button>' : '') + RT.LEVELS.map(function (x) { return '<button type="button" class="paq-b' + (own === x.id ? ' on' : '') + '" onclick="SLPssaAuto.ui.level(' + J(t.id) + ',' + J(x.id) + ')">' + E(x.label) + '</button>'; }).join('') + '</td></tr>'; });
-            h += card('pssa.lvl', lv + '</tbody></table>', RT.TYPES.every(function (t) { return !!RT.levelFor(t.id, { sysId: sy.id }).level; }));
+            var lv = '<div class="slap-q">Where is each type of requirement written in this system?</div><div class="paq-x">Tick systems, items, or both: a requirement can be written at more than one level. A systems tick in the PASA starts this at systems. Systems takes the requirements written for the system; items takes those written for each item in the tree (its probability, check and assurance level), each traced to its system requirement.</div><table class="paq-t"><tbody>';
+            RT.TYPES.forEach(function (t) { var cur = RT.pssaLevels(t.id, sy.id, null); lv += '<tr data-ccq-row="pssa.lvl.' + E(t.id) + '"><td><b>' + E(t.name) + '</b>' + (cur.from === 'pasa' ? '<div class="paq-x" style="margin:2px 0 0">From the PASA</div>' : '') + '</td><td style="white-space:nowrap">' + lvlButtons(t, cur.levels, null) + '</td></tr>'; });
+            h += card('pssa.lvl', lv + '</tbody></table>', RT.TYPES.every(function (t) { return RT.pssaLevels(t.id, sy.id, null).levels.length > 0; }));
         }
         return h;
     }
     function leftFc(sy, gr) {
-        var l = L(), E = l.E, J = l.J, f = gr.fcId, h = '', page = treeOf(gr), rec = fcRec(sy, f), fx = facts(sy, gr) || {};
-        h += '<div class="paq-h">' + E(fcName(gr)) + ' (' + E(gr.gov.severity) + ')</div>';
+        var l = L(), E = l.E, J = l.J, f = gr.fcId, h = '', page = treeOf(gr), rec = fcRec(sy, f), q0 = isQuant(gr);
+        h += '<div class="paq-h">' + E(fcName(gr)) + ' (' + E(gr.gov.severity) + ', ' + routeWords(gr) + ')</div>';
         var oi = openItems(sy, gr); if (oi.length) h += '<div class="paq-open" data-paq-openitems="1"><b>Open items</b><br>' + oi.map(E).join('<br>') + '</div>';
-        h += card('fc.' + f + '.gen', '<div class="slap-q">What the aircraft hands down, the tree, the numbers</div><div class="paq-x">Generated. Nothing to answer.</div>' + (page ? '<button type="button" class="paq-b" onclick="SLPasaAuto.ui.openTree(' + J(page.id) + ')">Open the fault tree</button>' : ''), true);
-        if (page && andGates(page).length) {
+        if (!q0) { h += card('fc.' + f + '.gen', '<div class="slap-q">The qualitative assessment</div><div class="paq-x">Generated from the system FHA and its 1309 chart. Nothing to answer here.</div>', true); return h; }
+        if (!page) return h;
+        var fx = facts(sy, gr) || {};
+        h += card('fc.' + f + '.gen', '<div class="slap-q">What the aircraft hands down, the tree, the numbers</div><div class="paq-x">Generated. Nothing to answer.</div><button type="button" class="paq-b" onclick="SLPasaAuto.ui.openTree(' + J(page.id) + ')">Open the fault tree</button>', true);
+        if (andGates(page).length) {
             var lo = items(page).filter(function (n) { return n._dalPending; }).map(function (n) { return S(n.displayId) + ' at ' + (n.type === 'gate' ? 'FDAL ' : 'IDAL ') + n.allocatedDAL; });
             h += card('fc.' + f + '.dal', Q({ id: 'fc.' + f + '.dal', text: 'Use independence to set the item assurance levels?', why: 'The system function is FDAL ' + (fx.fdal || '?') + ' because ' + f + ' is ' + gr.gov.severity + '. ARP4754B allows the items under an AND gate to sit lower when they are shown to be independent.', picked: rec.indep || null, options: [{ id: 'yes', label: 'Yes: use the levels the tool allocated down the tree', impact: (lo.length ? 'Lower levels: ' + l.listJoin(lo) + '. ' : '') + 'Each lower level relies on a common mode analysis showing the inputs independent; the table marks them pending until it does.' }, { id: 'no', label: 'No: keep every item at FDAL ' + (fx.fdal || ''), impact: 'No independence claim used for the assurance levels: more development effort on every item. The common mode analysis is still needed for the probability.' }] }), !!rec.indep);
         }
-        if (page) leaves(page).forEach(function (n) {
+        leaves(page).forEach(function (n) {
             var k = lidOf(n), st = rec.hid[k] || ((n.repairModel === 'periodic' || n.exposureMode === 'latent') ? 'hidden' : null), qid = 'fc.' + f + '.hid.' + k;
             h += card(qid, Q({ id: qid, text: 'Would ' + l.nodeName(n) + ' show itself when it fails?', why: 'A failure nobody would notice stays hidden until it matters; the tree then counts on a check to find it.', picked: st, options: [{ id: 'evident', label: 'Yes, it shows itself', impact: 'Nothing to check: its failure is noticed when it happens.' }, { id: 'hidden', label: 'No, it could stay hidden', impact: 'You set how often it is checked; the check becomes a requirement.' }] })
                 + (st === 'hidden' ? '<div class="paq-x" style="margin-top:8px"><b>How often is it checked?</b></div><button type="button" class="paq-b' + (n.tau && fx.hours && Math.abs(Number(n.tau) - fx.hours) < 1e-6 ? ' on' : '') + '" onclick="SLPssaAuto.ui.check(' + J(f) + ',' + J(k) + ',\'flight\')">Tested before every flight</button>'
                     + '<span class="paq-x"> or every </span><input type="number" min="1" step="1" class="paq-sel" style="width:90px" id="psq-tau-' + E(f + '-' + k) + '" value="' + E(n.tau && !(fx.hours && Math.abs(Number(n.tau) - fx.hours) < 1e-6) ? n.tau : '') + '"> <span class="paq-x">flight hours</span> <button type="button" class="paq-b" onclick="SLPssaAuto.ui.check(' + J(f) + ',' + J(k) + ',\'hours\')">Save</button>' : ''), !!st && (st !== 'hidden' || !!n.tau));
         });
-        var rq = reqsFor(sy, gr), nNew = rq.filter(function (x) { return x.state !== 'in'; }).length;
-        h += card('fc.' + f + '.req', '<div class="slap-q">Requirements for ' + E(f) + '</div><div class="paq-x">AutoReq writes them from this analysis, at the levels set on the front of the report.</div>' + (nNew ? '<button type="button" class="paq-b on" data-psq-acceptreq="' + E(f) + '" onclick="SLPssaAuto.ui.acceptReqs(' + J(f) + ')">Put the new and changed requirements for ' + E(f) + ' in the system requirements</button>' : '<div class="paq-x">Every requirement for ' + E(f) + ' is in the system requirements.</div>'), !nNew);
+        return h;
+    }
+    function leftFn(sy, key) {
+        var l = L(), E = l.E, J = l.J, fi = fnInfo(sy, key), grs = fnGroups(sy, key), RT = root.SLReqTrace, h = '';
+        h += '<div class="paq-h">' + E(fnTitle(fi)) + '</div><div class="paq-x">' + E(grs.length === 1 ? 'One failure condition of this function has a safety effect.' : grs.length + ' failure conditions of this function have a safety effect.') + ' Each has its own questions below; what the project already holds is filled in and named.</div>';
+        grs.forEach(function (gr) { h += '<div class="paq-fcblock" data-psq-fcblock="' + E(gr.fcId) + '">' + leftFc(sy, gr) + '</div>'; });
+        if (RT) {
+            var lv = '<div class="slap-q">Requirement levels for ' + E(key) + '</div><div class="paq-x">Ticked on the front of the report. Change one here only if this function needs it.</div><table class="paq-t"><tbody>';
+            RT.TYPES.forEach(function (t) { var cur = RT.pssaLevels(t.id, sy.id, key), own = cur.from === 'function'; lv += '<tr><td>' + E(t.name) + (own ? ' (this function)' : '') + '</td><td style="white-space:nowrap">' + lvlButtons(t, cur.levels, key) + (own ? '<button type="button" class="paq-b" onclick="SLPssaAuto.ui.levelReset(' + J(t.id) + ',' + J(key) + ')">As the report</button>' : '') + '</td></tr>'; });
+            var nNew = 0; grs.forEach(function (gr) { reqEntries(reqsFor(sy, gr)).forEach(function (e) { if (e.state !== 'in') nNew++; }); });
+            lv += '</tbody></table>' + (nNew ? '<div style="margin-top:8px"><button type="button" class="paq-b on" data-psq-acceptreq="' + E(key) + '" onclick="SLPssaAuto.ui.acceptReqs(' + J(key) + ')">Put the new and changed requirements for ' + E(key) + ' in the system requirements</button></div>' : '<div class="paq-x" style="margin-top:6px">Every requirement for ' + E(key) + ' is in the system requirements.</div>');
+            h += card('fn.' + key + '.req', lv, !nNew);
+        }
         return h;
     }
     function renderQuestions(R, tabv) {
         var l = L(); if (!l) return ''; l.style();
         var sy = sysNow(); if (!sy) return '<div class="paq-x">Open a system to see its PSSA.</div>';
-        var f = fcOfSid(R && R.partOf ? R.partOf(tabv) : null);
-        if (f) { var gr = groupOf(sy, f); return gr ? leftFc(sy, gr) : '<div class="paq-x">This failure condition is no longer offered.</div>'; }
+        var key = fnOfSid(R && R.partOf ? R.partOf(tabv) : null);
+        if (key) return fnGroups(sy, key).length ? leftFn(sy, key) : '<div class="paq-x">This function has no failure condition with a safety effect now.</div>';
         return leftFront(sy);
     }
 
@@ -331,22 +463,33 @@
         if (qid === 'pssa.scopeNote') f0.scopeNote = v; else if (qid === 'pssa.descText') f0.descText = v; else if (qid === 'pssa.methodText') f0.methodText = v; else return;
         save(); done(qid.replace(/Note$|Text$/, ''));
     }
-    function level(type, lv) { var sy = sysNow(), RT = root.SLReqTrace; if (!sy || !RT) return; try { RT.setLevel(type, lv, { sys: sy.id }); } catch (e) { return msg(e.message); } save(); done('pssa.lvl'); }
-    function addPick(id) { var sy = sysNow(); if (!sy || !id) return; var s0 = store(), a = s0.picks[S(sy.id)] = arr(s0.picks[S(sy.id)]); if (a.indexOf(id) < 0) a.push(id); var order = groups(sy).map(function (x) { return x.fcId; }); a.sort(function (x, y) { return order.indexOf(x) - order.indexOf(y); }); save(); done('pssa.fcs'); }
-    function unpick(id) { var sy = sysNow(); if (!sy) return; var s0 = store(); s0.picks[S(sy.id)] = arr(s0.picks[S(sy.id)]).filter(function (x) { return x !== id; }); save(); done('pssa.fcs'); }
-    function acceptReqs(fcId) {
-        var sy = sysNow(), gr = sy ? groupOf(sy, fcId) : null, AR = g('AutoReq'), m = sy ? merge(sy) : null; if (!gr || !AR || !m) return;
-        var ids = reqsFor(sy, gr).map(function (x) { return S(x.cand.reqSource.sourceId); });
-        var sub = { scope: m.scope, isNew: arr(m.isNew).filter(function (c) { return ids.indexOf(S(c.reqSource.sourceId)) >= 0; }), isUpdated: arr(m.isUpdated).filter(function (u) { return ids.indexOf(S(u.next.reqSource.sourceId)) >= 0; }), unchanged: [], orphaned: [], migrations: [], migrationUnresolved: [] };
-        try { AR.applyMerge(sub, { acceptNew: true, acceptUpdates: true, acceptOrphanRemoval: false }); } catch (e) { return msg('Not added: ' + (e && e.message || e)); }
-        _rq.k = ''; if (root.SLReqTrace) { root.SLReqTrace.ensureIds(); root.SLReqTrace.syncLevels(); }
-        save(); done('fc.' + fcId + '.req');
+    function level(type, lv, key) {
+        var sy = sysNow(), RT = root.SLReqTrace; if (!sy || !RT) return;
+        try { RT.toggleLevel(type, lv, key != null ? { sys: sy.id, fn: key } : { sys: sy.id }); } catch (e) { return msg(e.message); }
+        save(); done(key != null ? 'fn.' + key + '.req' : 'pssa.lvl');
+    }
+    function levelReset(type, key) { var sy = sysNow(), RT = root.SLReqTrace; if (!sy || !RT) return; RT.setLevels(type, null, { sys: sy.id, fn: key }); save(); done('fn.' + key + '.req'); }
+    // the system rows (ticked systems, or nothing decided yet) through AutoReq; the item rows after them, each traced to its
+    // system requirement (parentReqId), updated in place when it is already in the register
+    // the rows at the levels ticked, through AutoReq; then each item row traced to its system row (parentReqId)
+    // a row can depend on another accepted in the same go (a check requirement names the row it checks): a second pass settles it
+    function acceptReqs(key, again) {
+        var sy = sysNow(), AR = g('AutoReq'), m = sy ? merge(sy) : null, RT = root.SLReqTrace; if (!sy || !AR || !m || !RT) return;
+        var keep = [], kids = [];
+        fnGroups(sy, key).forEach(function (gr) { reqsFor(sy, gr).forEach(function (x) { if (!x.on) return; keep.push(S(x.cand.reqSource.sourceId)); if (x.at === 'item' && x.parent) kids.push(x); }); });
+        var sub = { scope: m.scope || ('sys-' + sy.id), isNew: arr(m.isNew).filter(function (c) { return keep.indexOf(S(c.reqSource.sourceId)) >= 0; }), isUpdated: arr(m.isUpdated).filter(function (u) { return keep.indexOf(S(u.next.reqSource.sourceId)) >= 0; }), unchanged: [], orphaned: [], migrations: [], migrationUnresolved: [] };
+        try { if (sub.isNew.length || sub.isUpdated.length) AR.applyMerge(sub, { acceptNew: true, acceptUpdates: true, acceptOrphanRemoval: false }); } catch (e) { return msg('Not added: ' + (e && e.message || e)); }
+        kids.forEach(function (x) { var c = stored(sy, x.cand.reqSource.sourceId), p = stored(sy, x.parent.cand.reqSource.sourceId); if (c && p) c.parentReqId = S(p.internalId); });
+        _rq.k = ''; RT.ensureIds(); RT.syncLevels();
+        if (!again && fnGroups(sy, key).some(function (gr) { return reqsFor(sy, gr).some(function (x) { return x.on && x.state !== 'in'; }); })) return acceptReqs(key, true);
+        save(); done('fn.' + key + '.req');
     }
 
     // ---- outputs and acceptance (the old PSSA checklist) --------------------------------------------------------------------
     function fpOf(o) { try { return JSON.stringify(o); } catch (_) { return String(Math.random()); } }
-    function outputs() {
-        var sy = sysNow(); if (!sy) return [];
+    // rep: the report asked about ('sys:<id>'; the SSA reads a PSSA's acceptance this way), else the system on screen
+    function outputs(rep) {
+        var sy = rep && /^sys:/.test(S(rep)) ? L().sysById(S(rep).slice(4)) : sysNow(); if (!sy) return [];
         var pk = picks(sy);
         return [
             { id: 'trees', what: 'Each fault tree within the budget the aircraft hands down', accept: 'No appendix above its budget; the stricter budget applied where two are handed down', role: 'Safety analyst', fp: function () { return fpOf(pk.map(function (id) { var gr = groupOf(sy, id), fx = gr ? facts(sy, gr) : null; return fx ? [fx.rate, fx.budget] : null; })); } },
@@ -363,15 +506,15 @@
         var CR = root.SLCcaReport; if (!CR || !L() || typeof document === 'undefined' || !document.getElementById('ws-view-pssa')) return null;
         return CR.define({
             key: 'pssa', viewId: 'ws-view-pssa', leftId: 'pssa-auto-host', title: 'Preliminary System Safety Assessment', code: 'PSSA',
-            lead: 'One report per system: the front says what it covers, how it is done and what it found; each system failure condition you pick has its own appendix. What the aircraft asks of this system arrives from the PASA.',
+            lead: 'One report per system: the front says what it covers, how it is done and what it found; each function of the system with a failure condition rated Minor or above has its own appendix holding all of those failure conditions. What the aircraft asks of this system arrives from the PASA.',
             appendices: true,
-            tabs: { allLabel: false, parts: true, pickLabel: 'Part', frontLabel: 'Front of the report', noun: 'failure condition', partLabel: function (s) { var sy = sysNow(), gr = sy ? groupOf(sy, fcOfSid(s)) : null; return gr ? fcName(gr) : S(s); } },
-            reports: function () { var sy = sysNow(); if (!sy) return []; var code = root.SLReqTrace ? root.SLReqTrace.sysCode(sy) : S(sy.id); return [{ id: 'sys:' + S(sy.id), code: code, label: L().T(sy.name || sy.id), title: L().T(sy.name || sy.id), sections: picks(sy).map(sid) }]; },
+            tabs: { allLabel: false, parts: true, pickLabel: 'Part', frontLabel: 'Front of the report', noun: 'function', partLabel: function (s) { var sy = sysNow(), k = fnOfSid(s); return sy && k ? fnTitle(fnInfo(sy, k)) : S(s); } },
+            reports: function () { var sy = sysNow(); if (!sy) return []; var code = root.SLReqTrace ? root.SLReqTrace.sysCode(sy) : S(sy.id); return [{ id: 'sys:' + S(sy.id), code: code, label: L().T(sy.name || sy.id), title: L().T(sy.name || sy.id), sections: appendices(sy).map(sid) }]; },
             front: front, after: after, sections: sections, renderQuestions: renderQuestions, outputs: outputs,
-            authored: [{ id: 'conclusion', title: 'Conclusion', purpose: 'Whether the system as planned meets the budget for this failure condition, what it rests on, and what is still open.' }],
+            authored: [{ id: 'conclusion', title: 'Conclusion', purpose: 'Whether the system as planned meets what is asked of each failure condition of this function, what that rests on, and what is still open.' }],
             reportAuthored: [{ id: 'conclusion', title: 'Conclusion', purpose: 'Whether the system as planned meets what the aircraft asks of it, what that rests on, and what is still open.' }],
             aiType: 'PSSA',
-            aiReady: function (s) { var sy = sysNow(); if (!sy) return { ready: false, left: ['Open a system'] }; var f = fcOfSid(s); if (f) { var gr = groupOf(sy, f), l0 = gr ? fcLeft(sy, gr) : []; return { ready: !l0.length, left: l0 }; } var l2 = frontLeft(sy); return { ready: !l2.length, left: l2 }; },
+            aiReady: function (s) { var sy = sysNow(); if (!sy) return { ready: false, left: ['Open a system'] }; var k = fnOfSid(s); if (k) { var l0 = fnLeft(sy, k); return { ready: !l0.length, left: l0 }; } var l2 = frontLeft(sy).concat(appendices(sy).filter(function (x) { return fnLeft(sy, x).length; }).map(function (x) { return 'The questions of the appendix for ' + fnTitle(fnInfo(sy, x)); })); return { ready: !l2.length, left: l2 }; },
             io: { does: 'Works the budgets the aircraft hands down through the system\'s own fault trees to its items: what each item must promise, what must be checked, and which independence claims the CMA has to show.',
                 inputs: [{ id: 'pasa', what: 'The budgets the PASA hands down', from: 'PASA', tab: 'pasa' }, { id: 'sfha', what: 'The system functional hazard assessment', from: 'SFHA', tab: 'sys-workspace' }, { id: 'trees', what: 'The system fault trees', from: 'Fault trees', tab: 'fta' }],
                 outputs: [{ id: 'reqs', what: 'System requirements with their rationale and source', to: 'System requirements', tab: 'sys-workspace' }, { id: 'idal', what: 'Item assurance levels', to: 'Development assurance', tab: 'dal-ref' }, { id: 'claims', what: 'Independence claims to show', to: 'CMA', tab: 'cma' }] }
@@ -379,8 +522,8 @@
     }
     (function boot(tries) { if (define()) return; if (tries > 0 && typeof setTimeout === 'function') setTimeout(function () { boot(tries - 1); }, 250); })(80);
 
-    var api = { VERSION: VERSION, sysNow: sysNow, candidates: candidates, picks: picks, groupOf: groupOf, handedDown: handedDown, applies: applies, facts: facts, items: items, hiddenOf: hiddenOf, reqsFor: reqsFor, frontLeft: frontLeft, fcLeft: fcLeft, openItems: openItems, section: section, outputs: outputs, store: store,
-        ui: { pick: pick, check: check, text: text, level: level, addPick: addPick, unpick: unpick, acceptReqs: acceptReqs } };
+    var api = { VERSION: VERSION, sysNow: sysNow, candidates: candidates, picks: picks, appendices: appendices, fnGroups: fnGroups, fnInfo: fnInfo, fnKey: fnKey, fnSection: fnSection, fnLeft: fnLeft, routeOf: routeOf, isQuant: isQuant, flowedIn: flowedIn, groupOf: groupOf, handedDown: handedDown, applies: applies, facts: facts, items: items, hiddenOf: hiddenOf, reqsFor: reqsFor, frontLeft: frontLeft, fcLeft: fcLeft, openItems: openItems, section: section, outputs: outputs, store: store,
+        ui: { pick: pick, check: check, text: text, level: level, levelReset: levelReset, acceptReqs: acceptReqs } };
     try { root.SLPssaAuto = api; } catch (_) {}
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

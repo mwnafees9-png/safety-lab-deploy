@@ -4268,7 +4268,7 @@ function _syncWsPssaNav(subTab) {
 
 function switchWorkspaceTab(subTab) {
     _ensureFmeaWorkspaceHost();   // make sure ws-view-fmea exists before we toggle views
-    const tabs = ['func', 'fcim', 'fha', 'req', 'asm', 'fmea', 'pssa'];
+    const tabs = ['func', 'fcim', 'fha', 'req', 'asm', 'fmea', 'pssa', 'ssa'];   // 10 Nov 2026: 'ssa', the SSA Autopilot (ssa_autopilot.js)
     tabs.forEach(t => {
         const view = document.getElementById(`ws-view-${t}`);
         if (view) view.style.display = (t === subTab) ? 'block' : 'none';

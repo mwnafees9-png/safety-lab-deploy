@@ -50,7 +50,7 @@
 // ============================================================================
 (function (root) {
     'use strict';
-    var VERSION = '1.8';   // 1.8 10 Nov 2026: interdependence and CoFFE live in the PASA Autopilot; MAC, MF&MS and resources beside the fault trees (cascading effects too, its link staying in Common cause); the system PSSA tab is the PSSA Autopilot
+    var VERSION = '1.9';   // 1.9 10 Nov 2026: the system's SSA link opens its SSA Autopilot (ssa_autopilot.js);   // 1.8 10 Nov 2026: interdependence and CoFFE live in the PASA Autopilot; MAC, MF&MS and resources beside the fault trees (cascading effects too, its link staying in Common cause); the system PSSA tab is the PSSA Autopilot
     // A section: key, label, icon, scope ('aircraft' | 'system' | 'foot'), items (menu link ids, or a group
     // { group, label, ids }), and pages: every page (switchTab id) that belongs to it, with the link that stands
     // for it in the bar (a page that has no link of its own, such as the AFHA's Functions tab, lights its area's link).
@@ -124,7 +124,7 @@
     // the section and the link of a page: a tree or diagram page from its tree home, a system workspace page from
     // its tab (the PSSA tabs are the PSSA section's), every other page from the index
     var WS_PSSA = { pssa: 'sl-nav-pssa-alloc', req: 'sl-nav-pssa-req' };
-    var WS_SSA = { fmea: 'sl-nav-ssa-fmea' };   // 25 Oct 2026: the system's FMEA is the SSA's (bottom-up evidence)
+    var WS_SSA = { fmea: 'sl-nav-ssa-fmea', ssa: 'sl-nav-ssa-report' };   // 25 Oct 2026: the system's FMEA is the SSA's (bottom-up evidence)
     function _where(tab) {
         // a CMA, R&M or HF page while a system is picked: that system's section
         if (_scope !== 'aircraft') { var sl = _sysTabLinks()[tab]; if (sl) return { area: _sysAreaOfLink(sl), link: sl, systemId: _scope }; }
@@ -159,7 +159,7 @@
         'sl-nav-diag-pssa':        ['Diagrams', function () { _homes() && _homes().openDiagrams('pssa', _sysScope()); }, 'Bow-ties, event trees, Markov models, monitors, exposure cases and frequency for this system'],
         'sl-nav-trees-ssa':        ['Verification trees', function () { _homes() && _homes().open('ssa', _sysScope()); }, 'This system\u2019s bottom-up verification trees, one for each PSSA fault tree'],
         'sl-nav-ssa-fmea':         ['FMEA', function () { _openWs('fmea'); }, 'This system\u2019s FMEA: functional and piece-part failure modes, the bottom-up evidence for its verification trees'],
-        'sl-nav-ssa-report':       ['SSA report', function () { var id = _sysScope(); try { if (root.Reports && typeof root.Reports.open === 'function') root.Reports.open('SSA', { systemId: id }); } catch (_) {} }, 'Generate this system\u2019s SSA report'],
+        'sl-nav-ssa-report':       ['SSA', function () { _openWs('ssa'); }, 'This system\u2019s SSA Autopilot: its report and its questions (opens once its PSSA is baselined)'],   // 10 Nov 2026 (ssa_autopilot.js)
         'sl-nav-trees-standalone': ['Fault trees', function () { _homes() && _homes().open('standalone'); }, 'Fault trees that belong to neither the aircraft nor a system'],
         'sl-nav-diag-standalone':  ['Diagrams', function () { _homes() && _homes().openDiagrams('standalone'); }, 'Diagrams that belong to neither the aircraft nor a system']
     };

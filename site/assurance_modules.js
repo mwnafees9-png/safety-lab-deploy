@@ -326,7 +326,7 @@ const Review = (function() {
 // 10 Nov 2026 (the PASA and PSSA Autopilots, Waqas: "Rewrite AutoReq rationales that read like tool notes ... into plain
 // sentences"): every rationale says why in plain words, with no page names, source keys, invariant numbers or "preview only";
 // recomputeFlags runs every generator (crew, monitoring and unsafe operating condition rows were marked orphan on every load)
-// and never marks an imported or promoted row an AutoReq orphan; a CMA concern's requirement goes orphan with its concern.
+// and never marks an imported, promoted or flowed-down row (req_trace.js) an AutoReq orphan; a CMA concern's requirement goes orphan with its concern.
 const AutoReq = (function(){
     // Tiny non-crypto hash (DJB2) for fingerprinting.
     function hashStr(s){ let h=5381; for(let i=0;i<s.length;i++) h=((h<<5)+h+s.charCodeAt(i))|0; return (h>>>0).toString(36); }
@@ -3074,7 +3074,7 @@ const AutoReq = (function(){
         merge.unchanged.forEach(u => liveById.set(u.next.reqSource.sourceId, u.next));
         store.forEach(r => {
             if(!r.reqSource) return;
-            if(r.reqSource.generator === 'reqif' || r.reqSource.generator === 'assumption' || /^asm:/.test(String(r.reqSource.sourceId || ''))){ r.reqSource.orphan = false; r.reqSource.stale = false; return; }
+            if(r.reqSource.generator === 'reqif' || r.reqSource.generator === 'assumption' || r.reqSource.generator === 'flow-down' || /^asm:/.test(String(r.reqSource.sourceId || ''))){ r.reqSource.orphan = false; r.reqSource.stale = false; return; }
             const live = liveById.get(r.reqSource.sourceId);
             if(live){
                 r.reqSource.stale = (r.reqSource.fingerprint !== live.reqSource.fingerprint);

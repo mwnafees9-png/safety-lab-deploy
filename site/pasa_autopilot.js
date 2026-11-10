@@ -1,6 +1,21 @@
-// pasa_autopilot.js (SLPasaAuto v1.0, 10 Nov 2026): the PASA Autopilot. One Preliminary Aircraft Safety Assessment for the
+// pasa_autopilot.js (SLPasaAuto v2.0, 10 Nov 2026): the PASA Autopilot. One Preliminary Aircraft Safety Assessment for the
 // aircraft: the front of the report (scope, the aircraft, the method, the failure conditions, the requirement levels, what
-// the appendices found, the conclusion) and one appendix per aircraft failure condition the engineer picks.
+// the appendices found, the conclusion) and one appendix per aircraft function, holding every failure condition of that
+// function rated Minor or above.
+//
+// v2.0 (Waqas, 10 Nov 2026, after v1):
+//   "instead of each failure condition getting an appendix we should go with each function getting an appendix too", "each
+//    appendix containing all its applicable failure conditions". No picking: every function with a failure condition rated
+//    Minor or above gets an appendix; No Safety Effect failure conditions are in the register only.
+//   "I need every failure condition major and above we have the charting AFHA can determine where we need qualitative vs
+//    quantitative assessments, even minor ones need qualitative assessment". Minor is qualitative; the 1309 chart routes Major
+//    and above; a chart not answered stays quantitative and is an open item.
+//   "requirements can be driven at multiple levels, why are we only allowing them to select one"; "at the aircraft level the
+//    options should only be aircraft, and/or systems". Levels are ticked per requirement type, with an override per function;
+//    a "systems" tick flows the requirement down into the register of each system that feeds the failure condition, linked
+//    to its parent (req_trace.js flowDown).
+//   "the performance is very slow": the report pane shows the front only, with a list of the appendices; each appendix is
+//    built when its tab is opened, and memoized per data generation.
 //
 // Waqas, 10 Nov 2026 (the brief, the mockups and the rulings after them):
 //   "Drop downs to select failure conditions for the PASA one report for the aircraft with each failure condition feeding in
@@ -16,13 +31,13 @@
 //    should be hand checked or AI drafted with architectural inputs"; "shared resources will be treated the same way".
 //   A system that feeds a failure condition with nothing traced is a question: trace one of its failure conditions, or exclude
 //   it with a reason. Each shared resource is a question about where it is dispositioned. CoFFE is "do one?", then its cases.
-//   Requirement levels are asked once per requirement type (req_trace.js), with an override per failure condition.
+//   Requirement levels are asked once per requirement type (req_trace.js), with an override per function (v2.0).
 //   Do not ask about architecture, protections or budget splits: they come from the model and the trees.
 //   The old completion checklist becomes the Autopilot's progress and its Outputs and acceptance; over-committed budgets and
 //   unreviewed items show as open questions. Same AI drafting (only once the questions are answered) and live comments.
 //
-// The frame is cca_report.js 2.0 (spec.appendices, tabs.parts, spec.reportAuthored). What this module keeps:
-//   projectConfig.pasaAuto = { picks: [fcId], front: { scope, scopeNote, desc, descText, method, methodText, units },
+// The frame is cca_report.js 2.1 (spec.appendices, tabs.parts, spec.reportAuthored). What this module keeps:
+//   projectConfig.pasaAuto = { front: { scope, scopeNote, desc, descText, method, methodText, units },
 //     fc: { <fcId>: { ex: { <sysId>: { why, by, at } }, res: { <resKey>: { where, why, by, at } } } } }
 // Everything else is written where it already lives: the interdependence cells (projectConfig.interdep), the SFHA rows'
 // acTrace, the CoFFE verdicts (projectConfig.coffe), the CoFFE choice (safetyProgramPlan.slots.combinedEffects), the
@@ -30,7 +45,7 @@
 // Every number comes from SLTopBasis and the trees. window.SLPasaAuto.
 (function (root) {
     'use strict';
-    var VERSION = '1.0';
+    var VERSION = '2.0';
     function g(n) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(n); if (v !== undefined) return v; } } catch (_) {} try { return root[n]; } catch (_) { return undefined; } }
     function arr(v) { return Array.isArray(v) ? v : []; }
     function S(v) { return v == null ? '' : String(v); }
@@ -60,9 +75,9 @@
 
     // ---- the store --------------------------------------------------------------------------------------------------
     function store() {
-        var p = pc(); if (!p) return { picks: [], front: {}, fc: {} };
+        var p = pc(); if (!p) return { front: {}, fc: {} };
         if (!p.pasaAuto || typeof p.pasaAuto !== 'object') p.pasaAuto = {};
-        var s0 = p.pasaAuto; if (!Array.isArray(s0.picks)) s0.picks = []; if (!s0.front || typeof s0.front !== 'object') s0.front = {}; if (!s0.fc || typeof s0.fc !== 'object') s0.fc = {};
+        var s0 = p.pasaAuto; if (!s0.front || typeof s0.front !== 'object') s0.front = {}; if (!s0.fc || typeof s0.fc !== 'object') s0.fc = {};
         return s0;
     }
     function fcStore(fcId) { var s0 = store(); var m = s0.fc[fcId]; if (!m || typeof m !== 'object') m = s0.fc[fcId] = {}; if (!m.ex) m.ex = {}; if (!m.res) m.res = {}; return m; }
@@ -71,11 +86,36 @@
     function Tr() { return root.SLFcTrees || null; }
     function groups() { var F = Tr(); return F ? (safe(function () { return F.groups('ac'); }, []) || []) : []; }
     function treeOf(gr) { var F = Tr(); return F && gr ? safe(function () { return F.treeFor(gr); }, null) : null; }
-    function candidates() { return groups().filter(function (gr) { return gr && gr.fcId && rank(gr.gov.severity) >= SEV_RANK.Major && !!treeOf(gr); }); }
+    // v2.0 (10 Nov 2026): Waqas: "instead of each failure condition getting an appendix we should go with each function getting
+    // an appendix", "each appendix containing all its applicable failure conditions"; every failure condition rated Minor or
+    // above (the governing row, its worst case) is applicable, with no picking; the 1309 chart decides qualitative or
+    // quantitative ("we have the charting AFHA can determine where we need qualitative vs quantitative assessments, even minor
+    // ones need qualitative assessment"). A function whose failure conditions are all No Safety Effect is in the register only.
+    function applicable(gr) { return !!(gr && gr.fcId && rank(gr.gov.severity) >= SEV_RANK.Minor); }
+    function candidates() { return groups().filter(applicable); }
     function groupOf(fcId) { return groups().filter(function (gr) { return gr.fcId === S(fcId); })[0] || null; }
-    function picks() { var c = candidates().map(function (x) { return x.fcId; }); return store().picks.filter(function (id) { return c.indexOf(id) >= 0; }); }
-    function sid(fcId) { return 'fc:' + fcId; }
-    function fcOfSid(s) { return S(s).indexOf('fc:') === 0 ? S(s).slice(3) : null; }
+    function functions() {
+        var seen = {}, out = [], fns = arr(g('acFunctionsData'));
+        fns.forEach(function (f) { if (!f || f.subId == null || seen[S(f.subId)]) return; seen[S(f.subId)] = 1; out.push({ id: S(f.subId), name: T(f.subName || f.funcName || ''), def: T(f.subDef || f.funcDef || ''), parent: T(f.funcName || '') }); });
+        groups().forEach(function (gr) { var k = S(gr.gov.subId); if (k && !seen[k]) { seen[k] = 1; out.push({ id: k, name: '', def: '', parent: '' }); } });
+        return out;
+    }
+    function fnOf(id) { return functions().filter(function (f) { return f.id === S(id); })[0] || null; }
+    function fnGroups(id) { return candidates().filter(function (gr) { return S(gr.gov.subId) === S(id); }); }
+    // the appendices: every function with an applicable failure condition, in the AFHA's own order
+    function appendices() { return functions().filter(function (f) { return fnGroups(f.id).length > 0; }).map(function (f) { return f.id; }); }
+    function picks() { return candidates().map(function (gr) { return gr.fcId; }); }
+    function sid(fnId) { return 'fn:' + fnId; }
+    function fnOfSid(x) { return S(x).indexOf('fn:') === 0 ? S(x).slice(3) : null; }
+    function fnTitle(f) { return f ? f.id + (f.name ? ' ' + f.name : '') : ''; }
+    // quantitative or qualitative, from the 1309 chart (fc_auto_trees route): Minor is always qualitative; a chart not answered
+    // stays quantitative and is an open item
+    function routeOf(gr) {
+        if (rank(gr.gov.severity) < SEV_RANK.Major) return 'qual';
+        var r = Tr() ? safe(function () { return Tr().route(gr.gov); }, 'quant') : 'quant';
+        return r === 'qual' || r === 'similarity' ? (r === 'similarity' ? 'similarity' : 'qual') : r === 'unanswered' ? 'unanswered' : 'quant';
+    }
+    function isQuant(gr) { var r = routeOf(gr); return r === 'quant' || r === 'unanswered'; }
     function fcName(gr) { return gr ? gr.fcId + ' ' + T(gr.gov.fcDesc || '') : ''; }
     function systems() { return arr(g('systemsData')).filter(function (s) { return s && s.id != null; }); }
     function sysById(id) { return systems().filter(function (s) { return S(s.id) === S(id); })[0] || null; }
@@ -258,10 +298,28 @@
         // an MF&MS tree seeded from the interdependence table, has its own place: the appendix never lists the same promise twice)
         var pid = S((pageOf(gr) || {}).id);
         return list.filter(function (x) { var d = RT.drivenFrom(x.row || x.cand); if (!d.some(function (e) { return /^Aircraft failure condition$/.test(e.what) && e.id === gr.fcId; })) return false; var trees = d.filter(function (e) { return /^fta:/.test(e.tab || '') && (e.what === 'Gate' || e.what === 'Event'); }); return !trees.length || trees.some(function (e) { return e.tab.split(':')[1] === pid; }); })
-            .map(function (x) { var r = x.row || x.cand, t = RT.typeOf(r), lv = RT.levelFor(t, { fcId: gr.fcId }).level; return { r: r, cand: x.cand, state: x.state, type: t, level: lv }; })
+            .map(function (x) { var r = x.row || x.cand, t = RT.typeOf(r), lv = RT.pasaLevels(t, gr.gov.subId).levels; return { r: r, cand: x.cand, state: x.state, type: t, levels: lv, aircraft: lv.indexOf('aircraft') >= 0, flows: lv.indexOf('system') >= 0 ? flowsFor(gr, x.cand) : [] }; })
             .sort(function (a, b) { var o = RT.TYPES.map(function (t) { return t.id; }); return o.indexOf(a.type) - o.indexOf(b.type); });
     }
     function reqLabel(x) { return x.r.id ? S(x.r.id) : 'New'; }
+    // v2.0: a requirement ticked "systems" is restated for each system that feeds the failure condition, in that system's
+    // requirements, traced to the aircraft one (req_trace.js flowDown); the probability one carries the system tree's budget
+    function sysBudget(gr, sysId) {
+        var sg = tracedFrom(gr, sysId)[0], tp = sg ? treeOf(sg) : null;
+        var e = tp && Tr() ? safe(function () { return Tr().effectiveTarget(tp); }, null) : null;
+        return e && e.rate != null ? e.rate : null;
+    }
+    function storedSys(sysId, sourceId) { var sy = sysById(sysId); return sy ? arr(sy.req).filter(function (r) { return r && r.reqSource && S(r.reqSource.sourceId) === S(sourceId) && !r.deleted; })[0] || null : null; }
+    function flowsFor(gr, cand) {
+        var RT = root.SLReqTrace; if (!RT) return [];
+        var ex = fcStore(gr.fcId).ex, rows = idpRows(gr);
+        var sys = rows.filter(function (r) { return r.state === 'feeds' && !ex[r.sysId]; }).map(function (r) { return { sysId: r.sysId, name: r.sysName, how: listJoin(r.feeds.map(howWords)), budget: sysBudget(gr, r.sysId) }; });
+        return RT.flowDown(cand, { fcId: gr.fcId, fcDesc: T(gr.gov.fcDesc), systems: sys }).map(function (f) {
+            var st = storedSys(f.sysId, f.cand.reqSource.sourceId);
+            return { sysId: f.sysId, cand: f.cand, row: st, r: st || f.cand, state: !st ? 'new' : st.reqSource.fingerprint === f.cand.reqSource.fingerprint ? 'in' : 'changed' };
+        });
+    }
+    function levelWords(lv) { return lv && lv.length ? listJoin(lv.map(function (l) { return l === 'aircraft' ? 'the aircraft' : 'each system'; })) : 'Not decided yet'; }
     var CLOSE = {
         prob: { how: 'Analysis: the fault tree worked out again with the real failure rates', where: 'ssa' },
         spf: { how: 'Analysis: no single failure in the minimal cut sets', where: 'asa' },
@@ -286,7 +344,6 @@
         { id: 'scope', text: 'What does this PASA cover?' },
         { id: 'desc', text: 'Is this the aircraft the PASA assesses?' },
         { id: 'method', text: 'Which method and numbers does the PASA use?' },
-        { id: 'fcs', text: 'Which failure conditions get an appendix?' },
         { id: 'coffe', text: 'Do a combined functional failure effects (CoFFE) analysis?' }
     ];
     function frontLeft() {
@@ -294,9 +351,8 @@
         if (!f.scope) left.push(F_QS[0].text);
         if (!f.desc) left.push(F_QS[1].text);
         if (!f.method) left.push(F_QS[2].text);
-        if (!picks().length) left.push(F_QS[3].text);
-        if (coffeOn() === null) left.push(F_QS[4].text);
-        var RT = root.SLReqTrace; if (RT) RT.TYPES.forEach(function (t) { if (!RT.levelFor(t.id, {}).level) left.push('At what level are ' + lc(t.name) + ' requirements derived?'); });
+        if (coffeOn() === null) left.push(F_QS[3].text);
+        var RT = root.SLReqTrace; if (RT) RT.TYPES.forEach(function (t) { if (!RT.pasaLevels(t.id, null).levels.length) left.push('At what level are ' + lc(t.name) + ' requirements derived?'); });
         return left;
     }
     function fcLeft(gr) {
@@ -308,8 +364,11 @@
         return left;
     }
     // over-committed budgets and unreviewed items: open questions the left pane shows
+    function fnLeft(fnId) { var out = []; fnGroups(fnId).forEach(function (gr) { out = out.concat(fcLeft(gr)); }); return out; }
     function openItems(gr) {
-        var out = [], tf = treeFacts(gr);
+        var out = [], tf = isQuant(gr) ? treeFacts(gr) : null;
+        if (routeOf(gr) === 'unanswered') out.push('The 1309 chart for ' + gr.fcId + ' is not answered in the AFHA yet, so it is assessed quantitatively until it is.');
+        if (isQuant(gr) && !pageOf(gr)) out.push('No fault tree is generated for ' + gr.fcId + ' yet.');
         if (tf && tf.meets && !tf.meets.pass) out.push('The fault tree is above its objective: ' + sci(tf.rate) + ' per flight hour against ' + sci(tf.objective) + '.');
         if (tf && tf.cg) tf.cg.gates.filter(function (x) { return x.critical; }).forEach(function (x) { var rv = cmas().filter(function (c) { return arr(c.linkedGateIds).map(S).indexOf(S(x.key)) >= 0; }); if (!rv.length) out.push('Gate ' + x.displayId + (x.name ? ' ' + T(x.name) : '') + ' carries the budget and has no common mode review yet.'); });
         untraced(gr).forEach(function (u) { if (u.ex) return; out.push(u.row.sysName + ' feeds ' + gr.fcId + ' but none of its failure conditions is traced to it.'); });
@@ -367,35 +426,39 @@
         var RT = root.SLReqTrace;
         if (RT) b.push({ k: 'table', name: 'levels', title: 'The level each type of requirement is derived at', q: 'pasa.lvl', rows: RT.TYPES.map(function (t) { var l = RT.levelFor(t.id, {}).level; return { 'Requirement type': t.name, 'What it covers': t.what, 'Derived at': l ? RT.levelLabel(l) : 'Not decided yet' }; }), lead: '{N} lists the level chosen for each type; an appendix says where a failure condition differs.' });
         b.push(H(1, 'The failure conditions'));
-        var pk = picks(), all = groups();
+        var apx = appendices(), all = groups();
         b.push({ k: 'table', name: 'register', title: 'Aircraft failure conditions and where each is assessed', q: 'pasa.fcs', rows: all.map(function (gr) {
-            var i = pk.indexOf(gr.fcId), tree = treeOf(gr);
-            return { 'Failure condition': fcName(gr), Severity: S(gr.gov.severity), 'Assessed in': i >= 0 ? 'Appendix ' + letter(i) : rank(gr.gov.severity) < SEV_RANK.Major ? 'No appendix: below Major' : !tree ? 'No appendix: no fault tree generated' : 'Not picked for this issue' };
-        }), lead: '{N} lists every aircraft failure condition in the AFHA.' });
+            var i = apx.indexOf(S(gr.gov.subId));
+            return { 'Failure condition': fcName(gr), Function: fnTitle(fnOf(gr.gov.subId)), Severity: S(gr.gov.severity), 'Assessed in': applicable(gr) && i >= 0 ? 'Appendix ' + letter(i) + ', ' + (isQuant(gr) ? 'quantitatively' : 'qualitatively') + (routeOf(gr) === 'unanswered' ? ' (1309 chart not answered)' : '') : 'No appendix: no safety effect' };
+        }), lead: '{N} lists every aircraft failure condition in the AFHA, the function whose appendix assesses it, and how. The 1309 chart in the AFHA decides whether each is assessed quantitatively or qualitatively; a Minor one is assessed qualitatively.' });
         b.push(P(coffeOn() === true ? 'A combined functional failure effects (CoFFE) analysis is done: each appendix lists which system failures, alone or together, produce its failure condition.' : coffeOn() === false ? 'No CoFFE analysis is done: interdependence and common resources carry the argument.' : 'Not decided yet: whether a CoFFE analysis is done.', 'pasa.coffe'));
         return b;
     }
     function letter(i) { var R0 = root.SLCcaReport && root.SLCcaReport.get('pasa'); return R0 && R0.appxLetter ? R0.appxLetter(i) : String.fromCharCode(65 + i); }
     function after(ctx) {
-        var b = [H(1, 'What the appendices found')], pk = picks();
-        if (!pk.length) b.push(P('No failure condition is picked for an appendix yet.'));
-        else b.push({ k: 'table', name: 'found', title: 'What each appendix found', rows: pk.map(function (id, i) {
-            var gr = groupOf(id), tf = gr ? treeFacts(gr) : null, cg = tf && tf.cg ? tf.cg.gates.filter(function (x) { return x.critical; }) : [];
-            return { Appendix: letter(i), 'Failure condition': fcName(gr), 'Against the objective': tf && tf.meets ? (tf.meets.pass ? 'Within' : 'Above') + ' (' + sci(tf.rate) + ' against ' + sci(tf.objective) + ' per flight hour)' : 'Not worked out', 'The budget rests on': cg.length ? 'Gates ' + listJoin(cg.map(function (x) { return x.displayId; })) : 'No independence claim', Findings: (function () { var o = gr ? openItems(gr) : []; return o.length ? o.join(' ') : 'None'; })() };
-        }), lead: '{N} sums up each appendix.' });
+        var b = [H(1, 'What the appendices found')], apx = appendices(), rows = [];
+        apx.forEach(function (fid, i) {
+            fnGroups(fid).forEach(function (gr) {
+                var q = isQuant(gr), tf = q ? treeFacts(gr) : null, cg = tf && tf.cg ? tf.cg.gates.filter(function (x) { return x.critical; }) : [], o = openItems(gr);
+                rows.push({ Appendix: letter(i), 'Failure condition': fcName(gr), Assessment: q ? 'Quantitative' : 'Qualitative', 'Against the objective': q ? (tf && tf.meets ? (tf.meets.pass ? 'Within' : 'Above') + ' (' + sci(tf.rate) + ' against ' + sci(tf.objective) + ' per flight hour)' : 'Not worked out') : 'Assessed in words', 'The budget rests on': cg.length ? 'Gates ' + listJoin(cg.map(function (x) { return x.displayId; })) : q ? 'No independence claim' : 'Not applicable', Findings: o.length ? o.join(' ') : 'None' });
+            });
+        });
+        if (!rows.length) b.push(P('No aircraft failure condition has a safety effect yet.'));
+        else b.push({ k: 'table', name: 'found', title: 'What each appendix found', rows: rows, lead: '{N} sums up each failure condition in its appendix.' });
         b.push({ k: 'rauth', asHeading: 1 });
         return b;
     }
 
     // ---- the report: one appendix per failure condition ------------------------------------------------------------------
     function asmText(ids) { var all = arr(g('acAssumptionsData')); return arr(ids).map(function (id) { var a = all.filter(function (x) { return x && S(x.asmId) === S(id); })[0]; return S(id) + (a && (a.text || a.statement) ? ' ' + T(a.text || a.statement) : ''); }).join('; '); }
-    function section(gr, ctx) {
+    function fcPart(gr, ctx) {
         var fc = gr.gov, f = fc.fcId, q = function (x) { return 'fc.' + f + '.' + x; }, b = [], t = target(fc.severity), tf = treeFacts(gr) || {};
         var phases = T(fc.phases || 'every phase'), phasesLc = phases.toLowerCase();
-        b.push(H(2, 'What is being evaluated'));
+        b.push(H(2, fcName(gr) + ' (' + (isQuant(gr) ? 'quantitative' : 'qualitative') + ')', { q: q('idp') }));
+        b.push(H(3, 'What is being evaluated'));
         b.push(P(f + ' is ' + lc(T(fc.fcDesc)) + ', in ' + phasesLc + '. The AFHA rates it ' + S(fc.severity) + (t.prob != null ? ', so it must be ' + (SEV_WORDS[fc.severity] || 'kept below its objective') + ': below ' + sci(t.prob) + ' per flight hour' : '') + (rank(fc.severity) >= SEV_RANK.Hazardous ? ', and no single failure may cause it' : '') + '.' + (fc.effAc ? ' Its effect on the aircraft: ' + lc(T(fc.effAc)).replace(/\.$/, '') + '.' : '')));
         b.push(P('This appendix asks whether the architecture as planned keeps ' + f + ' within that objective, and what each system must promise for that to hold. It looks first at how the systems feed it and what they share, then at the fault tree and the numbers, and ends with the requirements that make it so.'));
-        b.push(H(2, 'The AFHA entry'));
+        b.push(H(3, 'The AFHA entry'));
         b.push({ k: 'table', name: 'afha-' + f, title: f + ' as the AFHA records it', rows: [
             { Item: 'Failure condition', Entry: fcName(gr) }, { Item: 'Aircraft function', Entry: S(fc.subId) + (fnName(fc.subId) ? ' ' + fnName(fc.subId) : '') },
             { Item: 'Flight phases', Entry: phases }, { Item: 'Effect on the aircraft', Entry: T(fc.effAc || 'Not recorded') }, { Item: 'Effect on the crew', Entry: T(fc.effCrew || 'Not recorded') },
@@ -404,7 +467,7 @@
             { Item: 'Assumptions', Entry: asmText(fc.assumptionIds) || 'None recorded' }
         ], lead: '{N} is the AFHA entry for the worst case of ' + f + (gr.rows.length > 1 ? ' (the most severe of its ' + 'flight phase rows)' : '') + '.' });
         // interdependence
-        b.push(H(2, 'How the systems feed ' + f));
+        b.push(H(3, 'How the systems feed ' + f));
         var rows = idpRows(gr), feeds = rows.filter(function (r) { return r.state === 'feeds'; }), ex = fcStore(f).ex;
         if (!feeds.length) b.push(P('No system is shown to feed ' + f + ' yet: the interdependence questions for it are still open.', q('idp')));
         else b.push({ k: 'table', name: 'idp-' + f, title: 'The systems that feed ' + f, q: q('idp'), rowQ: feeds.map(function (r) { return ex[r.sysId] || !tracedFrom(gr, r.sysId).length ? q('trace.' + r.sysId) : q('idp'); }), rows: feeds.map(function (r) {
@@ -416,7 +479,7 @@
         var tnt = treeNotInTable(gr); if (tnt.length) b.push(P('Finding: the fault tree carries ' + listJoin(tnt.map(function (t) { return t.sys + ' (through ' + t.via + ')'; })) + ', but the interdependence table does not show ' + (tnt.length > 1 ? 'them' : 'it') + ' feeding ' + f + '. The table and the tree must tell one story: answer ' + (tnt.length > 1 ? 'those rows' : 'that row') + ' on the left.', q('idp')));
         var nit = tracedNotInTree(gr); if (nit.length) b.push(P('Finding: ' + listJoin(nit) + (nit.length > 1 ? ' are' : ' is') + ' traced to ' + f + ' but not yet in its fault tree.', q('idp')));
         // common resources
-        b.push(H(2, 'Resources the systems share'));
+        b.push(H(3, 'Resources the systems share'));
         var rs = resources(gr);
         if (!rs.length) b.push(P('No resource or common cause is shared by the systems that feed ' + f + '.'));
         else {
@@ -428,20 +491,21 @@
         }
         // CoFFE
         if (coffeOn()) {
-            b.push(H(2, 'Combined functional failure effects (CoFFE)'));
+            b.push(H(3, 'Combined functional failure effects (CoFFE)'));
             var ks = coffeCasesOf(gr);
             b.push(ks.length ? { k: 'table', name: 'coffe-' + f, title: 'Which system failures, alone or together, produce ' + f, q: q('coffe'), rowQ: ks.map(function (k) { return q('coffe.' + k.key); }), rows: ks.map(function (k) {
                 var v = coffeVerdictOf(gr, k), inTree = (function () { var hit = false, page = pageOf(gr); if (!page) return false; var ids = k.parts.map(function (p) { return S(p.sysId); }); walk(integrated(page).root, function (n) { var s0 = n.externalSource ? S(n.externalSource.targetId) : ''; systems().forEach(function (sy) { if (ids.indexOf(S(sy.id)) >= 0 && arr(sy.fha).some(function (r) { return ('SYS_' + String(r.internalId)) === s0; })) hit = true; }); }); return hit; })();
                 return { 'System failure(s)': caseWords(k), ['Produce ' + f]: v ? (v.v === 'yes' ? 'Yes' : 'No') + (v.src === 'mac' ? ' (from the MAC model)' : '') : 'Not decided yet', 'Covered by the tree': inTree ? 'Yes' : 'No' };
             }), lead: '{N} lists each case: a row with one system is that system alone able to cause it.' } : P('The CoFFE has no cases for ' + f + ': no system is shown to feed it yet.'));
         }
+        if (isQuant(gr)) {
         // the tree
-        b.push(H(2, 'The fault tree'));
+        b.push(H(3, 'The fault tree'));
         var figs = treeFigures(gr, ctx);
         if (figs.length) { b.push(P((figs.length > 1 ? 'The figures below are' : 'The figure below is') + ' the fault tree for ' + f + ' as the tool generated it' + (tf.full && tf.full !== tf.page ? ', with the system trees it transfers to drawn in' : '') + (figs.length > 1 ? ', cut into parts so each stays readable' : '') + '. Each box shows its probability per flight (P) and its rate per flight hour (\u03BB).')); figs.forEach(function (x) { b.push(x); }); }
         else b.push(P('The fault tree for ' + f + ' could not be drawn just now.'));
         // what the tree says
-        b.push(H(2, 'What the tree says'));
+        b.push(H(3, 'What the tree says'));
         if (tf.singles) b.push(P(tf.singles.length ? 'A single failure can cause ' + f + ': ' + listJoin(tf.singles) + '. A failure condition rated ' + S(fc.severity) + (rank(fc.severity) >= SEV_RANK.Hazardous ? ' must not follow from one failure, so this has to be designed out.' : ' may, if its probability allows it.') : 'No single failure causes ' + f + '. The shortest way to it takes ' + tf.shortest + ' failures together' + (tf.shortestEx.length ? ': ' + listJoin(tf.shortestEx) : '') + '.'));
         if (tf.ands && tf.ands.length) b.push(P('The design rests on independence. ' + (tf.singles && !tf.singles.length ? 'Every path to the top passes through an AND gate (' + listJoin(tf.ands.slice(0, 8)) + ')' : 'The tree has AND gates (' + listJoin(tf.ands.slice(0, 8)) + ')') + ', so the result is only as good as the claim that what sits under each gate cannot fail together. The resources they share are listed above.'));
         else b.push(P('The tree has no AND gate: no independence claim carries ' + f + '.'));
@@ -449,7 +513,7 @@
         else b.push(P('No input of the tree is marked as a failure that could stay hidden.'));
         if (tf.repeated && tf.repeated.length) b.push(P('The branches are linked: ' + listJoin(tf.repeated.slice(0, 6)) + (tf.repeated.length > 1 ? ' appear' : ' appears') + ' in more than one place, so those branches are not as separate as they are drawn.'));
         // the numbers
-        b.push(H(2, 'The numbers'));
+        b.push(H(3, 'The numbers'));
         var numRows = [{ Quantity: 'Objective', Value: t.prob != null ? sci(t.prob) + ' per flight hour' : 'Not set', Basis: S(fc.severity) + ', ' + acRef() },
             { Quantity: 'Top event', Value: tf.rate != null ? sci(tf.rate) + ' per flight hour' : 'Not worked out', Basis: tf.pTop != null ? sci(tf.pTop) + ' per flight of ' + (tf.hours ? Math.round(tf.hours * 100) / 100 + ' hours' : 'the average length') + ', from the tree' : '' }]
             .concat((tf.handed || []).map(function (h) { return { Quantity: 'Handed to ' + h.name, Value: h.p != null ? sci(h.p) + ' per flight' : 'Not allocated', Basis: 'From the tree' }; }))
@@ -465,27 +529,74 @@
             }), lead: '{N} shows what happens to ' + f + ' if each AND gate\'s independence fails, in two ways: if any one input alone were enough, and if one shared cause took out all of them at once (the gate then fails as often as its least likely input).' });
         }
         b.push(P('Development assurance: ' + (t.dal ? 'FDAL ' + t.dal + ' for the functions that feed ' + f + ', from its ' + S(fc.severity) + ' severity.' : 'not set.')));
+        } else qualBlocks(gr).forEach(function (x) { b.push(x); });
         // requirements
-        b.push(H(2, 'Requirements'));
+        b.push(H(3, 'Requirements'));
         var rq = reqsFor(gr), RT = root.SLReqTrace;
         if (!rq.length) b.push(P('AutoReq has no requirement for ' + f + ' yet.'));
         else {
             b.push(P('Generated by AutoReq from this analysis. These are the mitigations: each closes something the parts above leave open.'));
-            b.push({ k: 'table', name: 'req-' + f, title: 'Requirements for ' + f, q: q('req'), rows: rq.map(function (x) {
-                return { ID: reqLabel(x), Requirement: T(x.r.text), Rationale: T(x.r.rat) || 'Rationale missing', 'Driven from': RT ? RT.drivenText(x.r) : '', 'Derived to': x.level ? RT.levelLabel(x.level) : 'Not decided yet' };
-            }), lead: '{N} lists every requirement AutoReq generates for ' + f + ', why, where it is driven from and the level it is derived at.' });
+            b.push({ k: 'table', name: 'req-' + f, title: 'Requirements for ' + f, q: q('req'), rows: reqRows(rq, RT), lead: '{N} lists every requirement for ' + f + ', why, where it is driven from and the levels it is written at: an aircraft requirement first, then the one flowed down to each system that feeds ' + f + ', traced to it.' });
             if (rq.some(function (x) { return x.state !== 'in'; })) b.push(P('Requirements shown as New are not in the aircraft requirements yet; they go in when accepted.'));
         }
-        b.push(H(2, 'Path to compliance'));
+        b.push(H(3, 'Path to compliance'));
         if (!rq.length) b.push(P('The path to compliance is built from the requirements, and there are none yet.'));
         else {
             b.push(P(f + ' is shown when every requirement above is closed. This table is built from the requirements; it is not written by hand.'));
-            b.push({ k: 'table', name: 'path-' + f, title: 'How each requirement for ' + f + ' will be closed', rows: rq.map(function (x) { return { Requirement: reqLabel(x) + ' ' + T(x.r.text).slice(0, 90) + (T(x.r.text).length > 90 ? '...' : ''), 'Closed by': (CLOSE[x.type] || CLOSE.prob).how, In: closedIn(gr, x) }; }), lead: '{N} lists how and where each requirement is closed.' });
+            b.push({ k: 'table', name: 'path-' + f, title: 'How each requirement for ' + f + ' will be closed', rows: pathRows(gr, rq), lead: '{N} lists how and where each requirement is closed.' });
         }
         return b;
     }
+    // the requirement rows of a failure condition: each at the levels ticked (the aircraft row, then one per system flowed down)
+    function reqEntries(rq) {
+        var out = [];
+        rq.forEach(function (x) {
+            // levels not decided yet: the requirement is still shown once, as AutoReq writes it, so nothing is hidden
+            if (x.aircraft || !x.levels.length) out.push({ x: x, r: x.r, label: reqLabel(x), sys: null });
+            x.flows.forEach(function (fl) { out.push({ x: x, r: fl.r, label: (x.aircraft ? '\u21B3 ' : '') + (fl.row && fl.row.id ? S(fl.row.id) : 'New') + ' (' + sysName(fl.sysId) + ')', sys: fl.sysId, flow: fl }); });
+        });
+        return out;
+    }
+    function reqRows(rq, RT) { return reqEntries(rq).map(function (e) { return { ID: e.label, Requirement: T(e.r.text), Rationale: T(e.r.rat) || 'Rationale missing', 'Driven from': RT ? RT.drivenText(e.r) : '', 'Written at': e.sys ? 'System' : 'Aircraft', 'Levels ticked': levelWords(e.x.levels) }; }); }
+    function pathRows(gr, rq) { return reqEntries(rq).map(function (e) { var t0 = T(e.r.text); return { Requirement: e.label + ' ' + t0.slice(0, 90) + (t0.length > 90 ? '...' : ''), 'Closed by': (CLOSE[e.x.type] || CLOSE.prob).how, In: e.sys ? 'SSA ' + sysName(e.sys) : closedIn(gr, e.x) }; }); }
+    // a failure condition the 1309 chart sends to a qualitative assessment: the argument in words
+    function qualBlocks(gr) {
+        var fc = gr.gov, f = fc.fcId, cp = fc.chartProps || {}, r0 = routeOf(gr), b = [], fs = feeders(gr).map(sysName);
+        var why = rank(fc.severity) < SEV_RANK.Major ? 'it is Minor, and a Minor failure condition is assessed qualitatively'
+            : r0 === 'similarity' ? 'the 1309 chart records it as similar to a design already shown in service'
+            : cp.isSimpleConventional ? 'the 1309 chart records the design as simple and conventional'
+            : (cp.isSimple && cp.isRedundant) ? 'the 1309 chart records the design as simple and redundant'
+            : 'the 1309 chart sets a qualitative assessment for it';
+        b.push(H(3, 'The qualitative assessment'));
+        b.push(P(f + ' is assessed qualitatively because ' + why + '. No number is worked out for it; the argument below and the requirements after it carry the case.'));
+        b.push(P(fs.length ? 'It rests on ' + listJoin(fs) + ', the systems the interdependence answers show feeding it.' : 'No system is shown to feed it yet: the interdependence questions for it are still open.'));
+        var page = pageOf(gr), cs = page ? cutsets(page) : null;
+        if (cs) { var one = cs.filter(function (c) { return c.length === 1; }).map(function (c) { return nodeName(c[0]); }); b.push(P(one.length ? 'Its fault tree shows a single failure can cause it: ' + listJoin(one) + '.' : 'Its fault tree shows no single failure causes it.')); }
+        b.push(P(r0 === 'similarity' ? 'It is shown by the service experience of the similar design and by showing the differences do not change the effect.' : 'It is shown by a design and installation appraisal of the systems that feed it, their own functional hazard assessments, and the requirements below.'));
+        return b;
+    }
+    // one appendix per function: the function, then each of its applicable failure conditions (worked out once per change)
+    var _secMemo = { gen: -2, map: {} };
+    function fnSection(fnId, ctx) {
+        var G = memoGen(), k = fnId + '|' + (ctx.dark ? 1 : 0) + (ctx.forExport ? 1 : 0);
+        if (_secMemo.gen !== G || G === -1) _secMemo = { gen: G, map: {} };
+        if (_secMemo.map[k]) return _secMemo.map[k];
+        var f0 = fnOf(fnId) || { id: fnId, name: '' }, grs = fnGroups(fnId), b = [];
+        b.push(H(2, 'The function'));
+        var sysFeed = {}; grs.forEach(function (gr) { feeders(gr).forEach(function (x) { sysFeed[x] = 1; }); });
+        b.push(P(fnTitle(f0) + (f0.def ? ': ' + lc(f0.def).replace(/\.$/, '') + '.' : '.') + (f0.parent && f0.parent !== f0.name ? ' It is part of ' + f0.parent + '.' : '') + ' Its failure conditions with a safety effect: ' + listJoin(grs.map(function (gr) { return fcName(gr) + ' (' + S(gr.gov.severity) + ', ' + (isQuant(gr) ? 'quantitative' : 'qualitative') + ')'; })) + '.' + (Object.keys(sysFeed).length ? ' The systems that carry it: ' + listJoin(Object.keys(sysFeed).map(sysName)) + '.' : '')));
+        grs.forEach(function (gr) { b = b.concat(fcPart(gr, ctx)); });
+        _secMemo.map[k] = b;
+        return b;
+    }
+    function section(gr, ctx) { return fcPart(gr, ctx); }
+    // the section's blocks are a getter: worked out only when its appendix is drawn (the front lists the appendices only)
     function sections(ctx) {
-        return picks().map(function (id) { var gr = groupOf(id); return gr ? { id: sid(id), title: fcName(gr), tabLabel: { id: id, name: T(gr.gov.fcDesc) }, blocks: section(gr, ctx), edit: false } : null; }).filter(Boolean);
+        return appendices().map(function (fid) {
+            var f0 = fnOf(fid), o = { id: sid(fid), title: fnTitle(f0), tabLabel: { id: fid, name: f0 ? f0.name : '' }, edit: false }, cache = null;
+            Object.defineProperty(o, 'blocks', { enumerable: true, get: function () { if (!cache) cache = fnSection(fid, ctx); return cache; } });
+            return o;
+        });
     }
 
     // ---- the left pane -------------------------------------------------------------------------------------------------
@@ -508,30 +619,24 @@
     function textBox(qid, label, val, placeholder) { var id = 'paq-ta-' + qid.replace(/[^A-Za-z0-9_-]/g, '_'); return '<div class="paq-x">' + E(label) + '</div><textarea class="paq-ta" id="' + E(id) + '" placeholder="' + E(placeholder || '') + '">' + E(val || '') + '</textarea><button type="button" class="paq-b on" data-paq-save="' + E(qid) + '" onclick="SLPasaAuto.ui.text(' + J(qid) + ',' + J(id) + ')">Save</button>'; }
     function leftFront() {
         var f = store().front, h = '', RT = root.SLReqTrace, left = frontLeft();
-        h += '<div class="paq-h">The front of the report</div><div class="paq-x">These answers write the front of the PASA: what it covers, the aircraft, the method, which failure conditions get an appendix and how far down each type of requirement goes. Nothing about the architecture, the protections or the budget splits is asked: they come from the model and the trees.</div>';
+        h += '<div class="paq-h">The front of the report</div><div class="paq-x">These answers write the front of the PASA: what it covers, the aircraft, the method and where each type of requirement is written. Every function with a failure condition rated Minor or above gets its own appendix, and the 1309 chart decides quantitative or qualitative: nothing to pick. Nothing about the architecture, the protections or the budget splits is asked: they come from the model and the trees.</div>';
         if (root.SLAutopilotUI) h += root.SLAutopilotUI.progress(F_QS.length + (RT ? RT.TYPES.length : 0) - left.length, F_QS.length + (RT ? RT.TYPES.length : 0));
         h += card('pasa.scope', Q({ id: 'pasa.scope', text: 'What does this PASA cover?', why: 'The scope goes in the first part of the report.', picked: f.scope || null, options: [{ id: 'all', label: 'Every configuration and flight phase in the AFHA', impact: 'The report says it covers the whole AFHA.' }, { id: 'part', label: 'Only part of it', impact: 'You say what is left out and why; the report says so.' }] }) + (f.scope === 'part' ? textBox('pasa.scopeNote', 'What is left out, and why', f.scopeNote, 'For example: the ground handling configurations, assessed in a later issue.') : ''), !!f.scope);
         var sysN = systems().length;
         h += card('pasa.desc', Q({ id: 'pasa.desc', text: 'Is this the aircraft the PASA assesses?', why: 'From the project: ' + (S(safe(function () { return g('projectName'); }, '')) || 'this project') + ', with ' + sysN + ' systems in the architecture.', picked: f.desc || null, options: [{ id: 'project', label: 'Yes, describe it from the project', impact: 'The report names the aircraft and lists its systems from the architecture.' }, { id: 'own', label: 'I will write the description', impact: 'The report uses your words.' }] }) + (f.desc === 'own' ? textBox('pasa.descText', 'The aircraft, in a few sentences', f.descText, '') : ''), !!f.desc);
         h += card('pasa.method', Q({ id: 'pasa.method', text: 'Which method and numbers does the PASA use?', why: 'From the project: ' + regulation() + ', objectives from ' + acRef() + ', an average flight of ' + hoursWord() + '.', picked: f.method || null, options: [{ id: 'std', label: 'ARP4761A and ARP4754B, per flight hour over the average flight', impact: 'The report states the method and the numbers from the project.' }, { id: 'own', label: 'I will write the method', impact: 'The report uses your words.' }] }) + (f.method === 'own' ? textBox('pasa.methodText', 'The method', f.methodText, '') : ''), !!f.method);
-        // the failure conditions: picked from a dropdown, the worst case of each, Major and above with a generated tree
-        var pk = picks(), cand = candidates().filter(function (gr) { return pk.indexOf(gr.fcId) < 0; });
-        var fcs = '<div class="slap-q">Which failure conditions get an appendix?</div><div class="paq-x">Each is taken at its worst case. Only failure conditions rated Major or worse with a generated fault tree are offered.</div>'
-            + (pk.length ? '<table class="paq-t"><tbody>' + pk.map(function (id, i) { var gr = groupOf(id); return '<tr><td>Appendix ' + E(letter(i)) + '</td><td>' + E(fcName(gr)) + '</td><td>' + E(gr.gov.severity) + '</td><td><button type="button" class="paq-b" data-paq-unpick="' + E(id) + '" onclick="SLPasaAuto.ui.unpick(' + J(id) + ')">Remove</button></td></tr>'; }).join('') + '</tbody></table>' : '')
-            + (cand.length ? '<select class="paq-sel" data-paq-addfc="1" onchange="SLPasaAuto.ui.addPick(this.value)"><option value="">Add a failure condition...</option>' + cand.map(function (gr) { return '<option value="' + E(gr.fcId) + '">' + E(fcName(gr) + ' (' + gr.gov.severity + ')') + '</option>'; }).join('') + '</select> <button type="button" class="paq-b" data-paq-addsev="1" onclick="SLPasaAuto.ui.addSevere()">Add every Catastrophic and Hazardous one</button>' : '');
-        h += card('pasa.fcs', fcs, pk.length > 0);
         var co = coffeOn();
         h += card('pasa.coffe', Q({ id: 'pasa.coffe', text: 'Do a combined functional failure effects (CoFFE) analysis?', why: 'A CoFFE lists which system failures, alone or together, produce each failure condition. It catches combinations a tree built top down can miss. The same choice as the Plan Autopilot\'s.', picked: co === true ? 'yes' : co === false ? 'no' : null, options: [{ id: 'yes', label: 'Yes', impact: 'Each appendix gets a CoFFE part before its fault tree, with its cases to answer.' }, { id: 'no', label: 'No', impact: 'Interdependence and common resources carry the argument.' }] }), co !== null);
         if (RT) {
-            var lv = '<div class="slap-q">At what level is each type of requirement derived?</div><div class="paq-x">AutoReq writes every requirement from the analysis. For each type, pick how far down it goes: written at the aircraft, flowed down to each system, or down to items. It applies to every failure condition in this report; an appendix can change it for its own failure condition.</div><table class="paq-t"><tbody>';
-            RT.TYPES.forEach(function (t) { var cur = RT.levelFor(t.id, {}).level; lv += '<tr data-ccq-row="pasa.lvl.' + E(t.id) + '"><td><b>' + E(t.name) + '</b><div class="paq-x" style="margin:2px 0 0">' + E(t.what) + '</div></td><td style="white-space:nowrap">' + RT.LEVELS.map(function (l) { return '<button type="button" class="paq-b' + (cur === l.id ? ' on' : '') + '" data-paq-lvl="' + E(t.id + ':' + l.id) + '" onclick="SLPasaAuto.ui.level(' + J(t.id) + ',' + J(l.id) + ')">' + E(l.label) + '</button>'; }).join('') + '</td></tr>'; });
-            h += card('pasa.lvl', lv + '</tbody></table>', RT.TYPES.every(function (t) { return !!RT.levelFor(t.id, {}).level; }));
+            var lv = '<div class="slap-q">At what levels is each type of requirement written?</div><div class="paq-x">AutoReq writes every requirement from the analysis. For each type, tick where it is written: at the aircraft, flowed down to each system that carries it, or both. A system requirement is traced to the aircraft one above it. It applies to every function in this report; an appendix can change it for its own function.</div><table class="paq-t"><tbody>';
+            RT.TYPES.forEach(function (t) { var cur = RT.pasaLevels(t.id, null).levels; lv += '<tr data-ccq-row="pasa.lvl.' + E(t.id) + '"><td><b>' + E(t.name) + '</b><div class="paq-x" style="margin:2px 0 0">' + E(t.what) + '</div></td><td style="white-space:nowrap">' + RT.PASA_LEVELS.map(function (l) { var on = cur.indexOf(l) >= 0; return '<button type="button" role="checkbox" aria-checked="' + on + '" class="paq-b' + (on ? ' on' : '') + '" data-paq-lvl="' + E(t.id + ':' + l) + '" onclick="SLPasaAuto.ui.level(' + J(t.id) + ',' + J(l) + ')">' + (on ? '\u2713 ' : '') + E(l === 'aircraft' ? 'Aircraft' : 'Systems') + '</button>'; }).join('') + '</td></tr>'; });
+            h += card('pasa.lvl', lv + '</tbody></table>', RT.TYPES.every(function (t) { return RT.pasaLevels(t.id, null).levels.length > 0; }));
         }
         return h;
     }
     function leftFc(gr) {
         var f = gr.fcId, h = '', left = fcLeft(gr), rows = idpRows(gr), RT = root.SLReqTrace;
-        h += '<div class="paq-h">' + E(fcName(gr)) + ' (' + E(gr.gov.severity) + ')</div><div class="paq-x">Answer these and the appendix on the right writes itself. What the project already holds is filled in and named; what is new is checked by you or drafted by the AI from the architecture, then confirmed.</div>';
+        h += '<div class="paq-h" data-paq-fc="' + E(f) + '">' + E(fcName(gr)) + ' (' + E(gr.gov.severity) + ', ' + (isQuant(gr) ? 'quantitative' : 'qualitative') + ')</div><div class="paq-x">Answer these and its part of the appendix writes itself. What the project already holds is filled in and named; what is new is checked by you or drafted by the AI from the architecture, then confirmed.</div>';
         var items = openItems(gr); if (items.length) h += '<div class="paq-open" data-paq-openitems="1"><b>Open items</b><br>' + items.map(E).join('<br>') + '</div>';
         // 1. interdependence table
         var open = rows.filter(function (r) { return r.state === 'open' || r.state === 'proposed'; });
@@ -568,21 +673,30 @@
         });
         // 4. the tree: nothing to answer
         var pg = pageOf(gr);
-        h += card('fc.' + f + '.tree', '<div class="slap-q">The fault tree, what it says, the numbers</div><div class="paq-x">Generated from the tree. Nothing to answer.</div>' + (pg ? '<button type="button" class="paq-b" onclick="SLPasaAuto.ui.openTree(' + J(pg.id) + ')">Open the fault tree</button>' : ''), true);
-        // 5. requirements: the level for this failure condition, and the register
+        if (isQuant(gr)) h += card('fc.' + f + '.tree', '<div class="slap-q">The fault tree, what it says, the numbers</div><div class="paq-x">Generated from the tree. Nothing to answer.</div>' + (pg ? '<button type="button" class="paq-b" onclick="SLPasaAuto.ui.openTree(' + J(pg.id) + ')">Open the fault tree</button>' : ''), true);
+        return h;
+    }
+    // one function's questions: each failure condition's, then the function's requirement levels and the register
+    function leftFn(fnId) {
+        var f0 = fnOf(fnId), grs = fnGroups(fnId), RT = root.SLReqTrace, h = '';
+        h += '<div class="paq-h">' + E(fnTitle(f0)) + '</div><div class="paq-x">' + E(grs.length === 1 ? 'One failure condition of this function has a safety effect.' : grs.length + ' failure conditions of this function have a safety effect.') + ' Each has its own questions below; what the project already holds is filled in and named.</div>';
+        grs.forEach(function (gr) { h += '<div class="paq-fcblock" data-paq-fcblock="' + E(gr.fcId) + '">' + leftFc(gr) + '</div>'; });
         if (RT) {
-            var lv = '<div class="slap-q">Requirements for ' + E(f) + '</div><div class="paq-x">The levels come from the front of the report. Change one here only if ' + E(f) + ' needs it.</div><table class="paq-t"><tbody>';
-            RT.TYPES.forEach(function (t) { var base = RT.levelFor(t.id, {}).level, own = (safe(function () { return pc().reqLevels.fc[f][t.id]; }, null)); lv += '<tr><td>' + E(t.name) + '</td><td style="white-space:nowrap"><button type="button" class="paq-b' + (!own ? ' on' : '') + '" onclick="SLPasaAuto.ui.level(' + J(t.id) + ',null,' + J(f) + ')">As the report' + (base ? ' (' + E(RT.levelLabel(base)) + ')' : '') + '</button>' + RT.LEVELS.map(function (l) { return '<button type="button" class="paq-b' + (own === l.id ? ' on' : '') + '" onclick="SLPasaAuto.ui.level(' + J(t.id) + ',' + J(l.id) + ',' + J(f) + ')">' + E(l.label) + '</button>'; }).join('') + '</td></tr>'; });
-            var rq = reqsFor(gr), nNew = rq.filter(function (x) { return x.state !== 'in'; }).length;
-            lv += '</tbody></table>' + (nNew ? '<div style="margin-top:8px"><button type="button" class="paq-b on" data-paq-acceptreq="' + E(f) + '" onclick="SLPasaAuto.ui.acceptReqs(' + J(f) + ')">Put the new and changed requirements for ' + E(f) + ' in the aircraft requirements</button></div>' : '<div class="paq-x" style="margin-top:6px">Every requirement for ' + E(f) + ' is in the aircraft requirements.</div>');
-            h += card('fc.' + f + '.req', lv, !nNew);
+            var lv = '<div class="slap-q">Requirement levels for ' + E(fnId) + '</div><div class="paq-x">Ticked on the front of the report. Change one here only if this function needs it.</div><table class="paq-t"><tbody>';
+            RT.TYPES.forEach(function (t) {
+                var cur = RT.pasaLevels(t.id, fnId), own = cur.from === 'function';
+                lv += '<tr><td>' + E(t.name) + (own ? ' (this function)' : '') + '</td><td style="white-space:nowrap">' + RT.PASA_LEVELS.map(function (l) { var on = cur.levels.indexOf(l) >= 0; return '<button type="button" role="checkbox" aria-checked="' + on + '" class="paq-b' + (on ? ' on' : '') + '" onclick="SLPasaAuto.ui.level(' + J(t.id) + ',' + J(l) + ',' + J(fnId) + ')">' + (on ? '\u2713 ' : '') + E(l === 'aircraft' ? 'Aircraft' : 'Systems') + '</button>'; }).join('') + (own ? '<button type="button" class="paq-b" onclick="SLPasaAuto.ui.levelReset(' + J(t.id) + ',' + J(fnId) + ')">As the report</button>' : '') + '</td></tr>';
+            });
+            var nNew = 0; grs.forEach(function (gr) { reqEntries(reqsFor(gr)).forEach(function (e) { if (!(e.flow ? e.flow.state === 'in' : e.x.state === 'in')) nNew++; }); });
+            lv += '</tbody></table>' + (nNew ? '<div style="margin-top:8px"><button type="button" class="paq-b on" data-paq-acceptreq="' + E(fnId) + '" onclick="SLPasaAuto.ui.acceptReqs(' + J(fnId) + ')">Put the new and changed requirements for ' + E(fnId) + ' in the registers (aircraft and systems)</button></div>' : '<div class="paq-x" style="margin-top:6px">Every requirement for ' + E(fnId) + ' is in the registers.</div>');
+            h += card('fn.' + fnId + '.req', lv, !nNew);
         }
         return h;
     }
     function renderQuestions(R, tabv) {
         style();
-        var part = R && R.partOf ? R.partOf(tabv) : null, f = fcOfSid(part);
-        if (f) { var gr = groupOf(f); return gr ? leftFc(gr) : '<div class="paq-x">This failure condition is no longer offered.</div>'; }
+        var part = R && R.partOf ? R.partOf(tabv) : null, fid = fnOfSid(part);
+        if (fid) return fnGroups(fid).length ? leftFn(fid) : '<div class="paq-x">This function has no failure condition with a safety effect now.</div>';
         return leftFront();
     }
 
@@ -650,30 +764,44 @@
         catch (e) { msg('The AI could not draft the rows: ' + (e && e.message || e), true); }
         finally { ui.busy = null; save(); done('fc.' + fcId + '.idp'); }
     }
-    function level(type, lv, fcId) {
+    // a tick on or off: the report's level for a type, or one function's (its own list starts from the report's)
+    function level(type, lv, fnId) {
         var RT = root.SLReqTrace; if (!RT) return;
-        try { RT.setLevel(type, lv, fcId ? { fc: fcId } : 'types'); } catch (e) { return msg(e.message, true); }
-        save(); done(fcId ? 'fc.' + fcId + '.req' : 'pasa.lvl');
+        try { RT.toggleLevel(type, lv, fnId ? { fn: fnId } : 'types'); } catch (e) { return msg(e.message, true); }
+        save(); done(fnId ? 'fn.' + fnId + '.req' : 'pasa.lvl');
     }
-    function addPick(id) { if (!id) return; var s0 = store(); if (s0.picks.indexOf(id) < 0) s0.picks.push(id); orderPicks(); save(); done('pasa.fcs'); }
-    function unpick(id) { var s0 = store(); s0.picks = s0.picks.filter(function (x) { return x !== id; }); save(); done('pasa.fcs'); }
-    function addSevere() { var s0 = store(); candidates().forEach(function (gr) { if (rank(gr.gov.severity) >= SEV_RANK.Hazardous && s0.picks.indexOf(gr.fcId) < 0) s0.picks.push(gr.fcId); }); orderPicks(); save(); done('pasa.fcs'); }
-    // appendices in the AFHA's own order, so a letter never depends on the order things were picked in
-    function orderPicks() { var s0 = store(), order = groups().map(function (gr) { return gr.fcId; }); s0.picks.sort(function (a, b) { return order.indexOf(a) - order.indexOf(b); }); }
-    function acceptReqs(fcId) {
-        var gr = groupOf(fcId), AR = g('AutoReq'), m = merge(); if (!gr || !AR || !m) return;
-        var keep = reqsFor(gr), ids = keep.map(function (x) { return S(x.cand.reqSource.sourceId); });
-        var sub = { scope: m.scope || 'ac', isNew: arr(m.isNew).filter(function (c) { return ids.indexOf(S(c.reqSource.sourceId)) >= 0; }), isUpdated: arr(m.isUpdated).filter(function (u) { return ids.indexOf(S(u.next.reqSource.sourceId)) >= 0; }), unchanged: [], orphaned: [], migrations: [], migrationUnresolved: [] };
-        try { AR.applyMerge(sub, { acceptNew: true, acceptUpdates: true, acceptOrphanRemoval: false }); } catch (e) { return msg('Not added: ' + (e && e.message || e), true); }
-        _rq.gen = -3; if (root.SLReqTrace) { root.SLReqTrace.ensureIds(); root.SLReqTrace.syncLevels(); }
-        save(); done('fc.' + fcId + '.req');
+    function levelReset(type, fnId) { var RT = root.SLReqTrace; if (!RT) return; RT.setLevels(type, null, { fn: fnId }); save(); done('fn.' + fnId + '.req'); }
+    // put one function's requirements in the registers: each aircraft row ticked "aircraft" (AutoReq's own merge, by source),
+    // then each flowed-down row in its system's requirements, traced to the aircraft row; one row per source, never two
+    function acceptReqs(fnId) {
+        var AR = g('AutoReq'), m = merge(), RT = root.SLReqTrace; if (!AR || !m || !RT) return;
+        var grs = fnGroups(fnId), keepAc = [], flows = [];
+        grs.forEach(function (gr) { reqsFor(gr).forEach(function (x) { if (x.aircraft || !x.levels.length) keepAc.push(S(x.cand.reqSource.sourceId)); x.flows.forEach(function (fl) { if (fl.state !== 'in') flows.push({ x: x, fl: fl }); }); }); });
+        var sub = { scope: m.scope || 'ac', isNew: arr(m.isNew).filter(function (c) { return keepAc.indexOf(S(c.reqSource.sourceId)) >= 0; }), isUpdated: arr(m.isUpdated).filter(function (u) { return keepAc.indexOf(S(u.next.reqSource.sourceId)) >= 0; }), unchanged: [], orphaned: [], migrations: [], migrationUnresolved: [] };
+        try { if (sub.isNew.length || sub.isUpdated.length) AR.applyMerge(sub, { acceptNew: true, acceptUpdates: true, acceptOrphanRemoval: false }); } catch (e) { return msg('Not added: ' + (e && e.message || e), true); }
+        // the flowed-down rows, per system
+        var bySys = {};
+        flows.forEach(function (o) { (bySys[o.fl.sysId] = bySys[o.fl.sysId] || []).push(o); });
+        Object.keys(bySys).forEach(function (sysId) {
+            var news = [];
+            bySys[sysId].forEach(function (o) {
+                var parent = stored(o.x.cand.reqSource.sourceId), c = o.fl.cand;
+                c.parentReqId = parent ? S(parent.internalId) : '';
+                var st = storedSys(sysId, c.reqSource.sourceId);
+                if (st) { st.text = c.text; st.rat = c.rat; st.reqSource = c.reqSource; st.parentReqId = c.parentReqId; }
+                else news.push(c);
+            });
+            if (news.length) { try { AR.applyMerge({ scope: 'sys-' + sysId, isNew: news, isUpdated: [], unchanged: [], orphaned: [], migrations: [], migrationUnresolved: [] }, { acceptNew: true, acceptUpdates: false, acceptOrphanRemoval: false }); } catch (e) { return msg('Not added to the ' + sysName(sysId) + ' requirements: ' + (e && e.message || e), true); } }
+        });
+        _rq.gen = -3; RT.ensureIds(); RT.syncLevels();
+        save(); done('fn.' + fnId + '.req');
     }
     function openTree(pid) { try { if (typeof root.switchFTAPage === 'function') root.switchFTAPage(pid); else if (root.SLTreeHomes) root.SLTreeHomes.open('pasa'); } catch (_) {} }
 
     // ---- outputs and acceptance (the old completion checklist) -----------------------------------------------------------
     function fpOf(o) { try { return JSON.stringify(o); } catch (_) { return String(Math.random()); } }
     function outputs() {
-        var pk = picks();
+        var pk = picks();   // every applicable failure condition, across all the appendices
         return [
             { id: 'idp', what: 'How the systems feed each failure condition, confirmed', accept: 'Every system function answered for every appendix; every system that feeds a failure condition traced, or excluded with a reason', role: 'Chief safety engineer', fp: function () { return fpOf(pk.map(function (id) { var gr = groupOf(id); return gr ? idpRows(gr).map(function (r) { return r.sysId + r.state; }).join(',') + JSON.stringify(fcStore(id).ex) : ''; })); } },
             { id: 'cr', what: 'Shared resources and common causes dispositioned', accept: 'Each one points to the review that looks at it, or says why it cannot defeat an independence', role: 'Chief safety engineer', fp: function () { return fpOf(pk.map(function (id) { return fcStore(id).res; })); } },
@@ -692,16 +820,16 @@
         if (typeof document === 'undefined' || !document.getElementById('view-pasa')) return null;
         _R = CR.define({
             key: 'pasa', viewId: 'view-pasa', leftId: 'pasa-auto-host', title: 'Preliminary Aircraft Safety Assessment', code: 'PASA',
-            lead: 'One report for the aircraft: the front of the report says what it covers, how it is done and what it found; each failure condition you pick has its own appendix. Answer the questions on the left; the report on the right writes itself.',
+            lead: 'One report for the aircraft: the front of the report says what it covers, how it is done and what it found; each function with a failure condition rated Minor or above has its own appendix holding all of those failure conditions. Answer the questions on the left; the report on the right writes itself.',
             appendices: true,
-            tabs: { allLabel: false, parts: true, pickLabel: 'Part', frontLabel: 'Front of the report', noun: 'failure condition', partLabel: function (s) { var gr = groupOf(fcOfSid(s)); return gr ? fcName(gr) : S(s); } },
-            reports: function () { return [{ id: 'aircraft', code: '001', label: 'Aircraft', title: 'Aircraft', sections: picks().map(sid) }]; },
+            tabs: { allLabel: false, parts: true, pickLabel: 'Part', frontLabel: 'Front of the report', noun: 'function', partLabel: function (s) { var f = fnOf(fnOfSid(s)); return f ? fnTitle(f) : S(s); } },
+            reports: function () { return [{ id: 'aircraft', code: '001', label: 'Aircraft', title: 'Aircraft', sections: appendices().map(sid) }]; },
             front: front, after: after, sections: sections, renderQuestions: renderQuestions, outputs: outputs,
-            authored: [{ id: 'conclusion', title: 'Conclusion', purpose: 'Whether the architecture as planned keeps this failure condition within its objective, what it rests on, and what is still open.' }],
+            authored: [{ id: 'conclusion', title: 'Conclusion', purpose: 'Whether the architecture as planned keeps each failure condition of this function within its objective, what that rests on, and what is still open.' }],
             reportAuthored: [{ id: 'conclusion', title: 'Conclusion', purpose: 'Whether the aircraft as planned meets the safety objectives of the failure conditions assessed, what that rests on, and what is still open.' }],
             reportFacts: function () { return 'The front of the report: ' + front({}).filter(function (b) { return b.k === 'p'; }).map(function (b) { return b.text; }).join(' '); },
             aiType: 'PASA',
-            aiReady: function (s) { var f = fcOfSid(s); if (f) { var gr = groupOf(f); var l = gr ? fcLeft(gr) : []; return { ready: !l.length, left: l }; } var l2 = frontLeft().concat(picks().filter(function (id) { var gr = groupOf(id); return gr && fcLeft(gr).length; }).map(function (id) { return 'The questions of the appendix for ' + id; })); return { ready: !l2.length, left: l2 }; },
+            aiReady: function (s) { var f = fnOfSid(s); if (f) { var l = fnLeft(f); return { ready: !l.length, left: l }; } var l2 = frontLeft().concat(appendices().filter(function (id) { return fnLeft(id).length; }).map(function (id) { return 'The questions of the appendix for ' + fnTitle(fnOf(id)); })); return { ready: !l2.length, left: l2 }; },
             io: { does: 'Works out, early and from the architecture, whether the aircraft can meet the safety objective of each failure condition it assesses, and what each system must promise for that to hold.',
                 inputs: [{ id: 'afha', what: 'The aircraft functional hazard assessment', from: 'AFHA', tab: 'ac-fha' }, { id: 'arch', what: 'The architecture: systems, functions and shared resources', from: 'Architecture', tab: 'arch' }, { id: 'trees', what: 'The generated fault trees', from: 'Fault trees', tab: 'fta' }, { id: 'sfha', what: 'The system functional hazard assessments', from: 'SFHA', tab: 'pssa' }],
                 outputs: [{ id: 'reqs', what: 'Aircraft requirements with their rationale and source', to: 'Aircraft requirements', tab: 'ac-req' }, { id: 'budgets', what: 'Budgets handed down to the systems', to: 'PSSA', tab: 'pssa' }, { id: 'claims', what: 'Independence claims to show', to: 'CMA', tab: 'cma' }] }
@@ -743,9 +871,9 @@
     // what the PSSA Autopilot shares with this one (pssa_autopilot.js): the same words, numbers and tree pictures
     var lib = { sci: sci, T: T, E: E, S: S, J: J, arr: arr, safe: safe, listJoin: listJoin, lc: lc, rank: rank, SEV_RANK: SEV_RANK, SEV_WORDS: SEV_WORDS, target: target, kids: kids, walk: walk, nodeName: nodeName,
         cutsets: cutsets, metricsOf: metricsOf, cgOf: cgOf, cmas: cmas, CLOSE: CLOSE, acRef: acRef, regulation: regulation, style: style, sysName: sysName, sysById: sysById, systems: systems, traceList: traceList };
-    var api = { VERSION: VERSION, lib: lib, besideGo: besideGo, placeBeside: placeBeside, candidates: candidates, picks: picks, groupOf: groupOf, idpRows: idpRows, untraced: untraced, resources: resources, treeFacts: treeFacts, reqsFor: reqsFor,
+    var api = { VERSION: VERSION, lib: lib, besideGo: besideGo, placeBeside: placeBeside, candidates: candidates, picks: picks, appendices: appendices, functions: functions, fnGroups: fnGroups, fnSection: fnSection, routeOf: routeOf, isQuant: isQuant, fnLeft: fnLeft, fnOf: fnOf, fnTitle: fnTitle, feeders: feeders, critGates: critGates, treeOf: treeOf, groupOf: groupOf, idpRows: idpRows, untraced: untraced, resources: resources, treeFacts: treeFacts, reqsFor: reqsFor,
         frontLeft: frontLeft, fcLeft: fcLeft, openItems: openItems, tracedNotInTree: tracedNotInTree, treeNotInTable: treeNotInTable, section: section, front: front, coffeOn: coffeOn, store: store, outputs: outputs,
-        ui: { pick: pick, text: text, cell: cell, idpNone: idpNone, idpAi: idpAi, level: level, addPick: addPick, unpick: unpick, addSevere: addSevere, acceptReqs: acceptReqs, openTree: openTree } };
+        ui: { pick: pick, text: text, cell: cell, idpNone: idpNone, idpAi: idpAi, level: level, levelReset: levelReset, acceptReqs: acceptReqs, openTree: openTree } };
     try { root.SLPasaAuto = api; } catch (_) {}
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

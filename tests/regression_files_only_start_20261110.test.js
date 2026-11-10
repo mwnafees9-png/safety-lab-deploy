@@ -81,7 +81,7 @@ const HOSTED = 'fhrqkhdrwbfnizkepkch';
 const HTML = rd('index.html');
 {
     const at = s => HTML.indexOf(s);
-    check('3  local_start.js 1.0 loads right before auth_gate.js 62.80; safety_lab 65.80, helpers 3.69, labs_thread_config 1.3', at('local_start.js?v=1.0') > 0 && /local_start\.js\?v=1\.0" defer><\/script>\s*<script src="auth_gate\.js\?v=62\.80"/.test(HTML) && at('safety_lab.js?v=65.80') > 0 && at('helpers_modules.js?v=3.69') > 0 && at('labs_thread_config.js?v=1.3') > 0);
+    check('3  local_start.js 1.0 loads right before auth_gate.js 62.80; safety_lab 65.80, helpers 3.70, labs_thread_config 1.3', at('local_start.js?v=1.0') > 0 && /local_start\.js\?v=1\.0" defer><\/script>\s*<script src="auth_gate\.js\?v=62\.80"/.test(HTML) && at('safety_lab.js?v=65.80') > 0 && at('helpers_modules.js?v=3.70') > 0 && at('labs_thread_config.js?v=1.3') > 0);
 }
 // ---- 4: the name rule ----------------------------------------------------------------------------------------------------
 {

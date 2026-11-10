@@ -527,6 +527,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
             <div id="ws-view-pssa" style="display: none;">
                 <div id="ws-pssa-host" style="display:none"></div>
             </div>
+            <!-- 10 Nov 2026: the SSA Autopilot (ssa_autopilot.js) mounts here; locked until the system's PSSA is baselined -->
+            <div id="ws-view-ssa" style="display: none;"></div>
 
             <div id="ws-view-func">
                 <div class="header-with-export">
@@ -3023,7 +3025,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
 
         <div id="view-asa" style="display: none;">
             <div class="header-with-export">
-                <h3>ASA — Aircraft Safety Assessment</h3>
+                <h3>ASA: Aircraft Safety Assessment</h3>
             </div>
             <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0 0 var(--s-3) 0;">The whole-aircraft verification closure (ARP4761A §3.7, Appendix F): confirms every AFHA failure condition is closed by SSA evidence or aircraft-level analysis, with CCA confirmations and final FDAL/IDAL checks.</p>
             <div id="ckpt-page-asa"></div>
@@ -4258,7 +4260,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
     <script src="support_modules.js?v=66.64" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
-    <script src="helpers_modules.js?v=3.69" defer></script>
+    <script src="helpers_modules.js?v=3.70" defer></script>
     <script src="cloud_writer.js?v=1.3" defer></script>
     <script src="severity_axes.js?v=1.36" defer></script>
     <!-- 5 Sep 2026 — levers 2 + 3: escapes per phase; aircraft / crew levels derived from the MAC and the Task Analysis. -->
@@ -4317,7 +4319,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="design_baseline.js?v=1.0" defer></script>
     <!-- Phase 76 — these modules read safety_lab.js constants at definition time (or are only referenced at runtime), so they load AFTER the monolith. None are referenced at the monolith's top level. -->
     <script src="req_taxonomy.js?v=1.1" defer></script>
-    <script src="assurance_modules.js?v=1.47" defer></script>
+    <script src="assurance_modules.js?v=1.48" defer></script>
     <script src="engine_modules.js?v=1.3" defer></script>
     <!-- Backlog #1 — AI confidence-tied-to-fidelity badges (born modular; deterministic verdicts from recorded provenance; decorates worksheets, feeds reports + evidence package). Loads BEFORE reports.js so final outputs pick up the labels. -->
     <script src="ai_badges.js?v=1.4" defer></script>
@@ -4579,7 +4581,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- 4 Nov 2026: the ZSA and PRA Autopilots (the shared look first) -->
     <script src="report_comments.js?v=1.0" defer></script>
     <script src="autopilot_ui.js?v=1.5" defer></script>
-    <script src="cca_report.js?v=2.0" defer></script>
+    <script src="cca_report.js?v=2.1" defer></script>
     <script src="zsa_type_hazards.js?v=1.0" defer></script>
     <script src="zsa_autopilot.js?v=1.9" defer></script>
     <script src="pra_autopilot.js?v=2.8" defer></script>
@@ -4655,7 +4657,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="prove_tabs.js?v=1.9" defer></script>
     <!-- 24 Oct 2026: nav_areas.js (SLNavAreas) lays the left menu out the way Sys Lab does: a Working on picker, sections, and each section's pages as tabs above the page. After support_modules.js, helpers_modules.js, program_plan.js and prove_tabs.js. -->
     <script src="level_view.js?v=1.2" defer></script>
-    <script src="nav_areas.js?v=2.2" defer></script>
+    <script src="nav_areas.js?v=2.3" defer></script>
     <script src="fta_tree_picker.js?v=1.6" defer></script>
     <!-- 25 Aug 2026 — the way back from a golden-thread jump (reviewer: "to go
          back you have to click on the golden thread"). Wraps _gtvShowEco /
@@ -4697,11 +4699,14 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- 8 Nov 2026: cma_autopilot.js (SLCmaAuto): the CMA Autopilot. Plain questions per independence claim (the gates, the claim, every common mode category, how each concern is closed), answered through SLCmaFlow into the CMA rows, and the CMA report content (one section per claim), inputs and outputs, and inline Edit / Add a CMA. After cma_flow.js and autopilot_ui.js. -->
     <script src="cma_claims.js?v=1.2" defer></script>
     <script src="cma_autopilot.js?v=1.5" defer></script>
-    <!-- 10 Nov 2026: pasa_autopilot.js (SLPasaAuto): the PASA Autopilot, one report for the aircraft with an appendix per failure condition (cca_report.js 2.0 frame). After cma_claims.js (the tree pictures), req_trace.js and assurance_modules.js (AutoReq). -->
+    <!-- 10 Nov 2026: pasa_autopilot.js (SLPasaAuto): the PASA Autopilot, one report for the aircraft with an appendix per function (cca_report.js 2.1 frame). After cma_claims.js (the tree pictures), req_trace.js and assurance_modules.js (AutoReq). -->
     <!-- 10 Nov 2026: req_trace.js (SLReqTrace): requirement IDs, the level of each requirement type, where each requirement is driven from. After assurance_modules.js (AutoReq) and req_basis.js; the Autopilots below use it. -->
-    <script src="req_trace.js?v=1.0" defer></script>
-    <script src="pasa_autopilot.js?v=1.0" defer></script>
-    <script src="pssa_autopilot.js?v=1.0" defer></script>
+    <script src="req_trace.js?v=1.1" defer></script>
+    <script src="pasa_autopilot.js?v=2.0" defer></script>
+    <script src="pssa_autopilot.js?v=2.0" defer></script>
+    <!-- 10 Nov 2026: ssa_autopilot.js (SLSsaAuto): the SSA Autopilot, per system, locked until its PSSA is baselined. asa_autopilot.js (SLAsaAuto): the ASA Autopilot, locked until the PASA and every SSA are baselined. After pssa_autopilot.js. -->
+    <script src="ssa_autopilot.js?v=1.0" defer></script>
+    <script src="asa_autopilot.js?v=1.0" defer></script>
     <script src="cca_models.js?v=1.05" defer></script>
     <!-- Skills V1 — versioned drafting-instruction registry. Loads EAGERLY (tiny,
          static) and BEFORE ai_loader so the engine finds window.SLABSkills on its

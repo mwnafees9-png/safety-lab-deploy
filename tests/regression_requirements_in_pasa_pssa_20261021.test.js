@@ -48,7 +48,7 @@ const wsNav = idx.slice(idx.indexOf('<button id="ws-tab-func"'), idx.indexOf('id
 check('the system tabs no longer offer System Requirements beside the SFHA', wsNav.length > 0 && !/ws-tab-req|switchWorkspaceTab\('req'\)/.test(wsNav));
 check('the PSSA has a two-page bar: Allocation & DAL, System Requirements',
   /id="ws-pssa-tab-overview" onclick="switchWorkspaceTab\('pssa'\)"/.test(idx) && /id="ws-pssa-tab-req" onclick="switchWorkspaceTab\('req'\)"/.test(idx));
-check('switchWorkspaceTab keeps req as a sub-tab and syncs the PSSA bar', /const tabs = \['func', 'fcim', 'fha', 'req', 'asm', 'fmea', 'pssa'\];/.test(helpers) && /_syncWsPssaNav\(subTab\);/.test(helpers));
+check('switchWorkspaceTab keeps req as a sub-tab and syncs the PSSA bar (10 Nov 2026: the SSA tab after it)', /const tabs = \['func', 'fcim', 'fha', 'req', 'asm', 'fmea', 'pssa'(, 'ssa')?\];/.test(helpers) && /_syncWsPssaNav\(subTab\);/.test(helpers));
 
 console.log('\n[behaviour] the bars, on a small DOM');
 {

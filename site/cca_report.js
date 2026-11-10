@@ -1,4 +1,4 @@
-// cca_report.js (SLCcaReport v2.0, 10 Nov 2026: reports with a front and appendices, the dropdown picks the front or one appendix, parts written once per report (the PASA and PSSA Autopilots); v1.9 10 Nov 2026: the AI drafts only once the questions are answered; live comments in the margin; images and captions centered; v1.8 10 Nov 2026; v1.7 9 Nov 2026; v1.6 9 Nov 2026; v1.5 9 Nov 2026; v1.4 9 Nov 2026; v1.3 9 Nov 2026; v1.2 8 Nov 2026): the shared report frame of the PRA, ZSA and CMA Autopilots.
+// cca_report.js (SLCcaReport v2.1, 10 Nov 2026: a third heading level, the front drawn on its own; v2.0 10 Nov 2026: reports with a front and appendices, the dropdown picks the front or one appendix, parts written once per report (the PASA and PSSA Autopilots); v1.9 10 Nov 2026: the AI drafts only once the questions are answered; live comments in the margin; images and captions centered; v1.8 10 Nov 2026; v1.7 9 Nov 2026; v1.6 9 Nov 2026; v1.5 9 Nov 2026; v1.4 9 Nov 2026; v1.3 9 Nov 2026; v1.2 8 Nov 2026): the shared report frame of the PRA, ZSA and CMA Autopilots.
 // v1.8 (10 Nov 2026): Waqas: "we also need to fix how we are not using the full width of the page for the text", for all the
 // reports. Paragraphs, leads, lists, captions and the written parts now run the full width of the document column, the
 // same width as the tables (the 78ch and 980px caps are gone). A section may carry { k:'html', html } (preview only, never in
@@ -124,7 +124,7 @@
 // text (live counts appear only in the panel when asked), plain words, no em dashes.
 (function (root) {
     'use strict';
-    var VERSION = '2.0';   // 2.0 10 Nov 2026: reports with a front and appendices (spec.appendices), the dropdown picks the front or one appendix (tabs.parts), parts written once per report (spec.reportAuthored, { k:'rauth' });   // 1.9 10 Nov 2026: the AI drafts a part only once its questions are answered (spec.aiReady);   // 1.8 10 Nov 2026: text the full width of the document column; { k:'html' } preview-only blocks;   // 1.7 9 Nov 2026: column diagrams with squared connectors in their own lanes, never through a box, lit on hover (flow);   // 1.6 9 Nov 2026: the parts the engineer writes (spec.authored): write it or draft it with the AI, accepted by a person;   // 1.5 9 Nov 2026: every subject its own report, picked from one dropdown, with a register (spec.reports)   // 1.4 9 Nov 2026: pictures placed in the story (shotslot), per-source pictures ticked by default; 1.3: 3D model pictures (spec.shots)
+    var VERSION = '2.1';   // 2.1 10 Nov 2026: a third heading level (A.1.1); with appendices the front on screen draws the front only, each appendix when picked (a section's blocks may be a getter, worked out only when drawn);   // 2.0 10 Nov 2026: reports with a front and appendices (spec.appendices), the dropdown picks the front or one appendix (tabs.parts), parts written once per report (spec.reportAuthored, { k:'rauth' });   // 1.9 10 Nov 2026: the AI drafts a part only once its questions are answered (spec.aiReady);   // 1.8 10 Nov 2026: text the full width of the document column; { k:'html' } preview-only blocks;   // 1.7 9 Nov 2026: column diagrams with squared connectors in their own lanes, never through a box, lit on hover (flow);   // 1.6 9 Nov 2026: the parts the engineer writes (spec.authored): write it or draft it with the AI, accepted by a person;   // 1.5 9 Nov 2026: every subject its own report, picked from one dropdown, with a register (spec.reports)   // 1.4 9 Nov 2026: pictures placed in the story (shotslot), per-source pictures ticked by default; 1.3: 3D model pictures (spec.shots)
     function E(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
     function J(v) { return E(JSON.stringify(v)); }
     function g(name) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(name); if (v !== undefined) return v; } } catch (_) {} try { return root[name]; } catch (_) { return undefined; } }
@@ -510,12 +510,13 @@
         function number(blocks) {
             // v2.0: an appendix heading ({ appx: 'A' }) is "Appendix A: ...", its sub-headings A.1, A.2 and its tables and
             // figures Table A.1, Figure A.1 (so an appendix keeps its numbers when it is shown on its own)
-            var h1 = 0, h2 = 0, t = 0, f = 0, out = [], ax = null, at = 0, af = 0;
+            var h1 = 0, h2 = 0, h3 = 0, t = 0, f = 0, out = [], ax = null, at = 0, af = 0;
             blocks.forEach(function (b) {
                 if (!b) return;
                 if (b.k === 'h' && b.level === 1 && b.appx) { ax = String(b.appx); h2 = 0; at = 0; af = 0; b.text = 'Appendix ' + ax + ': ' + b.text; }
-                else if (b.k === 'h' && b.level === 1) { ax = null; h1++; h2 = 0; b.text = h1 + '. ' + b.text; }
-                else if (b.k === 'h' && b.level === 2) { h2++; b.text = (ax || h1) + '.' + h2 + ' ' + b.text; }
+                else if (b.k === 'h' && b.level === 1) { ax = null; h1++; h2 = 0; h3 = 0; b.text = h1 + '. ' + b.text; }
+                else if (b.k === 'h' && b.level === 2) { h2++; h3 = 0; b.text = (ax || h1) + '.' + h2 + ' ' + b.text; }
+                else if (b.k === 'h' && b.level === 3) { h3++; b.text = (ax || h1) + '.' + h2 + '.' + h3 + ' ' + b.text; }   // v2.1: a third level (A.1.1)
                 if (b.k === 'table') { var tn = ax ? ax + '.' + (++at) : String(++t); b.n = tn; b.caption = 'Table ' + tn + ': ' + b.title; if (b.lead) out.push(P(String(b.lead).replace('{N}', 'Table ' + tn), { sec: b.sec })); }
                 if (b.k === 'fig' || b.k === 'shot') { var fn = ax ? ax + '.' + (++af) : String(++f); b.n = fn; b.caption = 'Figure ' + fn + ': ' + b.title; if (b.lead) out.push(P(String(b.lead).replace('{N}', 'Figure ' + fn), { sec: b.sec })); }
                 out.push(b);
@@ -604,6 +605,9 @@
                 b.push({ k: 'table', name: 'outputs', title: 'Outputs and how each is accepted', rows: outs.map(function (x, i) { return { '#': String(i + 1), Output: x.what, 'Accepted when': x.accept || '', 'Accepted by (role)': x.role || docCtl().appr || 'Chief safety engineer', Signature: '', Date: '' }; }), lead: '{N} lists the outputs and how each is accepted.' });
             }
             var rs = secs.filter(function (x) { return x && r.sections.indexOf(x.id) >= 0; });
+            // v2.1 (10 Nov 2026, the speed): the front on screen draws the front only; each appendix is drawn when it is picked
+            // (Word and Print still carry every appendix)
+            if (o.frontOnly) { if (rs.length) { b.push(H(1, 'Appendices')); b.push(P('Each appendix is shown on its own: pick it in the Part list above. Word and Print carry them all.')); b.push({ k: 'table', name: 'appx-list', title: 'The appendices', rows: rs.map(function (x, i) { return { Appendix: appxLetter(i), Title: x.title }; }), lead: '{N} lists the appendices.' }); } return number(b); }
             rs.forEach(function (x, i) { b.push(H(1, x.title, { appx: appxLetter(i), sec: x.id, edit: x.edit !== false && !!spec.edit, secHead: true })); b = b.concat(secBlocks(x, fx)); });
             var all = number(b);
             if (!o.part) return all;
@@ -633,7 +637,7 @@
             var hs = blocks.filter(function (b) { return b.k === 'h'; }), ts = blocks.filter(function (b) { return b.k === 'table'; }), fs = blocks.filter(function (b) { return b.k === 'fig' || b.k === 'shot'; });
             var r2 = REP ? repOf(REP) : null;
             return '<div class="ccr-cover" data-cc-cover="1"' + (r2 ? ' data-cc-report="' + E(r2.id) + '"' : '') + '><div class="ccr-ct">' + E(spec.title) + '</div>' + (r2 ? '<div class="ccr-ct2">' + E(r2.label) + '</div>' : '') + '<div class="ccr-cs">' + E(projName()) + '</div>' + coverTables().map(function (t) { return '<div class="ccr-cap">' + E(t.title) + '</div>' + tblHtml(t.rows); }).join('') + '</div>'
-                + '<div class="ccr-front" data-cc-toc="1"><h3 class="ccr-dh">Contents</h3>' + hs.map(function (h, i) { return '<div class="ccr-tl' + (h.level > 1 ? ' l2' : '') + '"><a href="javascript:void(0)" data-cc-goto="h' + i + '">' + E(h.text) + '</a></div>'; }).join('')
+                + '<div class="ccr-front" data-cc-toc="1"><h3 class="ccr-dh">Contents</h3>' + hs.map(function (h, i) { return '<div class="ccr-tl' + (h.level > 2 ? ' l3' : h.level > 1 ? ' l2' : '') + '"><a href="javascript:void(0)" data-cc-goto="h' + i + '">' + E(h.text) + '</a></div>'; }).join('')
                 + '<h3 class="ccr-dh">List of tables</h3>' + (ts.length ? ts.map(function (t) { return '<div class="ccr-tl" data-cc-lot="1"><a href="javascript:void(0)" data-cc-goto="t' + t.n + '">' + E(t.caption) + '</a></div>'; }).join('') : '<p>None.</p>')
                 + '<h3 class="ccr-dh">List of figures</h3>' + (fs.length ? fs.map(function (f) { return '<div class="ccr-tl" data-cc-lof="1"><a href="javascript:void(0)" data-cc-goto="f' + f.n + '">' + E(f.caption) + '</a></div>'; }).join('') : '<p>None.</p>') + '</div>';
         }
@@ -645,7 +649,7 @@
                     var id = 'h' + (hi++);
                     var tools = forPage && b.sec && b.edit ? ' <button type="button" class="ccr-edit" data-cc-edit="' + E(b.sec) + '" onclick="SLCcaReport.act(' + J(key) + ',\'edit\',' + J(b.sec) + ')">Edit</button>' : '';
                     if (b.secHead && b.sec) { out += '<div class="ccr-sec" data-ccsec="' + E(b.sec) + '">'; open = true; }
-                    out += '<h3 class="ccr-dh ' + (b.level === 1 ? 'l1' : 'l2') + '" data-cc-a="' + id + '">' + E(b.text) + tools + '</h3>';
+                    out += '<h3 class="ccr-dh ' + (b.level === 1 ? 'l1' : b.level === 3 ? 'l2 l3' : 'l2') + '" data-cc-a="' + id + '">' + E(b.text) + tools + '</h3>';
                     if (forPage && b.sec && ui0.editing === b.sec) out += editForm(b.sec);
                     return;
                 }
@@ -740,7 +744,7 @@
                 + '.ccr-legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-weight:400;margin-top:4px}.ccr-legend span{white-space:nowrap}'
                 + '.ccr-swatch{display:inline-block;width:11px;height:11px;border-radius:3px;margin:0 6px -1px 0;border:1px solid rgba(0,0,0,.25);vertical-align:baseline}'
                 + '.ccr .ccr-prev .ccr-cap{font-weight:700;font-size:11.5px;margin:10px 0 4px;text-align:center}.ccr-cover{border-bottom:2px solid var(--cp-rule);padding-bottom:14px;margin-bottom:14px}.ccr-ct{font-size:22px;font-weight:700;margin-top:6px}.ccr-cs{font-size:14px;margin:2px 0 10px}'
-                + '.ccr-front{border-bottom:2px solid var(--cp-rule);padding-bottom:12px;margin-bottom:12px}.ccr-tl{font-size:12px;margin:1px 0}.ccr-tl.l2{margin-left:16px}.ccr .ccr-prev a{color:var(--cp-link);text-decoration:none}'
+                + '.ccr-front{border-bottom:2px solid var(--cp-rule);padding-bottom:12px;margin-bottom:12px}.ccr-tl{font-size:12px;margin:1px 0}.ccr-tl.l2{margin-left:16px}.ccr-tl.l3{margin-left:32px}.ccr .ccr-dh.l3{font-size:13px}.ccr .ccr-prev a{color:var(--cp-link);text-decoration:none}'
                 + '.ccr .ccr-prev .ccr-dt{width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:10px}.ccr .ccr-prev .ccr-dt tr,.ccr .ccr-prev .ccr-dt td{background:var(--cp-bg);color:var(--cp-ink)}'
                 + '.ccr .ccr-prev .ccr-dt thead th,.ccr .ccr-prev .ccr-dt th,.ccr .ccr-prev .ccr-dt td{border:1px solid var(--cp-line) !important;padding:4px 6px;text-align:left;vertical-align:top;font-family:inherit !important;text-transform:none !important;letter-spacing:normal !important;font-size:11.5px !important}'
                 + '.ccr .ccr-prev .ccr-dt thead th,.ccr .ccr-prev .ccr-dt th{background:var(--cp-th) !important;color:var(--cp-ink) !important;font-weight:700}'
@@ -951,7 +955,7 @@
                     if (!cur && noRegister() && list.length) cur = list[0].id;
                     REP = ridOf(cur);
                     if (cur && partOf(cur)) { var blP = repDoc({ dark: dark, secs: secs, part: partOf(cur) }), dP = docCtl(), rP = repOf(REP, secs); html = '<div class="ccr-tabdoc" data-cc-tabdoc="' + E(cur) + '" data-cc-partdoc="' + E(partOf(cur)) + '"><div class="ccr-tabhead" data-cc-tabhead="1">' + E(spec.title) + (rP && repList(secs).length > 1 ? ' · ' + E(rP.label) : '') + ' · ' + E(dP.no) + ' Rev ' + E(rev()) + ' · ' + E(projName()) + '</div>' + bodyHtml(blP, true) + '</div>'; }
-                    else if (cur) { var blR = doc({ dark: dark, report: cur, secs: secs }); html = '<div class="ccr-tabdoc" data-cc-tabdoc="' + E(cur) + '">' + frontHtml(blR) + bodyHtml(blR, true) + '</div>'; }
+                    else if (cur) { var blR = spec.appendices ? repDoc({ dark: dark, secs: secs, frontOnly: true }) : doc({ dark: dark, report: cur, secs: secs }); html = '<div class="ccr-tabdoc" data-cc-tabdoc="' + E(cur) + '">' + frontHtml(blR) + bodyHtml(blR, true) + '</div>'; }
                     else html = registerHtml(secs || [], list);
                     cur = cur || null;
                 } else if (false) {
