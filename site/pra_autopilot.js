@@ -1,4 +1,4 @@
-// pra_autopilot.js (SLPraAuto v2.7, 9 Nov 2026; v2.6 v2.5 v2.4 v2.3 9 Nov 2026; v2.2 9 Nov 2026; v2.1 8 Nov 2026): the PRA page.
+// pra_autopilot.js (SLPraAuto v2.8, 10 Nov 2026: the AI drafts only once the questions are answered; v2.7 9 Nov 2026; v2.6 v2.5 v2.4 v2.3 9 Nov 2026; v2.2 9 Nov 2026; v2.1 8 Nov 2026): the PRA page.
 // v2.3, Waqas, 9 Nov 2026: "I want the PRA reports to explain their methods their basis, the math, where we have multiple
 // impact zones, we should have 1 image per cone like in the rotor burst PRA 1 per engine and the cones be different distinct
 // colors, show the calculations, tell the whole story please"; "yeah needs to look clean and legible". Each risk the CAD model
@@ -51,7 +51,7 @@
 // Answers: projectConfig.praAuto = { v:1, answers: { qid: { pick, by, at } }, signed: { riskKey: { by, at } } }.
 (function (root) {
     'use strict';
-    var VERSION = '2.7';   // 2.7 9 Nov 2026: the loss figure drawn with squared connectors in their own lanes (SLCcaReport.flow);   // 2.6 9 Nov 2026: proposed mitigations, path to compliance and conclusion are the engineer's (written or AI drafted and accepted); the tool's part is the summary of results;   // 2.5 9 Nov 2026: the burst bands table names each kind of piece's color in the pictures;   // 2.4 9 Nov 2026: every particular risk its own report, picked from a dropdown, with a register;   // 2.3 9 Nov 2026: each section tells the whole story (method, basis, calculations per danger source, one 3D picture per source); 2.2: 3D model pictures per risk
+    var VERSION = '2.8';   // 2.8 10 Nov 2026: the AI drafts a risk's parts only once its questions are answered (aiReady);   // 2.7 9 Nov 2026: the loss figure drawn with squared connectors in their own lanes (SLCcaReport.flow);   // 2.6 9 Nov 2026: proposed mitigations, path to compliance and conclusion are the engineer's (written or AI drafted and accepted); the tool's part is the summary of results;   // 2.5 9 Nov 2026: the burst bands table names each kind of piece's color in the pictures;   // 2.4 9 Nov 2026: every particular risk its own report, picked from a dropdown, with a register;   // 2.3 9 Nov 2026: each section tells the whole story (method, basis, calculations per danger source, one 3D picture per source); 2.2: 3D model pictures per risk
     var D2R = Math.PI / 180;
     function U() { return root.SLAutopilotUI; }
     function C() { return root.SLCadZonal; }
@@ -1215,6 +1215,8 @@
                 { id: 'conclusion', title: '12. Conclusion', purpose: 'State what this assessment concludes: what the risk can take out, whether continued safe flight and landing is shown to survive it with the protections recorded, and what remains open before the risk can be closed.' }
             ],
             aiType: 'PRA',
+            // 10 Nov 2026: the AI drafts a risk's parts only once every question for that risk is answered (and a rotor's inputs are in)
+            aiReady: function (sid) { var res = compute(); if (!res) return { ready: true, left: [] }; var r = res.risks.find(function (x) { return secOf(x) === String(sid); }); if (!r) return { ready: true, left: [] }; var left = []; if (r.kind === 'ROTOR' && !r.inputsReady) left.push('the rotor inputs (where the rotor is and how fast it turns)'); r.questions.forEach(function (q) { if (!optionOf(q)) left.push(String(q.text || q.title || q.id)); }); return { ready: !left.length, left: left }; },
             tabs: { allLabel: 'All risks (register)', noun: 'risk', nounTitle: 'Particular risk', pickLabel: 'Particular risk', registerTitle: 'Particular risk reports' },
             edit: { addLabel: 'Add a particular risk', fields: editFields, save: saveRisk },
             io: IO, live: live, node: node, onShow: function () { _cache = null; forget(); },

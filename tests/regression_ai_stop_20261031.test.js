@@ -35,7 +35,7 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
     for (const p of ['playwright', '/home/claude/.npm-global/lib/node_modules/playwright']) { try { pw = require(p); break; } catch (_) {} }
     if (!process.env.PLAYWRIGHT_BROWSERS_PATH && fs.existsSync('/opt/pw-browsers')) process.env.PLAYWRIGHT_BROWSERS_PATH = '/opt/pw-browsers';
     const HTML = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8');
-    const iCK = HTML.indexOf('comment_kinds.js?v=1.0'), iAs = HTML.indexOf('assurance_modules.js?v=');
+    const iCK = HTML.indexOf('comment_kinds.js?v=1.'), iAs = HTML.indexOf('assurance_modules.js?v=');
     check('core_modules.js v1.16+, helpers 3.52+ and lane_ai_bar.js v1.6+ are loaded', /core_modules\.js\?v=1\.1[6-9]/.test(HTML) && (m => !!m && (+m[1] > 3 || (+m[1] === 3 && +m[2] >= 52)))(HTML.match(/helpers_modules\.js\?v=(\d+)\.(\d+)/)) && /lane_ai_bar\.js\?v=1\.([6-9]|\d\d)/.test(HTML));
     if (!pw) { console.log('  note  Playwright is not installed: the browser part did not run'); console.log('\n' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0); }
     const demo = require('./lib/demo_projects_all.js').all().find(d => d.key === 'showcase:kestrel');

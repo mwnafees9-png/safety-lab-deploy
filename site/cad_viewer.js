@@ -787,6 +787,10 @@
             self._clearModel();
             var geom = I.normalizeGeometry(geometry);
             self.geom = geom; self.attrs = (geometry && geometry.attrs) || {};
+            // 10 Nov 2026: properties kept in the project for this model (the demo's built-in materials, projectConfig.cadProps) fill
+            // what the STEP file itself does not carry; the file's own values win
+            try { var _pc = (root.SLEnv && root.SLEnv.get && root.SLEnv.get('projectConfig')) || root.projectConfig || null, _pp = _pc && _pc.cadProps && entry && _pc.cadProps[entry.sha256];
+                  if (_pp) { var _a = Object.assign({}, self.attrs); Object.keys(_pp).forEach(function (pid) { _a[pid] = Object.assign({}, _pp[pid], _a[pid] || {}); }); self.attrs = _a; } } catch (_) {}
             // 10 Nov 2026 (ZSA, what each material brings): the STEP materials by part kept in the project, so the report has them
             try { if (root.SLZsaTypeHazards && entry) root.SLZsaTypeHazards.harvestMaterials(entry.sha256 || entry.id, self.attrs); } catch (_) {}
             // one pass, plain loops: 200,000 parts index in a fraction of a second

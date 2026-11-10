@@ -1,3 +1,4 @@
+// 10 Nov 2026: every part of the demo's CAD model has its material and a description built in (HL1_MATERIALS, projectConfig.cadMaterials and cadProps).
 // hl1_showcase.js — loader for the Aeolus HL-1 demo project.
 //
 // Mirrors kestrel_showcase.js: lazy-loads demo_showcase_hl1.js on demand and
@@ -54,10 +55,78 @@
             document.head.appendChild(s);
         });
     }
+    // 10 Nov 2026 (Waqas: "demo's CAD model should come with materials and properties built in"): every part of the
+    // Aeolus HL-1 model gets the material a real part of its kind is made of, and a short description, the first rule that
+    // fits its name and place in the model deciding. Kept in projectConfig.cadMaterials and projectConfig.cadProps by the
+    // model's fingerprint, as a STEP file's own materials are (zsa_type_hazards.js reads them; the CAD properties panel
+    // shows them). Demo data, ours: a customer's model brings its own from its STEP file.
+    var HL1_MATERIALS = [
+        [/^ROUTING\/WIRING/, 'Copper conductors, PTFE and polyimide insulation (harness)', 'Wiring harness'],
+        [/^ROUTING\/BLEED DUCTS/, 'Titanium alloy Ti-6Al-4V duct, nickel alloy Inconel 625 bellows', 'Bleed air duct'],
+        [/^ROUTING\/FUEL LINES/, 'Aluminum alloy 6061-T6 tube', 'Fuel line'],
+        [/^ROUTING\/HYDRAULIC LINES/, 'Titanium alloy Ti-3Al-2.5V tube', 'Hydraulic line'],
+        [/^ROUTING\/OXYGEN LINES/, 'Stainless steel 321 tube', 'Oxygen line'],
+        [/Fan rotor disc/, 'Titanium alloy Ti-6Al-4V', 'Fan rotor disc'],
+        [/High-pressure turbine disc/, 'Nickel alloy Inconel 718', 'High-pressure turbine disc'],
+        [/Nacelle barrel/, 'Carbon fiber composite (IM7/epoxy) with titanium fire seal', 'Nacelle barrel'],
+        [/Pylon box/, 'Titanium alloy Ti-6Al-4V', 'Engine pylon box'],
+        [/Fin\b|Horizontal stabilizer/, 'Carbon fiber composite (IM7/8552)', 'Tail surface'],
+        [/Wing (front|rear) spar|Wing rib|Center wing box/, 'Aluminum alloy 7085-T7651', 'Wing structure'],
+        [/Fuselage frame|Fuselage stringer|Keel beam|pressure bulkhead/, 'Aluminum alloy 2024-T3', 'Fuselage structure'],
+        [/Cargo floor|Flight deck floor/, 'Aluminum-lithium alloy 2099-T83 beams, aramid honeycomb panels', 'Floor'],
+        [/battery|batteries/i, 'Lithium-ion cells (NMC) in a stainless steel case', 'Battery'],
+        [/oxygen bottle/i, 'Carbon fiber composite overwrap on an aluminum liner', 'Oxygen bottle'],
+        [/extinguisher bottle/i, 'Stainless steel 304', 'Fire extinguisher bottle'],
+        [/loop|detector|sensor|probe/i, 'Stainless steel sensing element, ceramic insulation', 'Sensor'],
+        [/^(APU|Auxiliary power unit)$/i, 'Nickel alloy Inconel 718 hot section, aluminum casing', 'Auxiliary power unit'],
+        [/restraint|\broller|guide track|winch|wipers?|quadrant|handles?\b|pedals?\b|sidestick|hinge|fitting/i, 'Steel 4340 and aluminum alloy 7075-T73 fittings', 'Mechanical part'],
+        [/\bmasks?\b/i, 'Silicone rubber face seal, polycarbonate shell', 'Oxygen mask'],
+        [/lavatory/i, 'Aluminum frame, flame-retardant polymer panels', 'Furnishing'],
+        [/\bfans?\b/i, 'Aluminum alloy housing, glass fiber reinforced nylon impeller', 'Fan'],
+        [/fadec|exciter|electronics|interphone|computer|\bunit\b|display|controller|panel|radio|receiver|transponder|recorder|instrument|switch|terminal|module|box/i, 'Aluminum alloy 6061-T6 housing, glass fiber circuit boards', 'Electronic unit'],
+        [/generator/i, 'Aluminum alloy housing, copper windings, steel rotor', 'Generator'],
+        [/pump|motor/i, 'Aluminum alloy A356 housing, steel rotating parts', 'Pump or motor'],
+        [/accumulator|reservoir/i, 'Stainless steel 15-5PH', 'Pressure vessel'],
+        [/precooler|heat exchanger|pack\b/i, 'Nickel alloy core, aluminum casing', 'Heat exchanger'],
+        [/valve/i, 'Stainless steel 17-4PH body', 'Valve'],
+        [/actuator|actuation/i, 'Steel 300M rod, aluminum alloy 7075-T73 body, nitrile and PTFE seals', 'Actuator'],
+        [/oil tank/i, 'Aluminum alloy 2219-T87', 'Oil tank'],
+        [/water tank|waste tank/i, 'Glass fiber composite (filament wound)', 'Water or waste tank'],
+        [/\btank\b/i, 'Aluminum alloy 2024-T3 (integral wing tank structure)', 'Fuel tank'],
+        [/bogie|nose gear|gear leg/i, 'Steel 300M with carbon brakes, rubber tires', 'Landing gear'],
+        [/seat|bunk|galley|furnish/i, 'Aluminum frame, flame-retardant polymer and foam', 'Furnishing'],
+        [/windshield$|windshield,|window/i, 'Stretched acrylic and glass laminate', 'Window'],
+        [/\bdoor\b|hatch|\bexit\b/i, 'Aluminum alloy 7075-T6 with carbon fiber composite skin', 'Door'],
+        [/\blights?\b|\blighting\b|beacon/i, 'Polycarbonate lens, aluminum housing', 'Light'],
+        [/Fan rotor|turbofan|Engine \d|Powerplant/i, 'Titanium alloy Ti-6Al-4V fan case, nickel alloy hot section', 'Engine'],
+        [/./, 'Aluminum alloy 6061-T6 housing, glass fiber circuit boards', 'Electronic unit']
+    ];
+    function hl1Materials(parts) {
+        var mats = {}, props = {};
+        (parts || []).forEach(function (p) {
+            if (!p || !p.pid) return;
+            var where = (p.path || [])[1] === 'ROUTING' ? (p.path || []).slice(1).join('/') : (p.name || '');   // routing by its run, everything else by its own name
+            for (var i = 0; i < HL1_MATERIALS.length; i++) {
+                var r = HL1_MATERIALS[i], hit = r[0].test(where);
+                if (hit) { mats[p.pid] = r[1]; props[p.pid] = { material: r[1], description: r[2] + (p.partNumber ? ', part ' + p.partNumber : '') }; break; }
+            }
+        });
+        return { mats: mats, props: props };
+    }
+    function _putMaterials(pc, sha, parts) {
+        if (!pc || !sha) return false;
+        var m = hl1Materials(parts);
+        if (!pc.cadMaterials || typeof pc.cadMaterials !== 'object') pc.cadMaterials = {};
+        if (!pc.cadProps || typeof pc.cadProps !== 'object') pc.cadProps = {};
+        if (pc.cadMaterials[sha] && Object.keys(pc.cadMaterials[sha]).length) return false;   // a model's own (or earlier) materials are kept
+        pc.cadMaterials[sha] = m.mats; pc.cadProps[sha] = m.props;
+        return true;
+    }
     function _addCad(data) {
         var C = window.SL_HL1_CAD;
         if (!C || !C.projectConfig || !data || !data.projectConfig) return false;
         Object.keys(C.projectConfig).forEach(function (k) { data.projectConfig[k] = JSON.parse(JSON.stringify(C.projectConfig[k])); });
+        try { var m0 = (data.projectConfig.cadModels || [])[0]; if (m0) _putMaterials(data.projectConfig, m0.sha256 || C.sha256, m0.parts); } catch (_) {}
         _register();   // the 3D view finds the geometry for this fingerprint in the bundled STEP
         return true;
     }
@@ -81,6 +150,8 @@
             var C = window.SL_HL1_CAD, E = window.SLCadZonal, pc = _pcNow();
             if (!C || !C.projectConfig || !E || !pc || !_isAeolus()) return false;
             _register();
+            // 10 Nov 2026: an Aeolus project with the bundled model but no materials yet gets the demo's materials
+            try { var mb = (pc.cadModels || []).find(function (x) { return x && x.sha256 === C.sha256; }), mp = (C.projectConfig.cadModels || [])[0]; if (mb && mp && _putMaterials(pc, C.sha256, mp.parts)) { if (typeof window.scheduleAutosave === 'function') window.scheduleAutosave(); } } catch (_) {}
             if (Array.isArray(pc.cadModels) && pc.cadModels.length) return false;   // it has a model (this one or a newer one): left alone
             var run = function () {
                 var D = C.projectConfig, zs = D.zones || [], byId = {}; zs.forEach(function (z) { byId[z.id] = z; });
@@ -162,6 +233,6 @@
     }
 
     window.loadHL1Demo = loadHL1Demo;
-    window.SLHl1Cad = { ensure: ensureCad, isAeolus: _isAeolus };
+    window.SLHl1Cad = { ensure: ensureCad, isAeolus: _isAeolus, materials: hl1Materials };
     window.slHL1Visible = isVisible;
 })();

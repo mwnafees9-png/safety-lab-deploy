@@ -165,12 +165,14 @@
     { id: 'lithium', near: true, label: 'Lithium cells', re: /lithium|li-?ion|lipo|li-?po|lifepo|nmc|\bnca\b/i,
       hazard: 'Can go into thermal runaway: the cell heats itself, vents flammable toxic gas and catches fire, and the next cell follows.', mechanism: 'fire',
       here: 'One failing cell can set the whole battery and the equipment around it on fire.' },
-    { id: 'foam', near: true, label: 'Foam or insulation blanket', re: /foam|insulat|blanket|batting/i,
+    { id: 'foam', near: true, label: 'Foam or insulation blanket', re: /foam|insulation blanket|thermal blanket|acoustic blanket|batting/i,
       hazard: 'Soaks up leaked fluid and holds it; some foams burn readily.', mechanism: 'fluid',
       here: 'Fluid held in it stays next to wiring and hot parts long after a leak.' },
     { id: 'copper', label: 'Copper', re: /\bcopper\b|\bcu\b|brass|bronze/i,
       hazard: 'Brings no hazard of its own here.', mechanism: null, here: '' }
   ];
+  // a part is often several materials ("steel rod, aluminum body, nitrile seals"): every material named counts
+  function materialClasses(name) { var n = _s(name); if (!n.trim()) return []; var out = MATERIALS.filter(function (m) { return m.re.test(n); }); return out.length ? out : [materialClass(n)]; }
   function materialClass(name) { var n = _s(name); if (!n.trim()) return null; for (var i = 0; i < MATERIALS.length; i++) if (MATERIALS[i].re.test(n)) return MATERIALS[i]; return { id: 'other', label: n.trim(), hazard: '', mechanism: null, here: '', unknown: true }; }
   // the material of a unit: the STEP material of its CAD part, else a material set on its system
   function _cadMats(cadId) {
@@ -309,7 +311,7 @@
     if (untyped.length) { P('Not known what kind of equipment these are, so the hazards they bring are not written here: ' + _join(untyped) + '. Set what each one is in this zone\'s Edit to have them included.'); out.gaps.push('untyped'); }
     // materials
     var mats = {};
-    items.forEach(function (x) { if (!x.mat) return; var c = materialClass(x.mat.name); var k = c.id === 'other' ? 'other:' + c.label : c.id; (mats[k] = mats[k] || { c: c, names: [], recorded: [] }).names.push(x.name); mats[k].recorded.push(x.mat.name); });
+    items.forEach(function (x) { if (!x.mat) return; materialClasses(x.mat.name).forEach(function (c) { var k = c.id === 'other' ? 'other:' + c.label : c.id; (mats[k] = mats[k] || { c: c, names: [], recorded: [] }).names.push(x.name); mats[k].recorded.push(x.mat.name); }); });
     var mk = Object.keys(mats).sort(function (a, b) { return _nat(mats[a].c.label, mats[b].c.label); });
     if (mk.length) {
       var mrows = mk.map(function (k) {
@@ -319,7 +321,8 @@
           var others = items.filter(function (x) { return nm.indexOf(x.name) < 0 && susceptible(x.sysId, c.mechanism); });
           reach = c.here + (others.length ? ' Around it in this zone: ' + _join(_uniq(others.map(function (x) { return x.name; })).sort(_nat)) + '.' : '');
         } else reach = c.here || (c.unknown ? 'This material is not in the library, so what it brings is not written here.' : '');
-        return [c.label + (c.unknown ? '' : ' (recorded as ' + _join(_uniq(e.recorded)) + ')'), _join(nm), c.hazard || 'Not in the library.', reach.trim()];
+        var rec = _uniq(e.recorded);
+        return [c.label + (c.unknown || rec.length !== 1 ? '' : ' (recorded as ' + rec[0] + ')'), _join(nm), c.hazard || 'Not in the library.', reach.trim()];
       });
       out.materials = mk.map(function (k) { return mats[k].c.label; });
       out.blocks.push({ type: 'table', id: tid('materials'), title: 'Materials in ' + title, columns: ['Material', 'Equipment made of it', 'The hazard it brings', 'What that means for the equipment around it'], rows: mrows });
@@ -334,7 +337,7 @@
     try { return JSON.stringify([pc.cadMaterials || null, pc.zsaUnitFacts || null, pc.zoneThreats || null, _arr(_g('systemsData')).map(function (s) { return s ? [s.id, s.equipType || '', s.material || ''] : 0; }), (_Z() && _Z().barriers) ? _Z().barriers().map(function (b) { return [b.a, b.b, b.material || '', b.requirementId || '']; }) : 0]); } catch (_) { return ''; }
   }
 
-  var api = { VERSION: VERSION, AROUND: AROUND, MATERIALS: MATERIALS, EXTRA: EXTRA, typeLabel: typeLabel, typeHazards: typeHazards, unitType: unitType, nameKind: nameKind, facts: facts, setFacts: setFacts, kinds: kinds, materialClass: materialClass, unitMaterial: unitMaterial,
+  var api = { VERSION: VERSION, AROUND: AROUND, MATERIALS: MATERIALS, EXTRA: EXTRA, typeLabel: typeLabel, typeHazards: typeHazards, unitType: unitType, nameKind: nameKind, facts: facts, setFacts: setFacts, kinds: kinds, materialClass: materialClass, materialClasses: materialClasses, unitMaterial: unitMaterial,
               harvestMaterials: harvestMaterials, setMaterial: setMaterial, susceptible: susceptible, carryInto: carryInto, consequence: consequence, aircraftText: aircraftText, section: section, memoPart: memoPart };
   try { root.SLZsaTypeHazards = api; } catch (_) {}
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

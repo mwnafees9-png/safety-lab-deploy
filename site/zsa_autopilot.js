@@ -1001,6 +1001,8 @@
                 { id: 'conclusion', title: 'Conclusion', purpose: 'State what the analysis of this zone concludes: what one event in the zone can take out, whether the separation the design relies on holds with the protections recorded, and what remains open before the zone can be closed.' }
             ],
             aiType: 'ZSA',
+            // v1.9: the AI drafts a zone's parts only once every question for that zone is answered
+            aiReady: function (sid) { var res = compute(), z = res && res.byCode[sid]; if (!z) return { ready: true, left: [] }; var left = activeQuestions(z).filter(function (q) { return !optionOf(q); }).map(function (q) { return _clean(q.text); }); return { ready: !left.length, left: left }; },
             tabs: { allLabel: 'All zones (register)', noun: 'zone', nounTitle: 'Zone', pickLabel: 'Zone', registerTitle: 'Zonal safety reports' },
             edit: { addLabel: 'Add a zone', fields: _frameFields, save: _frameSave },
             io: _frameIO(), live: _live, node: _node,

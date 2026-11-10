@@ -85,7 +85,7 @@ function contrast(a, b) { const x = lum(a), y = lum(b); return (Math.max(x, y) +
   const rpm = (CM.match(/function renderPraModels\(\) \{[\s\S]*?\n    \}/) || [''])[0];
   check('S5 the "Dynamic threat models" panel is no longer drawn on the PRA page; praDynamicModel stays exported and gives direct and knock-on systems', rpm && !/innerHTML|appendChild/.test(rpm) && /remove\(\)/.test(rpm) && !/tabId === 'pra'\) setTimeout\(renderPraModels/.test(CM) && /window\.praDynamicModel = praDynamicModel/.test(CM) && /directSystems:/.test(CM) && /knockOn:/.test(CM));
   check('S6 no em dashes in the frame or the PRA module', CR.indexOf('—') < 0 && PA.indexOf('—') < 0);
-  check('S7 the frame documents its tabs at the top (spec.tabs, tabLabel, the per-section question filter, tab() and setTab(), model({ only }))', /tabs\s+optional \(v1\.2\)/.test(CR.slice(0, 12000)) && ['tabLabel', 'filter(question, sectionId)', 'renderQuestions(R, sectionId)', 'setTab(id)', "{ only: sectionId }"].every((k) => CR.slice(0, 12000).indexOf(k) >= 0));
+  check('S7 the frame documents its tabs at the top (spec.tabs, tabLabel, the per-section question filter, tab() and setTab(), model({ only }))', /tabs\s+optional \(v1\.2\)/.test(CR.slice(0, 16000)) && ['tabLabel', 'filter(question, sectionId)', 'renderQuestions(R, sectionId)', 'setTab(id)', "{ only: sectionId }"].every((k) => CR.slice(0, 16000).indexOf(k) >= 0)   /* 10 Nov 2026: the header documents more (aiReady, comments) */);
 
   let pw = null; try { pw = require('playwright'); } catch (_) {}
   if (!pw) { console.log('  SKIP  Playwright is not installed here; the app part needs the real app'); }

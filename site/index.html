@@ -4328,14 +4328,14 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="design_baseline.js?v=1.0" defer></script>
     <!-- Phase 76 — these modules read safety_lab.js constants at definition time (or are only referenced at runtime), so they load AFTER the monolith. None are referenced at the monolith's top level. -->
     <script src="req_taxonomy.js?v=1.1" defer></script>
-    <script src="assurance_modules.js?v=1.45" defer></script>
+    <script src="assurance_modules.js?v=1.46" defer></script>
     <script src="engine_modules.js?v=1.3" defer></script>
     <!-- Backlog #1 — AI confidence-tied-to-fidelity badges (born modular; deterministic verdicts from recorded provenance; decorates worksheets, feeds reports + evidence package). Loads BEFORE reports.js so final outputs pick up the labels. -->
     <script src="ai_badges.js?v=1.4" defer></script>
     <script src="autonomy_metrics.js?v=0.3" defer></script>
     <!-- 31 Oct 2026: fta_print.js (SLFtaPrint: fault trees drawn for reports on landscape sheets, 7.5 pt text, split at transfers) and report_writer.js (SLReportWriter: the one Word and PDF writer: contents, lists of tables and figures, captions, cross references, significant figures). Right before reports.js. -->
     <script src="fta_print.js?v=1.1" defer></script>
-    <script src="report_writer.js?v=1.3" defer></script>
+    <script src="report_writer.js?v=1.4" defer></script>
     <!-- 6 Nov 2026: report_ai.js (SLReportAI): the AI drafts a report section's narrative only; tables, lists, appendices and figures are put back by the engine; no placeholders (docs/REPORT_AI_REBUILD_2026-11-06.md). -->
     <script src="report_ai.js?v=1.0" defer></script>
     <!-- 6 Nov 2026: markov_ai.js (SLMarkovAI): the AI drafts a Markov model's states and transitions; every rate is the sum of the project's own recorded rates it names. -->
@@ -4534,7 +4534,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- Demo-project picker — one chooser routing to every showcase loader. -->
     <!-- shared showcase authoring helpers; MUST load before any showcase builder runs -->
     <script src="demo_kit.js?v=3" defer></script>
-    <script src="hl1_showcase.js?v=9" defer></script>
+    <script src="hl1_showcase.js?v=10" defer></script>
     <script src="halcyon_showcase.js?v=7" defer></script>
     <script src="vayu_showcase.js?v=2" defer></script>
     <script src="demo_picker.js?v=6" defer></script>
@@ -4588,18 +4588,19 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="zsa_engine.js?v=1.1" defer></script>
     <script src="zsa_engine_ui.js?v=1.1" defer></script>
     <!-- 4 Nov 2026: the ZSA and PRA Autopilots (the shared look first) -->
+    <script src="report_comments.js?v=1.0" defer></script>
     <script src="autopilot_ui.js?v=1.5" defer></script>
-    <script src="cca_report.js?v=1.8" defer></script>
+    <script src="cca_report.js?v=1.9" defer></script>
     <script src="zsa_type_hazards.js?v=1.0" defer></script>
     <script src="zsa_autopilot.js?v=1.9" defer></script>
-    <script src="pra_autopilot.js?v=2.7" defer></script>
+    <script src="pra_autopilot.js?v=2.8" defer></script>
     <!-- 6 Nov 2026: the HF Autopilot (SLHfAuto): the human factors work through the design cycle, one plain question at a time, written into the HF tables -->
     <script src="hf_autopilot.js?v=2.1" defer></script>
     <!-- 6 Nov 2026: the Plan Autopilot. After autopilot_ui.js (the shared look), objectives_matrix.js (the objectives) and program_plan.js (the lanes). -->
-    <script src="plan_autopilot.js?v=2.3" defer></script>
+    <script src="plan_autopilot.js?v=2.4" defer></script>
     <!-- 18 Oct 2026: the live state of every generated requirement, written beside the project for Sys Lab (requirement-states.json). -->
     <script src="requirement_states.js?v=1.1" defer></script>
-    <script src="pra_report.js?v=1.5" defer></script>
+    <script src="pra_report.js?v=1.6" defer></script>
     <script src="equipment_hazards.js?v=1.1" defer></script>
     <script src="beta_scoring.js?v=1.0" defer></script>
     <script src="zsa_walkthrough.js?v=1.5" defer></script>
@@ -4697,7 +4698,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="fta_dedupe.js?v=1.0" defer></script>
     <script src="stale_revive.js?v=1.0" defer></script>
     <!-- 31 Oct 2026: comment_kinds.js (SLCommentKinds): review comments on every assessment (fault trees and their nodes, CCMR, MAC, CoFFE, resources, Markov, RBD, ETA, FRACAS, MSG-3, crew credit) and the rows ANEM may change when a comment asks. After assurance_modules.js (Review, Traceability). -->
-    <script src="comment_kinds.js?v=1.0" defer></script>
+    <script src="comment_kinds.js?v=1.1" defer></script>
     <!-- 31 Oct 2026: cma_flow.js (SLCmaFlow): the Common Mode Analysis in four steps (gates and claim, the App M questionnaire, concerns and mitigations, close out), a status that means something, and the DAL reduction given back only when it is mitigated. After cma_walkthrough.js, cma_live.js and critical_gates.js. -->
     <script src="cma_flow.js?v=1.3" defer></script>
     <!-- 31 Oct 2026: rate_sources.js (SLRateSources): every failure rate names its source (supplier guarantee, field data, calculated, library entry, engineering judgment); the sources table, the canvas warning and the SSA table; ANEM only matches library entries. After cma_flow.js. -->
@@ -4706,7 +4707,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="iface_reqs.js?v=1.0" defer></script>
     <!-- 8 Nov 2026: cma_autopilot.js (SLCmaAuto): the CMA Autopilot. Plain questions per independence claim (the gates, the claim, every common mode category, how each concern is closed), answered through SLCmaFlow into the CMA rows, and the CMA report content (one section per claim), inputs and outputs, and inline Edit / Add a CMA. After cma_flow.js and autopilot_ui.js. -->
     <script src="cma_claims.js?v=1.1" defer></script>
-    <script src="cma_autopilot.js?v=1.4" defer></script>
+    <script src="cma_autopilot.js?v=1.5" defer></script>
     <script src="cca_models.js?v=1.05" defer></script>
     <!-- Skills V1 — versioned drafting-instruction registry. Loads EAGERLY (tiny,
          static) and BEFORE ai_loader so the engine finds window.SLABSkills on its

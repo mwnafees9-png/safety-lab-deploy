@@ -1,4 +1,4 @@
-/* report_writer.js v1.2 (6 Nov 2026: the titles of the CoFFE, MAC, MF&MS, independence principle and CCMR tables say what they are). v1.0 (31 Oct 2026): one writer for every report, Word and PDF (customer checklist items 20, 22, 24).
+/* report_writer.js v1.4 (10 Nov 2026: review comments go into Word as margin comments on their paragraph; images and captions centered, in Word and the PDF). v1.2 (6 Nov 2026: the titles of the CoFFE, MAC, MF&MS, independence principle and CCMR tables say what they are). v1.0 (31 Oct 2026): one writer for every report, Word and PDF (customer checklist items 20, 22, 24).
  *
  * The report builders (reports.js: the dialog's section editor and the one-shot Reports.generate) describe a report
  * as a list of blocks; this writer turns the same list into a Word file and a PDF, so both formats always carry the
@@ -192,7 +192,7 @@
             var body = rows.map(function (r) { return new D.TableRow({ children: headers.map(function (h) { return new D.TableCell({ borders: borders, children: [new D.Paragraph({ children: [new D.TextRun(fmtSig(S(r[h] == null ? '' : r[h]), sig))] })] }); }) }); });
             return new D.Table({ width: { size: TW, type: D.WidthType.DXA }, rows: [head].concat(body) });
         };
-        var caption = function (anchor, text) { return new D.Paragraph({ spacing: { before: 160, after: 80 }, keepNext: true, children: [new D.Bookmark({ id: anchor, children: [new D.TextRun({ text: text, bold: true, size: 20 })] })] }); };
+        var caption = function (anchor, text) { return new D.Paragraph({ alignment: D.AlignmentType.CENTER, spacing: { before: 160, after: 80 }, keepNext: true, children: [new D.Bookmark({ id: anchor, children: [new D.TextRun({ text: text, bold: true, size: 20 })] })] }); };
 
         // body sections: portrait text, landscape sheets for the trees
         var sections = [], cur = [];
@@ -206,7 +206,14 @@
                 if (b.pill) kids.push(new D.TextRun({ text: b.pill.text, size: 16, color: b.pill.color }));
                 cur.push(new D.Paragraph({ heading: hl, pageBreakBefore: b.k === 'appendix', spacing: { before: lvl === 1 ? 320 : 200, after: 120 }, children: kids }));
             } else if (b.k === 'p') {
-                S(b.text).split(/\r?\n/).forEach(function (ln) { cur.push(ln.trim() ? new D.Paragraph({ spacing: { after: 100, line: 300 }, children: runs(ln) }) : new D.Paragraph({ children: [new D.TextRun('')] })); });
+                // v1.4 (10 Nov 2026): a paragraph with review comments carries them as Word margin comments (report_comments.js)
+                var cids = Array.isArray(b.commentIds) && D.CommentRangeStart ? b.commentIds : null;
+                S(b.text).split(/\r?\n/).forEach(function (ln, li) {
+                    if (!ln.trim()) { cur.push(new D.Paragraph({ children: [new D.TextRun('')] })); return; }
+                    var kids = runs(ln);
+                    if (cids && li === 0) kids = cids.map(function (id) { return new D.CommentRangeStart(id); }).concat(kids, cids.map(function (id) { return new D.CommentRangeEnd(id); }), cids.map(function (id) { return new D.TextRun({ children: [new D.CommentReference(id)] }); }));
+                    cur.push(new D.Paragraph({ spacing: { after: 100, line: 300 }, children: kids }));
+                });
             } else if (b.k === 'blank') {
                 cur.push(new D.Paragraph({ children: [new D.TextRun('')] }));
             } else if (b.k === 'table') {
@@ -216,7 +223,7 @@
                 cur.push(new D.Paragraph({ children: [new D.TextRun('')] }));
             } else if (b.k === 'img') {
                 var iw = Math.min(624, b.w || 624), ih = Math.round((b.h || 400) * iw / (b.w || 624));
-                if (b.dataUrl) cur.push(new D.Paragraph({ keepNext: true, children: [new D.ImageRun({ data: S(b.dataUrl).replace(/^data:image\/png;base64,/, ''), transformation: { width: iw, height: ih } })] }));
+                if (b.dataUrl) cur.push(new D.Paragraph({ alignment: D.AlignmentType.CENTER, keepNext: true, children: [new D.ImageRun({ data: S(b.dataUrl).replace(/^data:image\/png;base64,/, ''), transformation: { width: iw, height: ih } })] }));
                 else cur.push(new D.Paragraph({ children: [new D.TextRun({ text: '(This figure could not be drawn.)', italics: true, color: 'B42318' })] }));
                 cur.push(caption(b.anchor, b.fullCaption));
             } else if (b.k === 'sheets') {
@@ -224,7 +231,7 @@
                     var s = b.sheets[si];
                     flush(false);
                     var land = [caption(s.anchor, s.fullCaption)];
-                    if (s.dataUrl) land.push(new D.Paragraph({ children: [new D.ImageRun({ data: S(s.dataUrl).replace(/^data:image\/png;base64,/, ''), transformation: { width: Math.round(s.w * 96 / 72), height: Math.round(s.h * 96 / 72) } })] }));
+                    if (s.dataUrl) land.push(new D.Paragraph({ alignment: D.AlignmentType.CENTER, children: [new D.ImageRun({ data: S(s.dataUrl).replace(/^data:image\/png;base64,/, ''), transformation: { width: Math.round(s.w * 96 / 72), height: Math.round(s.h * 96 / 72) } })] }));
                     else land.push(new D.Paragraph({ children: [new D.TextRun({ text: '(This tree could not be drawn.)', italics: true, color: 'B42318' })] }));
                     sections.push({ landscape: true, children: land });
                 }
@@ -244,7 +251,8 @@
             return { properties: s.landscape ? landscape : portrait, headers: header(), footers: footer(), children: s.children };
         }));
         var doc = new D.Document({ creator: 'Safety Lab Aero, Inc.', title: S(model.title), description: S(model.title) + (model.projectName ? ' for ' + model.projectName : ''),
-            features: { updateFields: true }, styles: { default: { document: { run: { font: 'Arial', size: 22 } } } }, sections: docSections });
+            features: { updateFields: true }, styles: { default: { document: { run: { font: 'Arial', size: 22 } } } }, sections: docSections,
+            comments: { children: (Array.isArray(model.comments) && D.CommentRangeStart ? model.comments : []).map(function (c) { return { id: c.id, author: S(c.author) || 'Reviewer', initials: S(c.author).split(/\s+/).map(function (w) { return w.charAt(0); }).join('').slice(0, 3).toUpperCase() || 'R', date: c.date instanceof Date ? c.date : new Date(), children: (c.lines || [S(c.text)]).map(function (l) { return new D.Paragraph({ children: [new D.TextRun(S(l))] }); }) }; }) } });
         return D.Packer.toBlob ? D.Packer.toBlob(doc) : D.Packer.toBuffer(doc);
     }
 
@@ -347,14 +355,14 @@
             else if (b.k === 'table') {
                 y += 10; need(40); doc.setFontSize(9.5); doc.setFont('helvetica', 'bold');
                 at[b.anchor] = { page: cur(), y: y - 10 };
-                wrap(b.caption, W - 2 * M, 9.5).forEach(function (ln) { doc.text(ln, M, y); y += 12; });
+                wrap(b.caption, W - 2 * M, 9.5).forEach(function (ln) { doc.text(ln, W / 2, y, { align: 'center' }); y += 12; });
                 y += 2; doc.setFont('helvetica', 'normal');
                 drawTable(b.rows || []);
             } else if (b.k === 'img') {
                 var pw0 = W - 2 * M, ph0 = (b.h || 300) * pw0 / (b.w || pw0);
                 need(ph0 + 24); at[b.anchor] = { page: cur(), y: y };
                 if (b.dataUrl) doc.addImage(b.dataUrl, 'PNG', M, y, pw0, ph0); y += ph0 + 12;
-                doc.setFontSize(9.5); doc.setFont('helvetica', 'bold'); wrap(b.fullCaption, W - 2 * M, 9.5).forEach(function (ln) { doc.text(ln, M, y); y += 12; }); doc.setFont('helvetica', 'normal'); y += 4;
+                doc.setFontSize(9.5); doc.setFont('helvetica', 'bold'); wrap(b.fullCaption, W - 2 * M, 9.5).forEach(function (ln) { doc.text(ln, W / 2, y, { align: 'center' }); y += 12; }); doc.setFont('helvetica', 'normal'); y += 4;
             } else if (b.k === 'sheets') {
                 (b.sheets || []).forEach(function (s) {
                     doc.addPage('letter', 'landscape');

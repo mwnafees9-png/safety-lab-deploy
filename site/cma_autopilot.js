@@ -1,4 +1,4 @@
-// cma_autopilot.js (SLCmaAuto v1.4, 10 Nov 2026; v1.3 9 Nov 2026; v1.2 v1.1 8 Nov 2026): the CMA Autopilot. The Common Mode Analysis written by answering plain
+// cma_autopilot.js (SLCmaAuto v1.5, 10 Nov 2026: the AI drafts only once the questions are answered; v1.4 10 Nov 2026; v1.3 9 Nov 2026; v1.2 v1.1 8 Nov 2026): the CMA Autopilot. The Common Mode Analysis written by answering plain
 // questions, one independence claim at a time, with the CMA report built from the answers.
 //
 // Waqas, 8 Nov 2026: "PRA build and ZSA similar to the planing autopilot, ability to see the reports etc. can we do
@@ -53,7 +53,7 @@
 //     becomes a concern of the CMA, closed the way any concern is (a requirement, evidence or a written reason).
 (function (root) {
     'use strict';
-    var VERSION = '1.4';   // 1.3 9 Nov 2026: proposed mitigations, path to compliance and conclusion once per report, written or AI drafted and accepted;   // 1.2 9 Nov 2026: one report per system and one at the aircraft level, picked from a dropdown
+    var VERSION = '1.5';   // 1.5 10 Nov 2026: the AI drafts a report's parts only once every claim's questions are answered (aiReady);   // 1.3 9 Nov 2026: proposed mitigations, path to compliance and conclusion once per report, written or AI drafted and accepted;   // 1.2 9 Nov 2026: one report per system and one at the aircraft level, picked from a dropdown
 
     // ==== THE SWITCH ================================================================================================
     // Flip to true in phase 2, once the CMA report (cca_report.js) is on the page: the CMA table, its hidden entry form
@@ -1102,6 +1102,8 @@
                 { id: 'conclusion', title: 'Conclusion', purpose: 'State what this common mode analysis concludes: which independence claims hold with the evidence recorded, which do not yet, and what that means for the development assurance levels and fault tree credit that rest on them.' }
             ],
             authoredAt: 'report', aiType: 'CMA',
+            // 10 Nov 2026: the AI drafts a report's parts only once every question of every claim in that report is answered
+            aiReady: function (sid) { var reps = frameReports(), rp = reps.find(function (x) { return x.id === sid || x.sections.indexOf(sid) >= 0; }); if (!rp) return { ready: true, left: [] }; var left = []; claims().forEach(function (r) { if (rp.sections.indexOf(anchorOf(r)) < 0) return; questionsFor(r).forEach(function (q) { if (!q.complete) left.push(T((r.cmaId ? r.cmaId + ': ' : '') + q.text)); }); }); if (!rp.sections.length) left.push('there is no independence claim in this report yet'); return { ready: !left.length, left: left }; },
             reports: frameReports,
             tabs: { allLabel: false, noun: 'analysis', pickLabel: 'Common mode analysis for', groupHeading: function (r) { return r.id === 'aircraft' ? 'The independence claims at the aircraft level' : 'The independence claims in the ' + r.label; } },
             edit: { addLabel: 'Add a CMA', fields: frameFields, save: frameSave },

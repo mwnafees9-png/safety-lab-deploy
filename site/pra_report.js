@@ -1,3 +1,4 @@
+// 10 Nov 2026 (Waqas: "make sure images and captions in all reports are centered"): figure captions centered.
 /* ============================================================================
  * pra_report.js (SLPraReport), 14 Oct 2026: the report page and its offline 3D viewer, shared by
  * every particular risk (rotor burst, tire burst, ...). A risk hands over its table HTML, the hit
@@ -123,7 +124,7 @@
         }
         // four fixed views for print / PDF (shown only by the print stylesheet)
         var grid = document.getElementById('v3d-print');
-        if (grid) { [['side', 'Side'], ['top', 'Top'], ['front', 'Front'], ['axis', 'Along the axis']].forEach(function (q) { view(q[0]); var im = document.createElement('figure'); im.style.margin = '0'; im.innerHTML = '<img alt="' + q[1] + ' view" style="width:100%;border:1px solid #ccc" src="' + cv.toDataURL('image/png') + '"><figcaption style="font-size:11px">' + q[1] + ' view</figcaption>'; grid.appendChild(im); }); }
+        if (grid) { [['side', 'Side'], ['top', 'Top'], ['front', 'Front'], ['axis', 'Along the axis']].forEach(function (q) { view(q[0]); var im = document.createElement('figure'); im.style.margin = '0'; im.innerHTML = '<img alt="' + q[1] + ' view" style="width:100%;border:1px solid #ccc" src="' + cv.toDataURL('image/png') + '"><figcaption style="font-size:11px;text-align:center">' + q[1] + ' view</figcaption>'; grid.appendChild(im); }); }
         view('threeq');
     }
     // page({title, heading, intro, typesTitle, png, tableHtml, parts, volumes, axis, triangles}): the HTML

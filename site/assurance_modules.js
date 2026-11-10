@@ -1,3 +1,4 @@
+// 10 Nov 2026: a review comment keeps target.anchor (where the words it is on are in a report, report_comments.js).
 // 13 Oct 2026 (fix G): the SEQ gate is an independence gate (every input must fail) for the structure requirements. See tests/regression_fta_handbuild_20261013b.test.js
 // 13 Oct 2026 (math fixes 7 and 2): DALgebra rationale explains pending (claimed, not yet CMA-substantiated) reductions with the would-be DAL, the App P row-hold and row-floor rules and a Cert Lab compliance basis; the gate generator derives physical AND functional independence for every AND-family gate (k>=2 VOTING and SPARE included) and a no-single-failure requirement for every OR-family gate on a single-failure path; see tests/regression_dal_row_20261013.test.js and tests/regression_alloc_reqs_20261013.test.js
 // assurance_modules.js — Review / AutoReq / Traceability, extracted verbatim from
@@ -43,7 +44,9 @@ const Review = (function() {
             target: {
                 kind: target.kind,
                 id: target.id,
-                systemId: target.systemId || null
+                systemId: target.systemId || null,
+                // 10 Nov 2026 (report_comments.js): a comment on words in a report keeps where they are
+                anchor: target.anchor || undefined
             },
             authorName: author,
             timestamp: Date.now(),

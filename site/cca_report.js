@@ -1,4 +1,4 @@
-// cca_report.js (SLCcaReport v1.8, 10 Nov 2026; v1.7 9 Nov 2026; v1.6 9 Nov 2026; v1.5 9 Nov 2026; v1.4 9 Nov 2026; v1.3 9 Nov 2026; v1.2 8 Nov 2026): the shared report frame of the PRA, ZSA and CMA Autopilots.
+// cca_report.js (SLCcaReport v1.9, 10 Nov 2026: the AI drafts only once the questions are answered; live comments in the margin; images and captions centered; v1.8 10 Nov 2026; v1.7 9 Nov 2026; v1.6 9 Nov 2026; v1.5 9 Nov 2026; v1.4 9 Nov 2026; v1.3 9 Nov 2026; v1.2 8 Nov 2026): the shared report frame of the PRA, ZSA and CMA Autopilots.
 // v1.8 (10 Nov 2026): Waqas: "we also need to fix how we are not using the full width of the page for the text", for all the
 // reports. Paragraphs, leads, lists, captions and the written parts now run the full width of the document column, the
 // same width as the tables (the 78ch and 980px caps are gone). A section may carry { k:'html', html } (preview only, never in
@@ -100,6 +100,10 @@
 //   authored      optional (v1.6): [{ id, title, purpose }]: parts every section ends with, written by the engineer or drafted
 //                 by the AI and accepted by a person (never deterministic). Empty reads "Not written yet."
 //   aiType        optional (v1.6): the report type the AI drafting guide uses (default spec.code)
+//   aiReady       optional (v1.9): function (sid) -> { ready, left: [question texts] }: the AI drafts a section's parts only
+//                 once ready (every question for it answered); the part says what is left. Without it, always ready.
+//   (v1.9) every preview is decorated with live comments in its margin (report_comments.js); written parts' paragraphs carry
+//                 data-cc-authp so a comment on them can be fixed with the AI.
 //   shotsFocus()  optional (v1.3, pages without tabs): the section whose pictures the left pane asks about now.
 //   live(nodeId)  optional: where the program stands for a figure box (shown in the panel only, on request)
 //   node(nodeId)  optional: the panel for the module's own figure boxes: { title, does, inputs: [what], outputs:
@@ -114,7 +118,7 @@
 // text (live counts appear only in the panel when asked), plain words, no em dashes.
 (function (root) {
     'use strict';
-    var VERSION = '1.8';   // 1.8 10 Nov 2026: text the full width of the document column; { k:'html' } preview-only blocks;   // 1.7 9 Nov 2026: column diagrams with squared connectors in their own lanes, never through a box, lit on hover (flow);   // 1.6 9 Nov 2026: the parts the engineer writes (spec.authored): write it or draft it with the AI, accepted by a person;   // 1.5 9 Nov 2026: every subject its own report, picked from one dropdown, with a register (spec.reports)   // 1.4 9 Nov 2026: pictures placed in the story (shotslot), per-source pictures ticked by default; 1.3: 3D model pictures (spec.shots)
+    var VERSION = '1.9';   // 1.9 10 Nov 2026: the AI drafts a part only once its questions are answered (spec.aiReady);   // 1.8 10 Nov 2026: text the full width of the document column; { k:'html' } preview-only blocks;   // 1.7 9 Nov 2026: column diagrams with squared connectors in their own lanes, never through a box, lit on hover (flow);   // 1.6 9 Nov 2026: the parts the engineer writes (spec.authored): write it or draft it with the AI, accepted by a person;   // 1.5 9 Nov 2026: every subject its own report, picked from one dropdown, with a register (spec.reports)   // 1.4 9 Nov 2026: pictures placed in the story (shotslot), per-source pictures ticked by default; 1.3: 3D model pictures (spec.shots)
     function E(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
     function J(v) { return E(JSON.stringify(v)); }
     function g(name) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(name); if (v !== undefined) return v; } } catch (_) {} try { return root[name]; } catch (_) { return undefined; } }
@@ -322,7 +326,7 @@
             authDefs().forEach(function (a) {
                 var r = authOf(sid, a.id), txt = r && r.text ? String(r.text).trim() : '';
                 out.push({ k: 'part', text: a.title, auth: a.id });
-                if (txt) txt.split(/\n\s*\n/).forEach(function (para) { if (para.trim()) out.push({ k: 'p', text: para.trim().replace(/\s*\n\s*/g, ' ') }); });
+                if (txt) txt.split(/\n\s*\n/).forEach(function (para) { if (para.trim()) out.push({ k: 'p', text: para.trim().replace(/\s*\n\s*/g, ' '), authp: key + '|' + sid + '|' + a.id }); });
                 else out.push({ k: 'p', text: 'Not written yet.' });
                 if (!forExport) out.push({ k: 'auth', aid: a.id });
             });
@@ -342,8 +346,17 @@
             authDefs().forEach(function (a) { var r = authOf(sid, a.id); if (r && r.text) lines.push('', '## ' + a.title + ' (written by the engineer)', String(r.text)); });
             return lines.join('\n').slice(0, 60000);
         }
+        // v1.9 (10 Nov 2026, Waqas: "AI doesnt draft till people have answered the questions"): the AI drafts a part only
+        // once every question for that section (or report) is answered; spec.aiReady(sid) says which are left
+        function aiReady(sid) {
+            if (typeof spec.aiReady !== 'function') return { ready: true, left: [] };
+            var r = safe(function () { return spec.aiReady(sid); }, null) || { ready: true, left: [] };
+            return { ready: !!r.ready, left: Array.isArray(r.left) ? r.left : [] };
+        }
         async function authAi(sid, aid) {
             var a = authDefs().filter(function (x) { return x.id === aid; })[0]; if (!a) throw fail('No such part.');
+            var gate = aiReady(sid);
+            if (!gate.ready) throw fail(('Answer the questions for this part first, then the AI can draft it. Still to answer: ' + gate.left.slice(0, 6).join('; ') + (gate.left.length > 6 ? '; and the rest in the list on the left' : '') + '.').replace(/\?\.$/, '?'));
             var AI = root.SafetyLabAI, RA = root.SLReportAI;
             if (!AI || typeof AI.complete !== 'function' || !RA) throw fail('The AI is not set up in this project. Write this part yourself, or set the AI up in Settings.');
             var heading = String(a.title).replace(/^\d+(\.\d+)*\.?\s*/, '');
@@ -372,7 +385,10 @@
                     + '<div class="ccr-authbar">' + btn('authaccept', 'Accept') + btn('authacceptedit', 'Edit, then accept') + btn('authdiscard', 'Discard') + '</div></div>';
             } else {
                 h += '<div class="ccr-authbar">' + (busy ? '<button type="button" class="slap-btn slab-ai-stop" data-cc-auth="authstop" onclick="try{window.slabAiStop&&window.slabAiStop()}catch(_){}">&#9632; Stop</button><span class="ccr-authwait">Drafting with the AI...</span>'
-                    : btn('authedit', r.text ? 'Edit' : 'Write it myself') + btn('authai', r.text ? 'Redraft with AI' : 'Draft with AI')) + '</div>';
+                    : btn('authedit', r.text ? 'Edit' : 'Write it myself') + (aiReady(sid).ready ? btn('authai', r.text ? 'Redraft with AI' : 'Draft with AI') : '<button type="button" class="slap-btn" disabled data-cc-auth="authai-wait" title="Answer the questions first">' + (r.text ? 'Redraft with AI' : 'Draft with AI') + '</button>')) + '</div>';
+                var g0 = aiReady(sid);
+                // said once per section, on its first part (the parts below share the same questions)
+                if (!g0.ready && (authDefs()[0] || {}).id === aid) h += '<div class="ccr-authhint" data-cc-aiwait="' + E(k) + '">' + E(('The AI drafts these parts once the questions for this ' + (spec.tabs && spec.tabs.noun ? spec.tabs.noun : 'part') + ' are answered. Still to answer: ' + g0.left.slice(0, 4).join('; ') + (g0.left.length > 4 ? '; and the rest in the list on the left' : '') + '.').replace(/\?\.$/, '?')) + '</div>';
                 if (!r.text && a.purpose) h += '<div class="ccr-authhint">' + E(a.purpose) + '</div>';
             }
             return h + '</div>';
@@ -584,7 +600,7 @@
                     return;
                 }
                 if (b.k === 'part') { out += '<h4 class="ccr-part' + (b.level === 2 ? ' l2' : '') + '">' + E(b.text) + '</h4>'; return; }
-                if (b.k === 'p') { out += '<p' + (b.q ? ' data-ccq="' + E(b.q) + '"' : '') + (/^Not decided yet|^To be decided/.test(b.text) ? ' class="ccr-tbd"' : '') + '>' + E(b.text).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>') + '</p>'; return; }
+                if (b.k === 'p') { out += '<p' + (b.q ? ' data-ccq="' + E(b.q) + '"' : '') + (b.authp ? ' data-cc-authp="' + E(b.authp) + '"' : '') + (/^Not decided yet|^To be decided/.test(b.text) ? ' class="ccr-tbd"' : '') + '>' + E(b.text).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>') + '</p>'; return; }
                 if (b.k === 'html') { if (forPage) out += '<div class="ccr-html" data-cc-html="1">' + (b.html || '') + '</div>'; return; }
                 if (b.k === 'act') { if (forPage) out += '<div class="ccr-act"><button type="button" class="slap-btn" data-cc-act="1" onclick="' + E(b.onclick) + '">' + E(b.label) + '</button></div>'; return; }
                 if (b.k === 'fig') { out += '<div class="ccr-fig" data-cc-a="f' + b.n + '">' + b.svg + '</div><div class="ccr-cap">' + E(b.caption) + '</div>'; return; }
@@ -631,6 +647,7 @@
             if (rid) { var rsec = (repOf(rid) || { sections: [] }).sections; for (var q = 0; q < rsec.length; q++) await shotsReady(rsec[q]); }
             else await shotsReady(o && o.only ? String(o.only) : null);
             var m = model(o), P0 = root.SLFtaPrint;
+            if (root.SLReportComments) { try { root.SLReportComments.annotate(m, key); } catch (_) {} }   // v1.9: open comments as margin comments
             for (var i = 0; i < m.blocks.length; i++) { var b = m.blocks[i]; if (b.k === 'img' && !b.dataUrl) { try { b.dataUrl = P0 && P0.png ? await P0.png({ svg: b.svg, w: b.w, h: b.h }, 2) : null; } catch (_) { b.dataUrl = null; } } }
             var blob = await root.SLReportWriter.docx(m, lib);
             try { var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = withRep(rid, function () { return (docCtl().no + ' Rev ' + rev() + ' ' + spec.title + (m.only ? ' ' + m.only : '')).replace(/[^\w-]+/g, '_') + '.docx'; }); document.body.appendChild(a); a.click(); a.remove(); } catch (_) {}
@@ -641,7 +658,7 @@
         function print(o) {
             var C0 = C; C = LIGHT; var html, rid = o && o.report ? String(o.report) : null;
             try { html = rid ? withRep(rid, function () { return fullHtml({ forExport: true, report: rid }); }) : fullHtml({ forExport: true }); } finally { C = C0; }
-            var css = '<style>.ccr-shotfig img{max-width:100%;height:auto;display:block}.ccr-dt{border-collapse:collapse;width:100%;font-size:11px}.ccr-dt th,.ccr-dt td{border:1px solid #999;padding:3px 5px;text-align:left;vertical-align:top}.ccr-cap{font-weight:700;font-size:11px;margin:10px 0 4px}.ccr-cover,.ccr-front{page-break-after:always}.ccr-ct{font-size:26px;font-weight:700;margin-top:80px}.ccr-cs{font-size:15px;margin:6px 0 30px}.ccr-fig svg{max-width:100%;height:auto;background:#fff}.ccr-tl.l2{margin-left:16px}.ccr-part{font-size:12.5px;margin:10px 0 4px}</style>';
+            var css = '<style>.ccr-shotfig img{max-width:100%;height:auto;display:block}.ccr-dt{border-collapse:collapse;width:100%;font-size:11px}.ccr-dt th,.ccr-dt td{border:1px solid #999;padding:3px 5px;text-align:left;vertical-align:top}.ccr-cap{font-weight:700;font-size:11px;margin:10px 0 4px;text-align:center}.ccr-cover,.ccr-front{page-break-after:always}.ccr-ct{font-size:26px;font-weight:700;margin-top:80px}.ccr-cs{font-size:15px;margin:6px 0 30px}.ccr-fig svg{max-width:100%;height:auto;background:#fff}.ccr-tl.l2{margin-left:16px}.ccr-part{font-size:12.5px;margin:10px 0 4px}</style>';
             if (U()) return U().openReport(spec.title + ' · ' + projName(), css + html);
             return false;
         }
@@ -672,12 +689,12 @@
                 + '.ccr-authbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px}.ccr-authhint,.ccr-authwhy,.ccr-authflag{font-size:12.5px;margin-top:6px}.ccr-authflag{color:var(--cp-tbd,#9A3412)}.ccr-authh{font-weight:700;font-size:12.5px;margin-bottom:4px}.ccr-authdt{font-size:13px;line-height:1.5}.ccr-authwait{font-size:12.5px}'
                 + '.ccr-legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-weight:400;margin-top:4px}.ccr-legend span{white-space:nowrap}'
                 + '.ccr-swatch{display:inline-block;width:11px;height:11px;border-radius:3px;margin:0 6px -1px 0;border:1px solid rgba(0,0,0,.25);vertical-align:baseline}'
-                + '.ccr .ccr-prev .ccr-cap{font-weight:700;font-size:11.5px;margin:10px 0 4px}.ccr-cover{border-bottom:2px solid var(--cp-rule);padding-bottom:14px;margin-bottom:14px}.ccr-ct{font-size:22px;font-weight:700;margin-top:6px}.ccr-cs{font-size:14px;margin:2px 0 10px}'
+                + '.ccr .ccr-prev .ccr-cap{font-weight:700;font-size:11.5px;margin:10px 0 4px;text-align:center}.ccr-cover{border-bottom:2px solid var(--cp-rule);padding-bottom:14px;margin-bottom:14px}.ccr-ct{font-size:22px;font-weight:700;margin-top:6px}.ccr-cs{font-size:14px;margin:2px 0 10px}'
                 + '.ccr-front{border-bottom:2px solid var(--cp-rule);padding-bottom:12px;margin-bottom:12px}.ccr-tl{font-size:12px;margin:1px 0}.ccr-tl.l2{margin-left:16px}.ccr .ccr-prev a{color:var(--cp-link);text-decoration:none}'
                 + '.ccr .ccr-prev .ccr-dt{width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:10px}.ccr .ccr-prev .ccr-dt tr,.ccr .ccr-prev .ccr-dt td{background:var(--cp-bg);color:var(--cp-ink)}'
                 + '.ccr .ccr-prev .ccr-dt thead th,.ccr .ccr-prev .ccr-dt th,.ccr .ccr-prev .ccr-dt td{border:1px solid var(--cp-line) !important;padding:4px 6px;text-align:left;vertical-align:top;font-family:inherit !important;text-transform:none !important;letter-spacing:normal !important;font-size:11.5px !important}'
                 + '.ccr .ccr-prev .ccr-dt thead th,.ccr .ccr-prev .ccr-dt th{background:var(--cp-th) !important;color:var(--cp-ink) !important;font-weight:700}'
-                + '.ccr-fig{margin:10px 0 2px;overflow-x:auto}.ccr-fig svg{max-width:100%;height:auto;border:1px solid var(--cp-hair,#e3e5e8);border-radius:8px}.ccr-fig .ccr-node:hover rect{stroke-width:2.4}'
+                + '.ccr-fig{margin:10px 0 2px;overflow-x:auto;text-align:center}.ccr-fig>svg,.ccr-fig>img{display:inline-block;margin:0 auto}.ccr-fig svg{max-width:100%;height:auto;border:1px solid var(--cp-hair,#e3e5e8);border-radius:8px}.ccr-fig .ccr-node:hover rect{stroke-width:2.4}'
                 + '.ccr-flash{animation:ccrFlash 2.2s ease-out}@keyframes ccrFlash{0%,35%{background:var(--cp-flash,#FFF1A8);box-shadow:0 0 0 4px var(--cp-flash,#FFF1A8)}100%{background:transparent;box-shadow:none}}'
                 + '.ccr-edit{font:inherit;font-size:11.5px;font-weight:600;padding:2px 10px;border-radius:7px;border:1px solid var(--cp-line);background:transparent;color:var(--cp-link) !important;cursor:pointer}'
                 + '.ccr-act{margin:4px 0 8px}.ccr-form{border:1px solid var(--cp-line);border-left:4px solid #1A6EF2;border-radius:9px;padding:10px 12px;margin:6px 0 12px}.ccr-form label{display:block;font-size:12px;font-weight:600;margin:6px 0 2px}'
@@ -901,6 +918,8 @@
                 + bar + '</div>'
                 + nodePanel() + '<div class="ccr-prev" data-ccdoc="1">' + (ui0.adding ? editForm(null) : '') + html + '</div></div></div></div>';
             var pv = h.querySelector('[data-ccdoc]'); if (pv) { pv.scrollTop = scroll; wire(pv); }
+            // v1.9: live comments in the margin of the preview (report_comments.js)
+            if (pv && root.SLReportComments) { try { root.SLReportComments.decorate(pv); } catch (e) { try { console.warn('[report comments]', e); } catch (_) {} } }
             var tb = h.querySelector('[data-cctabs]'); if (tb) wireTabs(tb);
             if (ui0.flash) { var k = ui0.flash; ui0.flash = null; flash(k, { stay: true }); }
             return true;

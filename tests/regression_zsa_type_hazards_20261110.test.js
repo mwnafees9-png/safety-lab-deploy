@@ -17,9 +17,13 @@
  *   7  ...it carries only into the zones whose space touches it (Z-PYL1), never into every zone of the aircraft
  *   8  the zone's Edit has what each unit is and what it is made of; saving writes them to their own store, not the row,
  *      and the report then has the materials table (magnesium, titanium) and the newly typed unit
+ *   9  the demo (Waqas: "demo's CAD model should come with materials and properties built in"): every part of the Aeolus HL-1
+ *      model has a material and a description from the start, and a zone's materials table fills with nothing typed; a
+ *      part of several materials counts each one
  * MUTATION PROOFS (SL_ZTH_MUTATE): sysfirst (the system's tag decides before the unit's name), allzones (a fire carries
  *   into every top zone), nofacts (what the engineer set is ignored), noaircraft (the aircraft column is left empty),
- *   nomaterials (no materials table), rowleak (the unit fields are written into the zone row). Each must turn this red.
+ *   nomaterials (no materials table), rowleak (the unit fields are written into the zone row), nodemomats (the demo model
+ *   comes without its materials), firstonly (a part of several materials counts only one). Each must turn this red.
  * Run: node tests/regression_zsa_type_hazards_20261110.test.js
  */
 'use strict';
@@ -36,6 +40,8 @@ function mutate(file, body) {
     if (MUT === 'nofacts' && file === 'zsa_type_hazards.js') rep("function facts(pid) { var f = _pc().zsaUnitFacts;", "function facts(pid) { return null; var f = _pc().zsaUnitFacts;");
     if (MUT === 'noaircraft' && file === 'zsa_type_hazards.js') rep("rows.push([h.name, STATE_WORD[h.state] || '', around.trim(), aircraftText(sysIds, into)]);", "rows.push([h.name, STATE_WORD[h.state] || '', around.trim(), '']);");
     if (MUT === 'nomaterials' && file === 'zsa_type_hazards.js') rep("    if (mk.length) {\n      var mrows", "    if (false) {\n      var mrows");
+    if (MUT === 'nodemomats' && file === 'hl1_showcase.js') rep("pc.cadMaterials[sha] = m.mats; pc.cadProps[sha] = m.props;", "");
+    if (MUT === 'firstonly' && file === 'zsa_type_hazards.js') rep("return out.length ? out : [materialClass(n)]; }", "return out.length ? out.slice(0, 1) : [materialClass(n)]; }");
     if (MUT === 'rowleak' && file === 'zsa_autopilot.js') rep("            if (/^unit\\.(kind|material)\\./.test(k)) return;\n", "");
     return body;
 }
@@ -90,6 +96,7 @@ const tick = ms => new Promise(r => setTimeout(r, ms));
         await tick(1500);
         const S = () => pg.evaluate(() => { SLZsaAuto.reset && SLZsaAuto.reset(); const s = SLZsaAuto.reportSections().find(x => x.code === 'Z-NAC1'); return s ? s.blocks : null; });
         const B = await S();
+        const D9 = await pg.evaluate(() => { const res = SLZsaAuto.compute(), m = (projectConfig.cadModels || [])[0], mats = (projectConfig.cadMaterials || {})[m && m.sha256] || {}, props = (projectConfig.cadProps || {})[m && m.sha256] || {}; const parts = (SLCadZonal.partsOf ? SLCadZonal.partsOf(res.cadId) : m.parts) || []; return { parts: parts.length, mats: parts.filter(p => mats[p.pid]).length, props: parts.filter(p => props[p.pid] && props[p.pid].description).length }; });
         const hs = (B || []).map((b, i) => b.type === 'h' ? [i, b.text] : null).filter(Boolean);
         const iB = hs.findIndex(h => /equipment and materials in the zone bring/.test(h[1])), iF = hs.findIndex(h => /^Functions the equipment performs/.test(h[1])), iE = hs.findIndex(h => /^What one event in the zone loses/.test(h[1]));
         const sec = iB >= 0 ? B.slice(hs[iB][0], iB + 1 < hs.length ? hs[iB + 1][0] : undefined) : [];
@@ -113,6 +120,9 @@ const tick = ms => new Promise(r => setTimeout(r, ms));
         const B2 = await S(), all = (B2 || []).filter(b => b.type === 'table');
         const mt = all.find(t => /-materials$/.test(t.id)), ep = all.find(t => /-kind-electrical_power$/.test(t.id));
         check('8  the zone\'s Edit has what each unit is and is made of; saving writes its own store, not the row; the report then has the materials and the newly set kind', ed.fields === ed.units * 2 && ed.ok && ed.facts && ed.facts.material === 'magnesium AZ91' && ed.leak.length === 0 && !!mt && mt.rows.some(r => /^Magnesium alloy/.test(r[0]) && /Oil tank/.test(r[1])) && mt.rows.some(r => /^Titanium alloy/.test(r[0])) && !!ep && /fire detection/i.test(JSON.stringify(sec.concat(B2).filter(b => b.type === 'p' && /^Electrical power/.test(b.text)).map(b => b.text))), JSON.stringify({ ed, mt: mt && mt.rows.map(r => r[0]) }));
+        const mt0 = sec.find(b => b.type === 'table' && /-materials$/.test(b.id)), noRec = sec.some(b => b.type === 'p' && /not on record/.test(b.text));
+        const tr = mt0 && mt0.rows.filter(r => /Thrust reverser actuation/.test(r[1])).map(r => r[0].replace(/ \(.*$/, ''));
+        check('9  the demo model has a material and a description for every part from the start; Z-NAC1\'s materials table fills with nothing typed, and a part of several materials counts each one', D9.parts > 2000 && D9.mats === D9.parts && D9.props === D9.parts && !!mt0 && !noRec && mt0.rows.some(r => /^Titanium alloy/.test(r[0])) && tr && tr.length >= 3, JSON.stringify({ D9, rows: mt0 && mt0.rows.map(r => r[0].slice(0, 40)), noRec, tr }));
         check('8  no page errors', errs.length === 0, errs.slice(0, 3).join(' | '));
     } catch (e) { check('the browser part ran to the end', false, e && e.stack); }
     await browser.close(); srv.close();

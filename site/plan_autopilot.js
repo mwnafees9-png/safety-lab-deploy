@@ -1,4 +1,4 @@
-// plan_autopilot.js (SLPlanAuto v2.3, 10 Nov 2026; v2.0 6 Nov 2026): the Plan Autopilot. The program's three safety plans, written by
+// plan_autopilot.js (SLPlanAuto v2.4, 10 Nov 2026: each section's "How this will be done", written or drafted with the AI once its questions are answered; live comments in the margin; images and captions centered; v2.3 10 Nov 2026; v2.0 6 Nov 2026): the Plan Autopilot. The program's three safety plans, written by
 // answering questions, with the same layout as the Sys Lab Planning Autopilot.
 // v2.3 (10 Nov 2026): Waqas: "we also need to fix how we are not using the full width of the page for the text", for all the
 // reports: the page lead runs the full width too (its 980px cap is gone); the plan documents already used the full column.
@@ -30,7 +30,7 @@
 // (program_plan.js doctrine); an expected lane holding work is turned off with a signed tailoring entry naming the answer.
 (function (root) {
     'use strict';
-    var VERSION = '2.3';
+    var VERSION = '2.4';   // 2.4 10 Nov 2026: each section can carry "How this will be done", written or drafted with the AI once its questions are answered;
     function E(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
     function U() { return root.SLAutopilotUI || null; }
     function PP() { return root.PROGRAM_PLAN || null; }
@@ -44,9 +44,9 @@
     function save() { if (U()) U().save(); else { try { if (typeof root.scheduleAutosave === 'function') root.scheduleAutosave(); } catch (_) {} } }
     function fail(m) { var e = new Error(m); e.userFacing = true; return e; }
     function store() {
-        var p = pc(); if (!p) return { answers: {}, who: {}, own: {}, why: {}, doc: {}, applied: {} };
+        var p = pc(); if (!p) return { answers: {}, who: {}, own: {}, why: {}, doc: {}, applied: {}, authored: {} };
         if (!p.planAuto || typeof p.planAuto !== 'object') p.planAuto = {};
-        var s = p.planAuto; ['answers', 'who', 'own', 'why', 'doc', 'applied'].forEach(function (k) { if (!s[k] || typeof s[k] !== 'object') s[k] = {}; });
+        var s = p.planAuto; ['answers', 'who', 'own', 'why', 'doc', 'applied', 'authored'].forEach(function (k) { if (!s[k] || typeof s[k] !== 'object') s[k] = {}; });
         return s;
     }
     function A(k) { return store().answers[k] || ''; }
@@ -1275,12 +1275,72 @@
         }
         return out;
     }
+    // ---- v2.4 (10 Nov 2026): each section in more detail, written or drafted with the AI ------------------------------
+    // Waqas: an optional AI draft on top of every report, the SSPP, HF plan and RAM plan included; "AI doesnt draft till
+    // people have answered the questions". Each section of a plan can carry a part written in full prose: by the engineer,
+    // or drafted by the AI from the section as the answers wrote it and the standards it follows, and in the plan only
+    // once a person accepts it. The AI drafts a section only when every question in it is answered.
+    // Stored: planAuto.authored['<plan>|<section>'] = { text, by, at, source: 'person'|'ai'|'ai-edited', draft: { text, model, at, flags } }.
+    var AUTH_TITLE = 'How this will be done';
+    var _previewing = false;
+    function authKey(key, sec) { return key + '|' + sec; }
+    function authOf(key, sec) { var r = store().authored[authKey(key, sec)]; return r && typeof r === 'object' ? r : null; }
+    function authLeft(key, sec) { return questions(key).filter(function (q) { return q.sec === sec && !complete(q); }).map(function (q) { return q.text; }); }
+    function authFacts(key, sec) {
+        var lines = ['Plan: ' + BY[key].title + ' (' + docCtl(key).no + ')', 'Program: ' + projName(), '', 'The section as the answers wrote it:'];
+        var it = intro(key, sec); if (it) lines.push(it);
+        questions(key).filter(function (q) { return q.sec === sec; }).forEach(function (q) { lines.push('- ' + q.text + ' ' + txtOf(q)); });
+        planTables(key, sec).forEach(function (t) { lines.push('', 'Table: ' + t.title); (t.rows || []).slice(0, 60).forEach(function (r) { lines.push(JSON.stringify(r)); }); });
+        return lines.join('\n').slice(0, 40000);
+    }
+    async function authAi(key, sec) {
+        if (!BY[key] || BY[key].secs.indexOf(sec) < 0) throw fail('No such section.');
+        var left = authLeft(key, sec);
+        if (left.length) throw fail(('Answer the questions in this section first, then the AI can draft it. Still to answer: ' + left.slice(0, 6).join('; ') + (left.length > 6 ? '; and the rest on the left' : '') + '.').replace(/\?\.$/, '?'));
+        var AI = root.SafetyLabAI, RA = root.SLReportAI;
+        if (!AI || typeof AI.complete !== 'function' || !RA) throw fail('The AI is not set up in this project. Write this part yourself, or set the AI up in Settings.');
+        var system = RA.systemPrompt(BY[key].code, { name: BY[key].title }, { heading: sec, prose: 'Explain in full how the program will carry out this part of the plan, as the answers decide it: who does what, with which inputs, in what order, what it produces and how it is checked. A plan says what WILL be done: no results, counts or status.' });
+        var res = await AI.complete({ feature: 'report.section.draft', system: system, messages: [{ role: 'user', content: 'The project data for the section "' + sec + '" of the ' + BY[key].title + ':\n\n' + authFacts(key, sec) }], max_tokens: 1600 });
+        var text = String((res && (res.text || (res.raw && res.raw.content && res.raw.content[0] && res.raw.content[0].text))) || '').trim();
+        if (!text) throw fail('The AI returned nothing. Try again, or write this part yourself.');
+        var flags = []; try { flags = (RA.guard(text, {}) || []).map(function (f) { return String(f.why || f.token || f); }); } catch (_) {}
+        var s0 = store(), cur = s0.authored[authKey(key, sec)] || {};
+        cur.draft = { text: text, model: (res && res.model) || '', at: now(), flags: flags };
+        s0.authored[authKey(key, sec)] = cur; forget(); save();
+        return cur.draft;
+    }
+    function authSave(key, sec, text, source) {
+        var s0 = store(), k = authKey(key, sec), cur = s0.authored[k] || {}; text = String(text || '').trim();
+        if (!text) { delete s0.authored[k]; forget(); save(); return null; }
+        cur.text = text; cur.by = who(); cur.at = now(); cur.source = source || 'person'; delete cur.draft; s0.authored[k] = cur; forget(); save(); return cur;
+    }
+    function authDiscard(key, sec) { var s0 = store(), cur = s0.authored[authKey(key, sec)]; if (cur) { delete cur.draft; if (!cur.text) delete s0.authored[authKey(key, sec)]; forget(); save(); } }
+    function authHtml(key, sec) {
+        var r = authOf(key, sec) || {}, k = authKey(key, sec), ed = ui0.authEdit === k, busy = ui0.authBusy === k, left = authLeft(key, sec);
+        var J = function (v) { return E(JSON.stringify(v)); };
+        var btn = function (verb, label, dis) { return '<button type="button" class="slap-btn"' + (dis ? ' disabled' : '') + ' data-pla-auth="' + E(verb) + '" data-pla-authk="' + E(k) + '" onclick="SLPlanAuto.ui.auth(\'' + verb + '\',' + J(key) + ',' + J(sec) + ')">' + E(label) + '</button>'; };
+        var h = '<div class="pla-auth" data-pla-authbox="' + E(k) + '">';
+        if (ed) h += '<textarea data-pla-authtext="' + E(k) + '" rows="7" placeholder="How the program will carry this out, in full.">' + E(ui0.authSeed != null ? ui0.authSeed : (r.text || '')) + '</textarea><div class="pla-authbar">' + btn('save', 'Save') + btn('cancel', 'Cancel') + '</div>';
+        else if (r.draft) h += '<div class="pla-authdraft" data-pla-authdraft="' + E(k) + '"><div class="pla-authh">AI draft of "' + E(AUTH_TITLE) + '": not in the plan until you accept it</div><div class="pla-authdt">' + E(r.draft.text).replace(/\n/g, '<br>') + '</div>'
+            + (r.draft.flags && r.draft.flags.length ? '<div class="pla-authflag"><b>Check before accepting:</b> ' + r.draft.flags.map(E).join('; ') + '</div>' : '')
+            + '<div class="pla-authbar">' + btn('accept', 'Accept') + btn('acceptedit', 'Edit, then accept') + btn('discard', 'Discard') + '</div></div>';
+        else {
+            h += '<div class="pla-authbar">' + (busy ? '<button type="button" class="slap-btn slab-ai-stop" onclick="try{window.slabAiStop&&window.slabAiStop()}catch(_){}">&#9632; Stop</button><span class="pla-authnote">The AI is drafting this section...</span>'
+                : btn('edit', r.text ? 'Edit "' + AUTH_TITLE + '"' : 'Write "' + AUTH_TITLE + '" myself') + btn('ai', r.text ? 'Redraft with AI' : 'Draft with AI', !!left.length)) + '</div>';
+            if (left.length && !busy) h += '<div class="pla-authnote" data-pla-aiwait="' + E(k) + '">The AI drafts this section once its questions are answered. Still to answer: ' + left.slice(0, 4).map(E).join('; ') + (left.length > 4 ? '; and the rest on the left.' : (/[?.]$/.test(left[left.length - 1] || '') ? '' : '.')) + '</div>';
+        }
+        return h + '</div>';
+    }
     function doc(key) {
         var plan = BY[key], blocks = [];
         plan.secs.forEach(function (sec, i) {
             blocks.push(H(1, (i + 1) + '. ' + sec));
             var it = intro(key, sec); if (it) blocks.push(P(it));
             questions(key).filter(function (q) { return q.sec === sec; }).forEach(function (q) { var b = P(txtOf(q)); b.q = q.k; blocks.push(b); });
+            // v2.4: the section in more detail, written by the engineer or drafted with the AI and accepted
+            var au = authOf(key, sec);
+            if (au && au.text) { blocks.push(H(2, AUTH_TITLE)); au.text.split(/\n\s*\n/).forEach(function (para) { if (para.trim()) { var pb = P(para.trim().replace(/\s*\n\s*/g, ' ')); pb.auth = key + '|' + sec; blocks.push(pb); } }); }
+            if (_previewing) blocks.push({ k: 'auth', key: key, sec: sec });
             secFigs(key, sec).forEach(function (f) { blocks.push(f); });
             planTables(key, sec).forEach(function (t) { blocks.push(t); });
         });
@@ -1339,7 +1399,7 @@
     function frontHtml(key, kind, blocks) {
         var plan = BY[key], isR = kind === 'status', title = isR ? plan.report : plan.title;
         var tbl = function (t) { var hd = t.rows.length ? Object.keys(t.rows[0]) : []; return '<div class="pla-cap">' + E(t.title) + '</div><table class="pla-dt"><thead><tr>' + hd.map(function (h) { return '<th>' + E(h) + '</th>'; }).join('') + '</tr></thead><tbody>' + t.rows.map(function (r) { return '<tr>' + hd.map(function (h) { return '<td>' + E(r[h]) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table>'; };
-        var hs = blocks.filter(function (b) { return b.k === 'h'; }), ts = blocks.filter(function (b) { return b.k === 'table'; }), fs = blocks.filter(function (b) { return b.k === 'fig'; });
+        var hs = blocks.filter(function (b) { return b.k === 'h' && b.level !== 2; }), ts = blocks.filter(function (b) { return b.k === 'table'; }), fs = blocks.filter(function (b) { return b.k === 'fig'; });
         return '<div class="pla-cover" data-pla-cover="1"><div class="pla-ct">' + E(title) + '</div><div class="pla-cs">' + E(projName()) + '</div>' + coverTables(key, kind).map(tbl).join('') + '</div>'
             + '<div class="pla-front" data-pla-toc="1"><h3 class="pla-dh">Contents</h3>' + hs.map(function (h, i) { return '<div class="pla-tl"><a href="#pla-' + kind + '-h' + i + '">' + E(h.text) + '</a></div>'; }).join('')
             + '<h3 class="pla-dh">List of tables</h3>' + (ts.length ? ts.map(function (t) { return '<div class="pla-tl" data-pla-lot="1"><a href="#pla-' + kind + '-t' + t.n + '">' + E(t.caption) + '</a></div>'; }).join('') : '<p>None.</p>')
@@ -1348,8 +1408,10 @@
     function docHtml(blocks, kind) {
         var hi = 0; kind = kind || 'plan';
         return blocks.map(function (b) {
+            if (b.k === 'h' && b.level === 2) return '<h4 class="pla-dh2">' + E(b.text) + '</h4>';
+            if (b.k === 'auth') return authHtml(b.key, b.sec);
             if (b.k === 'h') return '<h3 class="pla-dh" id="pla-' + kind + '-h' + (hi++) + '">' + E(b.text) + '</h3>';
-            if (b.k === 'p') return '<p class="' + (/To be decided|To be written/.test(b.text) ? 'pla-tbd' : '') + '"' + (b.q ? ' data-plap="' + E(b.q) + '"' : '') + '>' + E(b.text) + '</p>';
+            if (b.k === 'p') return '<p class="' + (/To be decided|To be written/.test(b.text) ? 'pla-tbd' : '') + '"' + (b.q ? ' data-plap="' + E(b.q) + '"' : '') + (b.auth ? ' data-pla-authp="' + E(b.auth) + '"' : '') + '>' + E(b.text) + '</p>';
             if (b.k === 'fig') return '<div class="pla-fig" id="pla-' + kind + '-f' + b.n + '">' + b.svg + '</div><div class="pla-cap">' + E(b.caption) + '</div>';
             if (b.k === 'table') { var hd = b.rows.length ? Object.keys(b.rows[0]) : []; return '<div class="pla-cap" id="pla-' + kind + '-t' + b.n + '">' + E(b.caption) + '</div>' + (b.rows.length ? '<table class="pla-dt"><thead><tr>' + hd.map(function (h) { return '<th>' + E(h) + '</th>'; }).join('') + '</tr></thead><tbody>' + b.rows.map(function (r) { return '<tr>' + hd.map(function (h) { return '<td>' + E(r[h]) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table>' : '<p class="pla-tbd">(No entries)</p>'); }
             return '';
@@ -1360,18 +1422,19 @@
         var plan = BY[key], isR = kind === 'status', d = docCtl(key), bl = isR ? statusDoc(key) : doc(key);
         return { title: isR ? plan.report : plan.title, titleLines: [projName(), (isR ? d.no + '-SR' : d.no) + ' · ' + (isR ? 'Report of ' + today() : 'Revision ' + rev(key) + ' · ' + d.status)],
             cover: { tables: coverTables(key, kind) }, headerText: (isR ? d.no + '-SR' : d.no + ' Rev ' + rev(key)) + ' · ' + (isR ? plan.report : plan.title), projectName: projName(), sigFigs: 3,
-            blocks: bl.map(function (b) { return b.k === 'fig' ? { k: 'img', caption: b.title, svg: b.svg, w: b.w, h: b.h } : b.k === 'table' ? { k: 'table', name: b.name, title: b.title, rows: b.rows } : b; }) };
+            blocks: bl.filter(function (b) { return b.k !== 'auth'; }).map(function (b) { return b.k === 'fig' ? { k: 'img', caption: b.title, svg: b.svg, w: b.w, h: b.h } : b.k === 'table' ? { k: 'table', name: b.name, title: b.title, rows: b.rows } : b; }) };
     }
     async function word(key, kind) {
         var lib = typeof root._loadDocxLib === 'function' ? await root._loadDocxLib() : root.docx;
         if (!lib || !root.SLReportWriter) throw fail('The Word writer is not loaded in this build.');
         var m = model(key, kind), P0 = root.SLFtaPrint;
+        if (root.SLReportComments) { try { root.SLReportComments.annotate(m, kind === 'status' ? 'plan:' + key + ':status' : 'plan:' + key); } catch (_) {} }   // v2.4: open comments as margin comments
         for (var i = 0; i < m.blocks.length; i++) { var b = m.blocks[i]; if (b.k === 'img') { try { b.dataUrl = P0 && P0.png ? await P0.png({ svg: b.svg, w: b.w, h: b.h }, 3) : null; } catch (_) { b.dataUrl = null; } } }
         var blob = await root.SLReportWriter.docx(m, lib);
         try { var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = ((kind === 'status' ? docCtl(key).no + '-SR' : docCtl(key).no + ' Rev ' + rev(key)) + ' ' + (kind === 'status' ? BY[key].report : BY[key].title)).replace(/[^\w-]+/g, '_') + '.docx'; document.body.appendChild(a); a.click(); a.remove(); } catch (_) {}
         return blob;
     }
-    function print(key, kind) { if (U()) U().openReport((kind === 'status' ? BY[key].report : BY[key].title) + ' · ' + projName(), '<style>.pla-dt{border-collapse:collapse;width:100%;font-size:11px}.pla-dt th,.pla-dt td{border:1px solid #999;padding:3px 5px;text-align:left}.pla-cap{font-weight:700;font-size:11px;margin:10px 0 4px}.pla-cover{page-break-after:always}.pla-front{page-break-after:always}.pla-ct{font-size:26px;font-weight:700;margin-top:80px}.pla-cs{font-size:15px;margin:6px 0 30px}.pla-fig svg{max-width:100%;height:auto}</style>' + fullHtml(key, kind)); }
+    function print(key, kind) { if (U()) U().openReport((kind === 'status' ? BY[key].report : BY[key].title) + ' · ' + projName(), '<style>.pla-dt{border-collapse:collapse;width:100%;font-size:11px}.pla-dt th,.pla-dt td{border:1px solid #999;padding:3px 5px;text-align:left}.pla-cap{font-weight:700;font-size:11px;margin:10px 0 4px;text-align:center}.pla-cover{page-break-after:always}.pla-front{page-break-after:always}.pla-ct{font-size:26px;font-weight:700;margin-top:80px}.pla-cs{font-size:15px;margin:6px 0 30px}.pla-fig svg{max-width:100%;height:auto}</style>' + fullHtml(key, kind)); }
     // ---- the diagrams (6 Nov 2026, Waqas: "for program planing I dont want just data flow choices, I want development
     // assurance choices and diagrams"): each drawn from the answers and the project, so it changes when they do. Plain
     // standalone svg (white background, no scripts): the same picture in the preview, in print and in Word.
@@ -1722,6 +1785,7 @@
         if (typeof document === 'undefined' || document.getElementById('pla-style')) return;
         var st = document.createElement('style'); st.id = 'pla-style';
         st.textContent = '.pla{font-size:13.5px}.pla-lead{font-size:13px;margin:0 0 14px}'
+            + '.pla .pla-prev h4.pla-dh2{font-size:13.5px;margin:10px 0 4px}.pla-auth{border:1px dashed var(--color-border,#c7cbd1);border-radius:10px;padding:8px 10px;margin:8px 0 12px;background:var(--color-surface-2,#f8fafc)}.pla-authbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center}.pla-auth textarea{width:100%;box-sizing:border-box;font:inherit;font-size:13px;padding:8px;border-radius:8px;border:1px solid var(--color-border,#c7cbd1);background:var(--color-surface-1,#fff);color:inherit;margin-bottom:6px}.pla-authnote,.pla-authflag{font-size:12.5px;margin-top:6px}.pla-authh{font-weight:600;margin-bottom:4px}.pla-authdt{margin-bottom:6px}.pla-authflag{color:#9A3412}body.theme-dark .pla-authflag{color:#F2925F}'
             + '.pla-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}.pla-card{border:1px solid var(--color-border,#e3e5e8);border-radius:12px;padding:14px 16px;background:var(--color-surface-1,#fff);display:flex;flex-direction:column;gap:8px}'
             + '.pla-ch{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.pla-ch b{font-size:14.5px}.pla-ch .slap-pill{white-space:nowrap;flex:none}.pla-g{font-size:12px}.pla-meta{display:flex;gap:6px;flex-wrap:wrap}.pla-chip{font-size:11.5px;padding:2px 8px;border-radius:10px;background:#ECECEA;color:#101216}'
             + '.pla-cols{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:18px;align-items:start}@media (max-width:1100px){.pla-cols{grid-template-columns:1fr}}'
@@ -1731,12 +1795,12 @@
             + 'body.theme-dark .pla .pla-prev{--pp-bg:#15181E;--pp-ink:#E8EAED;--pp-sub:#B4BAC4;--pp-line:#3A404A;--pp-hair:#2E333C;--pp-th:#1F2A3A;--pp-link:#8DBBFF;--pp-tbd:#F2925F;--pp-rule:#9AA1AD;--pp-flash:#5A4A12}'
             + '.pla .pla-prev{max-height:80vh;overflow:auto;border:1px solid var(--pp-hair);border-radius:10px;padding:16px 20px;background:var(--pp-bg);color:var(--pp-ink);font-size:12.5px;line-height:1.5}'
             + '.pla .pla-prev h3,.pla .pla-prev h4,.pla .pla-prev p,.pla .pla-prev li,.pla .pla-prev b,.pla .pla-prev div{color:var(--pp-ink)}'
-            + '.pla .pla-prev h3{font-size:15px;margin:16px 0 6px;background:none}.pla .pla-prev p{margin:0 0 8px}.pla .pla-prev .pla-tbd{color:var(--pp-tbd);font-style:italic}.pla .pla-prev .pla-cap{font-weight:700;font-size:11.5px;margin:10px 0 4px;color:var(--pp-ink)}'
+            + '.pla .pla-prev h3{font-size:15px;margin:16px 0 6px;background:none}.pla .pla-prev p{margin:0 0 8px}.pla .pla-prev .pla-tbd{color:var(--pp-tbd);font-style:italic}.pla .pla-prev .pla-cap{font-weight:700;font-size:11.5px;margin:10px 0 4px;color:var(--pp-ink);text-align:center}'
             + '.pla-cover{border-bottom:2px solid var(--pp-rule);padding-bottom:14px;margin-bottom:14px}.pla-ct{font-size:22px;font-weight:700;margin-top:6px}.pla-cs{font-size:14px;margin:2px 0 10px}.pla-front{border-bottom:2px solid var(--pp-rule);padding-bottom:12px;margin-bottom:12px}.pla-tl{font-size:12px;margin:1px 0}.pla .pla-prev .pla-tl a,.pla .pla-prev a{color:var(--pp-link);text-decoration:none}'
             + '.pla-dt{width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:10px}.pla .pla-prev .pla-dt tr,.pla .pla-prev .pla-dt td{background:var(--pp-bg);color:var(--pp-ink)}.pla .pla-prev .pla-dt th,.pla .pla-prev .pla-dt td{border:1px solid var(--pp-line);padding:4px 6px;text-align:left;vertical-align:top;font-family:inherit;text-transform:none;letter-spacing:normal}.pla .pla-prev .pla-dt th{background:var(--pp-th);color:var(--pp-ink);font-weight:700}'
             // the app's house rule paints every thead black with !important; the plan page is a document, so it wins back here
             + '.pla .pla-prev .pla-dt thead th,.pla .pla-prev .pla-dt th{background:var(--pp-th) !important;color:var(--pp-ink) !important;border:1px solid var(--pp-line) !important;font-family:inherit !important;text-transform:none !important;letter-spacing:normal !important;font-size:11.5px !important}'
-            + '.pla-fig{margin:10px 0 2px;overflow-x:auto}.pla-fig svg{max-width:100%;height:auto;border:1px solid var(--pp-hair,#e3e5e8);border-radius:8px}'
+            + '.pla-fig{margin:10px 0 2px;overflow-x:auto;text-align:center}.pla-fig>svg,.pla-fig>img{display:inline-block;margin:0 auto}.pla-fig svg{max-width:100%;height:auto;border:1px solid var(--pp-hair,#e3e5e8);border-radius:8px}'
             + '.pla-sech{font-weight:700;font-size:13px;margin:18px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--color-border,#e3e5e8)}'
             + '.pla-q{border:1px solid var(--color-border,#e3e5e8);border-left-width:3px;border-radius:10px;padding:10px 12px;margin:0 0 8px;background:var(--color-surface-1,#fff)}.pla-q.sub{position:relative}.pla-q.sub::before{content:"";position:absolute;left:-16px;top:-9px;width:12px;height:30px;border-left:2px solid var(--color-border-strong,#c7cbd1);border-bottom:2px solid var(--color-border-strong,#c7cbd1);border-bottom-left-radius:7px}.pla-q.gap{border-left:3px solid #B26A00}.pla-q.bad{border-left:3px solid #B42318}'
             + '.pla-qt{font-weight:600;margin-bottom:6px}.pla-q select,.pla-doc select,.pla-doc input,.pla-q textarea,.pla-q input[type=text]{font:inherit;font-size:13px;padding:6px 8px;border-radius:7px;border:1px solid var(--color-border-strong,#c7cbd1);max-width:100%;width:100%;background-color:var(--color-surface-1,#fff);color:inherit;box-sizing:border-box}.pla-q select,.pla-doc select{background-repeat:no-repeat;background-position:right 10px center;padding-right:28px}'
@@ -1860,7 +1924,7 @@
         h += '</div><div class="pla-right"><div class="pla-vt"><button type="button" class="' + (view === 'plan' ? 'on' : '') + '" data-plaview="plan" onclick="SLPlanAuto.ui.view(\'plan\')">The plan</button><button type="button" class="' + (view === 'status' ? 'on' : '') + '" data-plaview="status" onclick="SLPlanAuto.ui.view(\'status\')">' + E(plan.report) + '</button><span style="flex:1"></span>'
             + (view === 'plan' ? '<button type="button" class="' + (ui0.live ? 'on' : '') + '" data-plalive="1" onclick="SLPlanAuto.ui.live()" title="Show where the program stands on the diagrams. Never written into the plan.">' + (ui0.live ? 'Hide where the program stands' : 'Show where the program stands') + '</button>' : '')
             + '<button type="button" onclick="SLPlanAuto.ui.word(\'' + key + '\',\'' + view + '\')">Word (.docx)</button><button type="button" onclick="SLPlanAuto.print(\'' + key + '\',\'' + view + '\')">Print</button></div>'
-            + _nodePanel() + '<div class="pla-prev" data-pladoc="1" data-plakind="' + view + '">' + (function () { LIVE = !!ui0.live && view === 'plan'; C = isDark() ? DARK : LIGHT; try { return fullHtml(key, view); } finally { LIVE = false; C = LIGHT; } })() + '</div></div></div>';
+            + _nodePanel() + '<div class="pla-prev" data-pladoc="1" data-plakind="' + view + '">' + (function () { LIVE = !!ui0.live && view === 'plan'; C = isDark() ? DARK : LIGHT; try { _previewing = view === 'plan'; return fullHtml(key, view); } finally { _previewing = false; LIVE = false; C = LIGHT; } })() + '</div></div></div>';
         return h;
     }
     function render() {
@@ -1870,6 +1934,8 @@
         var pv0 = document.querySelector('[data-pladoc]'), scroll = pv0 ? pv0.scrollTop : 0;
         host.innerHTML = '<div class="pla">' + (ui0.open && BY[ui0.open] ? _plan(ui0.open) : _cards()) + '</div>';
         var pv = document.querySelector('[data-pladoc]'); if (pv) pv.scrollTop = scroll;
+        // v2.4: live comments in the margin of the plan preview (report_comments.js)
+        if (pv && root.SLReportComments) { try { root.SLReportComments.decorate(pv); } catch (e) { try { console.warn('[report comments]', e); } catch (_) {} } }
         if (ui0.flash) { var k = ui0.flash; ui0.flash = null; flash(k); }
     }
     // scroll the preview to the sentence an answer wrote, and light it up
@@ -1896,6 +1962,20 @@
         issue: function (key) { var it = issue(key); ui0.msg = { text: 'Issued revision ' + it.rev + ' (' + it.date + ').' }; render(); },
         view: function (v) { ui0.view = v === 'status' ? 'status' : 'plan'; render(); },
         apply: function (key) { var r = apply(key); ui0.msg = { text: (r.done.length ? 'Applied: ' + r.done.join('; ') + '.' : 'Nothing to apply.') + (r.errs.length ? ' Not applied: ' + r.errs.join('; ') : ''), err: !!r.errs.length }; render(); },
+        auth: function (verb, key, sec) {
+            var k = authKey(key, sec);
+            try {
+                if (verb === 'edit') { ui0.authEdit = k; ui0.authSeed = null; ui0.authSeedAi = false; }
+                else if (verb === 'cancel') { ui0.authEdit = null; ui0.authSeed = null; }
+                else if (verb === 'save') { var ta = document.querySelector('[data-pla-authtext="' + k.replace(/"/g, '\\"') + '"]'); authSave(key, sec, ta ? ta.value : '', ui0.authSeedAi ? 'ai-edited' : 'person'); ui0.authEdit = null; ui0.authSeed = null; ui0.authSeedAi = false; }
+                else if (verb === 'accept') { var r = authOf(key, sec); if (r && r.draft) authSave(key, sec, r.draft.text, 'ai'); }
+                else if (verb === 'acceptedit') { var r2 = authOf(key, sec); ui0.authEdit = k; ui0.authSeed = r2 && r2.draft ? r2.draft.text : ''; ui0.authSeedAi = true; }
+                else if (verb === 'discard') authDiscard(key, sec);
+                else if (verb === 'ai') { ui0.authBusy = k; ui0.msg = null; render(); authAi(key, sec).then(function () { ui0.authBusy = null; render(); }, function (e) { ui0.authBusy = null; ui0.msg = { text: (e && e.message) || String(e), err: true }; render(); }); return; }
+                ui0.msg = null;
+            } catch (e) { ui0.msg = { text: (e && e.message) || String(e), err: true }; }
+            render();
+        },
         word: function (key, kind) { word(key, kind).catch(function (e) { ui0.msg = { text: 'Could not write the Word file: ' + (e && e.message || e), err: true }; render(); }); }
     };
     function mount() {
@@ -1914,7 +1994,7 @@
     }
     if (typeof document !== 'undefined') { var tries = 40, t0 = setInterval(function () { if (mount() || --tries <= 0) clearInterval(t0); }, 250); }
     root.SLPlanAuto = { VERSION: VERSION, PLANS: PLANS, BY: BY, QBY: QBY, answer: answer, toggle: toggle, setOwn: setOwn, setWhy: setWhy, wires: wires, apply: apply, status: status, gaps: gaps, mismatches: mismatches, complete: complete,
-        daCover: daCover, doc: doc, statusDoc: statusDoc, docHtml: docHtml, fullHtml: fullHtml, model: model, word: word, print: print, render: render, ui: ui, state: ui0, questions: questions,
+        daCover: daCover, authOf: authOf, authAi: authAi, authSave: authSave, authLeft: authLeft, authDiscard: authDiscard, AUTH_TITLE: AUTH_TITLE, doc: doc, statusDoc: statusDoc, docHtml: docHtml, fullHtml: fullHtml, model: model, word: word, print: print, render: render, ui: ui, state: ui0, questions: questions,
         plannedCfg: plannedCfg, targetsFor: targetsFor, assessments: assessments, exchanges: exchanges, outputsOf: outputsOf, acceptance: acceptance, acceptOutput: acceptOutput, liveOf: liveOf, EX: EX, flash: flash, planned: planned, procRows: procRows, docCtl: docCtl, issue: issue, setDoc: setDoc, rev: rev, ROLES: ROLES, forget: forget };
     if (typeof module !== 'undefined' && module.exports) module.exports = root.SLPlanAuto;
 })(typeof window !== 'undefined' ? window : globalThis);

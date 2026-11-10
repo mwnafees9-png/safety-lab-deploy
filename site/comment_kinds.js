@@ -1,4 +1,4 @@
-/* comment_kinds.js v1.0 (31 Oct 2026): review comments on every assessment, and the rows ANEM may change.
+/* comment_kinds.js v1.1 (10 Nov 2026: the kind 'report', comments on words in a report, report_comments.js). v1.0 (31 Oct 2026): review comments on every assessment, and the rows ANEM may change.
  *
  * Waqas, 30 Oct 2026: "is our AI capable of addressing comments in the app for every single assessment" ... "lets get
  * it all done". Before this file, comments reached FHA, functions, FCIM, requirements, assumptions, PRA, ZSA, CMA,
@@ -129,6 +129,13 @@
             label: 'Crew Credit', tab: 'ac-fha',
             title: function (t) { var r = _fha(t.id, t.systemId); return r ? ('Crew credit · ' + _fcLabel(r)) : S(t.id); },
             anem: function (t) { return 'the crew credit on FHA row ' + t.id + (t.systemId ? ' in system ' + t.systemId : '') + ' (the credit comes from the HF assumptions, the FCIM awareness and the crew alerts: change those rows; the FHA row is table ' + (t.systemId ? 'sys_fha' : 'ac_fha') + ', _id ' + t.id + ')'; }
+        },
+        // 10 Nov 2026 (report_comments.js): a comment on words in a report (PRA, ZSA, CMA, SSPP, HF plan, RAM plan)
+        report: {
+            label: 'Report comments', tab: 'zsa',
+            title: function (t) { var p = S(t.id).split('\u00a7'), q = t.anchor && t.anchor.quote ? ' · "' + _clip(t.anchor.quote, 60) + '"' : ''; return S(p[0]).replace(/^plan:/, '').replace(/:status$/, ' status report').toUpperCase() + ' · ' + S(p[1] || '') + q; },
+            post: function (t) { var d = S(t.id).split('\u00a7')[0]; try { if (/^plan:/.test(d)) { root.switchTab && root.switchTab('plan-auto'); if (root.SLPlanAuto) { var pk = d.split(':'); root.SLPlanAuto.ui.open(pk[1]); root.SLPlanAuto.ui.view(pk[2] === 'status' ? 'status' : 'plan'); } } else { root.switchTab && root.switchTab(d); var C = root.SLCcaReport && root.SLCcaReport.get(d), sec = S(t.id).split('\u00a7')[1]; if (C && sec && sec !== 'front' && C.setTab) C.setTab(sec); } if (root.SLReportComments) root.SLReportComments.focus(t.commentId || null); } catch (_) {} },
+            anem: function (t) { var p = S(t.id).split('\u00a7'); return 'a comment on the words "' + _clip(t.anchor && t.anchor.quote, 200) + '" in the ' + S(p[0]).replace(/^plan:/, '').toUpperCase() + ' report (section ' + S(p[1] || '') + '). Reply only: a written part of the report is changed from the comment itself with Fix with AI, and accepted by a person; everything else in the report is worked out by the tool from its inputs'; }
         }
     };
     function _fhaAny(iid) { var r = _fha(iid, null); if (r) return r; var ss = _systems(); for (var i = 0; i < ss.length; i++) { var h = (ss[i].fha || []).find(function (x) { return x && String(x.internalId) === String(iid); }); if (h) return h; } return null; }

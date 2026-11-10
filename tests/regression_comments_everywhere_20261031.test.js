@@ -38,7 +38,7 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
     for (const p of ['playwright', '/home/claude/.npm-global/lib/node_modules/playwright']) { try { pw = require(p); break; } catch (_) {} }
     if (!process.env.PLAYWRIGHT_BROWSERS_PATH && fs.existsSync('/opt/pw-browsers')) process.env.PLAYWRIGHT_BROWSERS_PATH = '/opt/pw-browsers';
     const HTML = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8');
-    const iCK = HTML.indexOf('comment_kinds.js?v=1.0'), iAs = HTML.indexOf('assurance_modules.js?v=');
+    const iCK = HTML.indexOf('comment_kinds.js?v=1.'), iAs = HTML.indexOf('assurance_modules.js?v=');
     check('comment_kinds.js v1.0 loads, after assurance_modules.js', iCK > 0 && iAs > 0 && iCK > iAs);
     if (!pw) { console.log('  note  Playwright is not installed: the browser part did not run'); console.log('\n' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0); }
     const demo = require('./lib/demo_projects_all.js').all().find(d => d.key === 'showcase:kestrel');
