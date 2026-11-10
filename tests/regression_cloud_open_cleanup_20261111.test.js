@@ -25,7 +25,7 @@
  *   [D] opened again (fresh profile, then the same profile with its local copy): still 32 and clean.
  *   [N] live sync off: open from the cloud alone cleans up.
  *   [E] two screens clean up the same dirty project at once and both results meet: the merged event is there once.
- *   [P] pins and load order.
+ *   [P] pins and load order (these run first, and on their own where Playwright is not installed).
  * MUTATION PROOFS (SL_CLEAN_MUTATE): nolive, nocloudopen, noliveupdate, twice, freshids, noflagrepair, notold,
  *   noretry, nolog, notimeout, nowritertimeout. Each turns this red.
  * Run: node --no-maglev --no-concurrent-sparkplug tests/regression_cloud_open_cleanup_20261111.test.js
@@ -33,7 +33,7 @@
 'use strict';
 const fs = require('fs'), path = require('path'), http = require('http');
 if (!process.env.PLAYWRIGHT_BROWSERS_PATH && fs.existsSync('/opt/pw-browsers')) process.env.PLAYWRIGHT_BROWSERS_PATH = '/opt/pw-browsers';
-const pw = require('playwright');
+let pw = null; try { pw = require('playwright'); } catch (_) {}   // not installed on every machine: the browser part is skipped there, as in the other browser suites
 const REPO = path.join(__dirname, '..'), SITE = path.join(REPO, 'site');
 const MUT = process.env.SL_CLEAN_MUTATE || '';
 let pass = 0, fail = 0;
@@ -134,6 +134,14 @@ const FAST = () => { window.SL_CRDT_SAVE_RETRY_MS = 500; window.SL_CRDT_SAVE_TIM
 const NOSYNC = () => { try { localStorage.setItem('SLA_CRDT', '0'); } catch (_) {} };
 
 (async function main() {
+    // ===== [P] pins and load order ========================================================================================
+    const html = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8'), at = s => html.indexOf(s);
+    check('[P] pins: load_repair.js 1.0 before fta_dedupe.js 1.1 and stale_revive.js 1.1, after data_ops_modules.js and helpers_modules.js', at('load_repair.js?v=1.0') > 0 && at('load_repair.js?v=1.0') < at('fta_dedupe.js?v=1.1') && at('fta_dedupe.js?v=1.1') < at('stale_revive.js?v=1.1') && at('load_repair.js?v=1.0') > at('data_ops_modules.js?v=') && at('load_repair.js?v=1.0') > at('helpers_modules.js?v='));
+    check('[P] pins: crdt_sync.js 2.9, cloud_writer.js 1.4, save_state.js 3.7', at('crdt_sync.js?v=2.9') > 0 && at('cloud_writer.js?v=1.4') > 0 && at('save_state.js?v=3.7') > 0);
+    const crdt = fs.readFileSync(path.join(SITE, 'crdt_sync.js'), 'utf8');
+    check('[P] the live shared copy\'s save has no silent way out left', crdt.indexOf('if (res && res.error) return;') < 0 && crdt.indexOf('.catch(function () {});\n      } catch (_) {}\n    }, 5000);') < 0);
+    if (!pw) { console.log('  SKIP  Playwright is not installed here: the browser part did not run'); console.log('\n' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0); }
+
     const srv = http.createServer((q, r) => { let p = decodeURIComponent(q.url.split('?')[0]); if (p.endsWith('/')) p += 'index.html'; const f = path.join(SITE, path.normalize(p)); let b; try { b = fs.readFileSync(f); } catch (_) { r.writeHead(404); return r.end(); } try { b = mutate(path.basename(f), b); } catch (e) { console.log('  FAIL  ' + e.message); fail++; } r.writeHead(200, Object.assign({ 'Content-Type': TYPES[path.extname(f)] || 'application/octet-stream', 'Cache-Control': 'no-store' }, f.endsWith('.html') ? { 'Content-Security-Policy': CSP } : {})); r.end(b); });
     await new Promise(r => srv.listen(0, '127.0.0.1', r));
     const browser = await pw.chromium.launch();
@@ -386,12 +394,6 @@ const NOSYNC = () => { try { localStorage.setItem('SLA_CRDT', '0'); } catch (_) 
     } catch (err) { check('test crashed: ' + (err && err.message), false, err && err.stack); }
     await browser.close(); srv.close();
 
-    // ===== [P] pins and load order ========================================================================================
-    const html = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8'), at = s => html.indexOf(s);
-    check('[P] pins: load_repair.js 1.0 before fta_dedupe.js 1.1 and stale_revive.js 1.1, after data_ops_modules.js and helpers_modules.js', at('load_repair.js?v=1.0') > 0 && at('load_repair.js?v=1.0') < at('fta_dedupe.js?v=1.1') && at('fta_dedupe.js?v=1.1') < at('stale_revive.js?v=1.1') && at('load_repair.js?v=1.0') > at('data_ops_modules.js?v=') && at('load_repair.js?v=1.0') > at('helpers_modules.js?v='));
-    check('[P] pins: crdt_sync.js 2.9, cloud_writer.js 1.4, save_state.js 3.7', at('crdt_sync.js?v=2.9') > 0 && at('cloud_writer.js?v=1.4') > 0 && at('save_state.js?v=3.7') > 0);
-    const crdt = fs.readFileSync(path.join(SITE, 'crdt_sync.js'), 'utf8');
-    check('[P] the live shared copy\'s save has no silent way out left', crdt.indexOf('if (res && res.error) return;') < 0 && crdt.indexOf('.catch(function () {});\n      } catch (_) {}\n    }, 5000);') < 0);
     console.log('\n' + pass + ' passed, ' + fail + ' failed');
     process.exit(fail ? 1 : 0);
 })();
