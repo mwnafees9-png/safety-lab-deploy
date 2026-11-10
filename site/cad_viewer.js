@@ -1,4 +1,5 @@
 // ============================================================================
+// 10 Nov 2026: opening a model keeps its STEP materials by part in the project (SLZsaTypeHazards.harvestMaterials) for the ZSA report.
 // cad_viewer.js, v2.0: the 3D CAD viewer (window.SLCadViewer, 13 Oct 2026; 2.0 cad-C).
 //
 // View only: move through the aircraft and review it, never author it. Built on three.js
@@ -786,6 +787,8 @@
             self._clearModel();
             var geom = I.normalizeGeometry(geometry);
             self.geom = geom; self.attrs = (geometry && geometry.attrs) || {};
+            // 10 Nov 2026 (ZSA, what each material brings): the STEP materials by part kept in the project, so the report has them
+            try { if (root.SLZsaTypeHazards && entry) root.SLZsaTypeHazards.harvestMaterials(entry.sha256 || entry.id, self.attrs); } catch (_) {}
             // one pass, plain loops: 200,000 parts index in a fraction of a second
             var i, order = [], mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
             var PK = geom.packed, PP = geometry && geometry.parts && geometry.parts.n === (PK && PK.n) ? geometry.parts : null;

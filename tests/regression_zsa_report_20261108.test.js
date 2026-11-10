@@ -194,7 +194,7 @@ const tick = (ms) => new Promise((r) => setTimeout(r, ms || 0));
     const W1 = await pg.evaluate(() => { const secs = SLZsaAuto.reportSections(), all = secs.map(__txt).join('\n');
       const pats = [/\b\d+ of \d+\b/, /\b(not )?answered\b/i, /\bunanswered\b/i, /\bsigned\b/i, /\bready to sign\b/i, /(?<!SF-\d+ )\b(open|closed|mitigated)\b/i, /\b\d+ (questions?|findings?|zones?|units?|runs?|parts?|answers?)\b/i, /\band \d+ more\b/];
       const hits = pats.filter((p) => p.test(all)).map((p) => String(p) + ': ' + (all.match(p) || [])[0]);
-      const fcBare = (all.match(/\bFC-[A-Z0-9]+\b(?! [A-Z])/g) || []), sfBare = (all.match(/\bSF-\d+\b(?! [A-Z])/g) || []), sysIds = all.match(/\bsys-[a-z0-9-]+/g) || [];
+      const fcBare = (all.match(/\bFC-[A-Z0-9]+(?:-[A-Z0-9]+)*(?![-A-Z0-9])(?! [A-Z])/g)   /* 10 Nov 2026: ids like FC-PRP1-01 are one id */ || []), sfBare = (all.match(/\bSF-\d+\b(?! [A-Z])/g) || []), sysIds = all.match(/\bsys-[a-z0-9-]+/g) || [];
       return { hits, dash: /[—–]/.test(all), fcBare: fcBare.slice(0, 5), sfBare: sfBare.slice(0, 5), sysIds: sysIds.slice(0, 5), len: all.length };
     });
     check('W1 the report text carries no live counts and no status words', W1.hits.length === 0, W1.hits.join(' | '));

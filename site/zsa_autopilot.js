@@ -1,4 +1,4 @@
-// zsa_autopilot.js (SLZsaAuto v1.8, 9 Nov 2026; v1.7 v1.6 v1.5 9 Nov 2026; v1.4 8 Nov 2026; v1.0 4 Nov 2026): the ZSA Autopilot on the ZSA page.
+// zsa_autopilot.js (SLZsaAuto v1.9, 10 Nov 2026: what each kind of equipment and material in a zone brings, and what that does to the equipment around it and the aircraft; v1.8 9 Nov 2026; v1.7 v1.6 v1.5 9 Nov 2026; v1.4 8 Nov 2026; v1.0 4 Nov 2026): the ZSA Autopilot on the ZSA page.
 //
 // Waqas: "Put PRAs in the PRA, ZSAs in the ZSA, with same interface as Sys Lab but make the inputs more intuitive like
 // CMAs in safety lab"; "think about it similarly to how we built the planning auto pilot"; "the interface should be so
@@ -44,7 +44,7 @@
 //     over), and keeps a severity an engineer set in the report's Edit (row.severityBy === 'engineer').
 (function (root) {
     'use strict';
-    var VERSION = '1.8';   // 1.8 9 Nov 2026: the loss figure drawn with squared connectors in their own lanes (SLCcaReport.flow);   // 1.7 9 Nov 2026: proposed mitigations, path to compliance and conclusion per zone, written or AI drafted and accepted;   // 1.6 9 Nov 2026: every zone its own report, picked from a dropdown, with a register   // 1.5 9 Nov 2026: 3D model pictures per zone, picked beside its questions (spec.shots)
+    var VERSION = '1.9';   // 1.9 10 Nov 2026: each zone says what its kinds of equipment and its materials bring (zsa_type_hazards.js);   // 1.8 9 Nov 2026: the loss figure drawn with squared connectors in their own lanes (SLCcaReport.flow);   // 1.7 9 Nov 2026: proposed mitigations, path to compliance and conclusion per zone, written or AI drafted and accepted;   // 1.6 9 Nov 2026: every zone its own report, picked from a dropdown, with a register   // 1.5 9 Nov 2026: 3D model pictures per zone, picked beside its questions (spec.shots)
     // PHASE 2 SWITCH (8 Nov 2026): true hides the ZSA table, its entry form and the "Zone models" panel, because the
     // ZSA report (cca_report.js) holds every field with its own Edit and "Add a zone". Flip it when the report frame is wired.
     var TABLE_RETIRED = true;   // 8 Nov 2026 (v1.4): the report frame is wired, the table is retired
@@ -516,7 +516,7 @@
     var _secMemo = null;
     function _memoKey() {
         var res = compute(), pc = _pc();
-        try { return _hash(JSON.stringify([res ? res.cadId + '|' + res.zones.length : '', _peek().answers, _rows(), _g('routingData'), pc.macModels, pc.zonalAccepted, _items().length, _arr(_g('acFhaData')).length, _arr(_g('praData')).map(function (p) { return [p.praId, p.threat, p.affectedZones]; }), _arr(_g('systemsData')).length])); } catch (_) { return String(Math.random()); }
+        try { return _hash(JSON.stringify([res ? res.cadId + '|' + res.zones.length : '', _peek().answers, _rows(), _g('routingData'), pc.macModels, pc.zonalAccepted, _items().length, _arr(_g('acFhaData')).length, _arr(_g('praData')).map(function (p) { return [p.praId, p.threat, p.affectedZones]; }), _arr(_g('systemsData')).length, root.SLZsaTypeHazards ? root.SLZsaTypeHazards.memoPart() : ''])); } catch (_) { return String(Math.random()); }
     }
     function reportSections() {
         var key = _memoKey();
@@ -577,6 +577,9 @@
         else P(bySys.length ? 'None of the equipment in this zone is on the items list or recorded in the routing or zone record with a function; what it takes part in is known only through its system, below.' : 'No function is tied to the equipment in this zone: none of it is on the items list, linked to a system with functions, or recorded as housed here.');
         if (bySys.length) T(tid('sysfunctions'), 'Equipment in ' + title + ' that is not on the items list, with the functions of its system', ['Equipment', 'System', 'Functions of that system'], bySys.sort(function (a, b) { return _nat(a[1], b[1]) || _nat(a[0], b[0]); }));
         if (noSys.length) P('Equipment in the zone that is not linked to a system in this project, so the functions it performs are not known here: ' + _join(noSys.slice().sort(_nat)) + '.');
+
+        // 2b. what the equipment and materials in the zone bring (v1.9, 10 Nov 2026, zsa_type_hazards.js) ------------
+        if (z && root.SLZsaTypeHazards) { try { root.SLZsaTypeHazards.section(z, res.cadId, { title: title }).blocks.forEach(function (b) { if (b.type === 'table') T(b.id, b.title, b.columns, b.rows); else if (b.type === 'h') H(b.text); else P(b.text); }); } catch (e) { try { console.warn('[zsa] type hazards', e); } catch (_) {} } }
 
         // 3. what one event in the zone loses ---------------------------------------------------------------------
         H('What one event in the zone loses');
@@ -733,6 +736,17 @@
             { key: 'assessedOn', label: 'Assessed on', type: 'date', value: row ? row.assessedOn || '' : '', readOnly: auto, why: auto ? 'Recorded when the zone is signed in the ZSA Autopilot.' : '' },
             { key: 'findingStatus', label: 'Finding', type: 'select', options: [['open', 'Open'], ['closed', 'Closed (needs who, how, when and a mitigation)']], value: row ? row.findingStatus || 'open' : 'open', readOnly: auto, why: auto ? 'Closed when every decision is in and the zone is signed.' : '' }
         ].concat(ADJ.map(function (a) { var v = adj[a[0]]; return { key: 'adjacency.' + a[0], label: a[1], type: a[2], group: 'Where the zone sits (used when reasoning about particular risks)', value: a[2] === 'check' ? !!v : (Array.isArray(v) ? v.join(', ') : (v || '')) }; }));
+        // v1.9: what each unit in the zone is and what it is made of (zsa_type_hazards.js reads these first)
+        var TH = root.SLZsaTypeHazards, rz = auto && TH ? (compute() || { byCode: {} }).byCode[code] : null;
+        if (rz) {
+            var kopts = [['', 'Worked out by the tool']].concat(TH.kinds().map(function (k) { return [k.type, k.label]; })), G = 'What each piece of equipment is, and what it is made of';
+            rz.units.slice().sort(function (a, b) { return _nat(a.name, b.name); }).forEach(function (u) {
+                var fx = TH.facts(u.pid) || {}, wt = TH.unitType(Object.assign({}, u, { pid: null })), mt = TH.unitMaterial(Object.assign({}, u, { pid: null }), (compute() || {}).cadId);
+                var cadMat = TH.unitMaterial({ pid: u.pid, sysId: null }, (compute() || {}).cadId);
+                f.push({ key: 'unit.kind.' + u.pid, label: u.name + (u.designator ? ' (' + u.designator + '): what it is' : ': what it is'), type: 'select', group: G, options: kopts, value: fx.kind || '', help: wt ? 'The tool reads it as ' + TH.typeLabel(wt.type) + ', from ' + wt.from + '.' : 'The tool cannot tell what it is from its name or the CAD model.' });
+                f.push({ key: 'unit.material.' + u.pid, label: u.name + ': what it is made of', type: 'text', group: G, value: fx.material || '', help: (cadMat && !fx.material ? 'The CAD model records ' + cadMat.name + '.' : (mt && !fx.material ? 'Recorded: ' + mt.name + ' (' + mt.from + ').' : 'For example aluminum alloy, titanium, carbon fiber composite, magnesium.')) });
+            });
+        }
         return { zoneId: code, row: row ? row.internalId : null, inModel: auto, title: row ? _clean(code + ' ' + (row.desc || '')) : 'Add a zone', fields: f };
     }
     function _today() { return new Date().toISOString().slice(0, 10); }
@@ -750,7 +764,12 @@
         if (dup) return { ok: false, err: 'Zone ' + dup.zoneId + ' already has its record. Edit that one instead.', existing: dup.internalId };
         var next = Object.assign({}, row || {});
         next.zoneId = code;
+        // v1.9: what each unit is and is made of goes to its own store, never into the zone row
+        var TH = root.SLZsaTypeHazards, unitVals = {};
+        Object.keys(values).forEach(function (k) { var m = /^unit\.(kind|material)\.(.+)$/.exec(k); if (m && byKey[k]) { (unitVals[m[2]] = unitVals[m[2]] || {})[m[1]] = values[k]; } });
+        if (TH) Object.keys(unitVals).forEach(function (pid) { var fx = TH.facts(pid) || {}, v = unitVals[pid]; TH.setFacts(pid, 'kind' in v ? v.kind : fx.kind, 'material' in v ? v.material : fx.material, U() ? U().who() : 'Engineer'); });
         Object.keys(values).forEach(function (k) {
+            if (/^unit\.(kind|material)\./.test(k)) return;
             var f = byKey[k]; if (!f || f.readOnly || k === 'zoneId') return;
             var v = values[k];
             if (k.indexOf('adjacency.') === 0) {
