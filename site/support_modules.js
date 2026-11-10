@@ -1811,12 +1811,10 @@ function switchTab(tabId) {
     try {
         // Phase 63.2 — Interdependence / Resources / MAC live INSIDE the PASA workspace.
         // Every legacy caller (classic nav, cockpit deep links, command palette) redirects.
-        if (tabId === 'interdep' || tabId === 'resources' || tabId === 'mac') {
-            const sub = tabId === 'interdep' ? 'interdep' : tabId === 'resources' ? 'resources' : 'mac';
-            switchTab('pasa');
-            try { pasaSub(sub); } catch (_) {}
-            return;
-        }
+        // 10 Nov 2026 (the PASA Autopilot): the PASA page is the Autopilot; interdependence, common resources and CoFFE are
+        // answered inside it, so those old pages open the PASA. The MAC model and MF&MS are pages of their own beside the
+        // fault trees (pasa_autopilot.js draws the bar that joins them); the resource list is its own page again.
+        if (tabId === 'interdep' || tabId === 'coffe' || tabId === 'cockpit') { switchTab('pasa'); return; }
         // Phase 68 — FMEA is per-system now; there is no top-level FMEA tab. Any legacy
         // navigation to it (search jump, command palette, restored last-tab) lands on the
         // System Directory with a hint, so the user opens a System Folder to reach its FMEA.
@@ -1828,7 +1826,7 @@ function switchTab(tabId) {
         // navigation (restored last-tab, command palette, stray link) lands on the Sankey so
         // nobody hits a dead view.
         if (tabId === 'graph') { tabId = 'golden-thread'; }
-        const tabs = ['plan-auto', 'hfa-auto', 'hfa-results', 'dashboard', 'defs', 'ac-func', 'ac-fcim', 'phases', 'ac-fha', 'ac-req', 'ac-asm', 'items', 'ai', 'assumptions', 'sys-dir', 'sys-workspace', 'pra', 'zsa', 'cma', 'routing', 'resources', 'fmea', 'fta', 'library', 'markov', 'validation', 'trace', 'golden-thread', 'moc', 'baselines', 'cm', 'review', 'reqs-repo', 'arp-process', 'vv-status', 'dal-ref', 'ccmr', 'fmes', 'ipledger', 'pasa', 'asa', 'spp', 'hfa', 'hfa-tid', 'hfa-alloc', 'hfa-hea', 'hfa-alerts', 'hfa-task', 'hfa-cd', 'hfa-sa', 'hfa-mfc', 'hfa-ergo', 'stpa', 'interdep', 'conn', 'admin-ws', 'admin-lic'];   // 28 Oct 2026: the Admin page's three views
+        const tabs = ['mac', 'mfms', 'plan-auto', 'hfa-auto', 'hfa-results', 'dashboard', 'defs', 'ac-func', 'ac-fcim', 'phases', 'ac-fha', 'ac-req', 'ac-asm', 'items', 'ai', 'assumptions', 'sys-dir', 'sys-workspace', 'pra', 'zsa', 'cma', 'routing', 'resources', 'fmea', 'fta', 'library', 'markov', 'validation', 'trace', 'golden-thread', 'moc', 'baselines', 'cm', 'review', 'reqs-repo', 'arp-process', 'vv-status', 'dal-ref', 'ccmr', 'fmes', 'ipledger', 'pasa', 'asa', 'spp', 'hfa', 'hfa-tid', 'hfa-alloc', 'hfa-hea', 'hfa-alerts', 'hfa-task', 'hfa-cd', 'hfa-sa', 'hfa-mfc', 'hfa-ergo', 'stpa', 'interdep', 'conn', 'admin-ws', 'admin-lic'];   // 28 Oct 2026: the Admin page's three views
         // 2 Sep 2026 — the seven HF sub-lanes added after hfa-task/hfa-ergo were never
         // registered here. Their own module hid and showed them, so the views did not
         // stack, but the sidebar active state, the last-tab memory and the stepper all
@@ -1888,7 +1886,9 @@ function switchTab(tabId) {
         if (tabId === 'fmes')        { try { renderFmesPage(); } catch(e) { console.warn('renderFmesPage:', e); } }
         if (tabId === 'ipledger')    { try { renderIpLedgerPage(); } catch(e) { console.warn('renderIpLedgerPage:', e); } }
         if (tabId === 'spp')         { try { renderSppPage(); } catch(e) { console.warn('renderSppPage:', e); } }
-        if (tabId === 'pasa')        { try { pasaSub('cockpit'); } catch(e) { console.warn('pasa workspace:', e); } }
+        if (tabId === 'mac')         { try { renderMacPage(); } catch(e) { console.warn('renderMacPage:', e); } }
+        if (tabId === 'mfms')        { try { renderMfmsPanel(); } catch(e) { console.warn('renderMfmsPanel:', e); } }
+        if (tabId === 'resources')   { try { _populateResourceMultiselects({}); renderResources(); } catch(e) {} }
         if (tabId === 'asa')         { try { renderCockpitPage('ASA'); } catch(e) { console.warn('renderCockpitPage ASA:', e); } }
         if (tabId === 'golden-thread') { try { renderGoldenThreadView(); } catch(e) { console.warn('renderGoldenThreadView:', e); } try { renderInterfaces(); } catch(e) {} }
         if (tabId === 'moc') { try { renderMoCCatalogue(); renderMoCMatrix(); } catch(e) {} }

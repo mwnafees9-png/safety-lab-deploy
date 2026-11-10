@@ -42,9 +42,9 @@ const tick = (ms) => new Promise((r) => setTimeout(r, ms));
   check('S2 the bar draws the link at its end, opening the CAD page', /area\.cadLink \? '<a [^']*data-cad-link="1"[^']*onclick="switchTab\(\\'cad\\'\)">Open the CAD model/.test(PT));
   const grp = (IDX.match(/<details class="asb-grp" id="asb-grp-ac">[\s\S]*?<\/details>/) || [''])[0];
   check('S3 index.html: CAD Model is a row of its own in the Define group, right after Flight Phases', /id="snav-phases"[^\n]*\n(\s*<!--[^\n]*-->\n)?\s*<a class="asb-item sub" id="snav-cad" onclick="switchTab\('cad'\)"[^>]*><span class="asb-lbl">CAD Model<\/span><\/a>/.test(grp) && (IDX.match(/id="snav-cad"/g) || []).length === 1);
-  check('S4 nav_areas.js v1.7: CAD Model in Plan and basis after Flight Phases; the CAD page no longer lights the ZSA link', /VERSION = '1\.7'/.test(NAV) && /items: \['snav-plan-auto', 'snav-arp-process', 'snav-spp', 'snav-phases', 'snav-cad'\]/.test(NAV) && !/\bcad: 'snav-zsa'/.test(NAV) && /'snav-cad': 'CAD Model'/.test(NAV));
+  check('S4 nav_areas.js v1.7 or later: CAD Model in Plan and basis after Flight Phases; the CAD page no longer lights the ZSA link', parseFloat((/VERSION = '([0-9.]+)'/.exec(NAV) || [])[1]) >= 1.7 && /items: \['snav-plan-auto', 'snav-arp-process', 'snav-spp', 'snav-phases', 'snav-cad'\]/.test(NAV) && !/\bcad: 'snav-zsa'/.test(NAV) && /'snav-cad': 'CAD Model'/.test(NAV));
   check('S5 the MSG-3 zonal window and the PRA page carry the link (the PRA page through the Autopilot buttons)', /data-cad-link="1"[^\n]*switchTab\(\\'cad\\'\)/.test(M3) && /U\(\)\.importButtons\(true\)/.test(PA) && /data-slap-import="page" onclick="SLAutopilotUI\.openCad\(\)">Open the CAD Model page/.test(UI));
-  check('S6 pins moved: prove_tabs 1.9, nav_areas 2.1, msg3_zonal 1.22', /prove_tabs\.js\?v=1\.9"/.test(IDX) && /nav_areas\.js\?v=2\.1"/.test(IDX) && /msg3_zonal\.js\?v=1\.22"/.test(IDX));
+  check('S6 pins moved: prove_tabs 1.9, nav_areas 2.1 or later, msg3_zonal 1.22', /prove_tabs\.js\?v=1\.9"/.test(IDX) && parseFloat((/nav_areas\.js\?v=([0-9.]+)"/.exec(IDX) || [])[1]) >= 2.1 && /msg3_zonal\.js\?v=1\.22"/.test(IDX));
 
   let pw = null; try { pw = require('playwright'); } catch (_) {}
   if (!pw) { console.log('  SKIP  Playwright is not installed here; [B] needs the real app'); }

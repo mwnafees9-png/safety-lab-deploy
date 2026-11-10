@@ -50,7 +50,7 @@
 // ============================================================================
 (function (root) {
     'use strict';
-    var VERSION = '1.7';
+    var VERSION = '1.8';   // 1.8 10 Nov 2026: interdependence and CoFFE live in the PASA Autopilot; MAC, MF&MS and resources beside the fault trees (cascading effects too, its link staying in Common cause); the system PSSA tab is the PSSA Autopilot
     // A section: key, label, icon, scope ('aircraft' | 'system' | 'foot'), items (menu link ids, or a group
     // { group, label, ids }), and pages: every page (switchTab id) that belongs to it, with the link that stands
     // for it in the bar (a page that has no link of its own, such as the AFHA's Functions tab, lights its area's link).
@@ -61,7 +61,10 @@
         // the fault trees and diagram tools of a level are links made here (DYN below): their pages decide their
         // section from the tree home on screen (SLTreeHomes.navArea)
         { key: 'pasa', label: 'PASA', ic: '🌳', scope: 'aircraft', items: ['snav-pasa', 'snav-ac-req', 'snav-fta', 'sl-nav-diag-pasa'],
-          pages: { interdep: 'snav-pasa', resources: 'snav-pasa', mac: 'snav-pasa', mfms: 'snav-pasa', coffe: 'snav-pasa' } },
+          // 10 Nov 2026: interdependence and CoFFE are answered in the PASA Autopilot; the MAC model, MF&MS and the resource list
+          // sit beside the fault trees (cascading effects is reached there too, and keeps its link in Common cause, where its
+          // program plan lane switches it on and off)
+          pages: { interdep: 'snav-pasa', coffe: 'snav-pasa', resources: 'snav-fta', mac: 'snav-fta', mfms: 'snav-fta' } },
         { key: 'cca', label: 'Common cause', ic: '🔗', scope: 'aircraft', items: ['snav-zsa', 'snav-pra', 'snav-cma', 'snav-cea', 'snav-stpa'],
           pages: { zonal: 'snav-zsa', routing: 'snav-zsa', phys: 'snav-zsa', ipledger: 'snav-cma', cra: 'snav-cma' } },
         { key: 'asa', label: 'ASA', ic: '✈', scope: 'aircraft', items: ['snav-asa', 'sl-nav-trees-asa', 'snav-ccmr', 'snav-mmel', 'snav-sse'] },
@@ -150,7 +153,7 @@
         'sl-nav-diag-pasa':        ['Diagrams', function () { _homes() && _homes().openDiagrams('pasa'); }, 'Bow-ties, event trees, Markov models, monitors, exposure cases and frequency for the aircraft'],
         'sl-nav-trees-asa':        ['Verification trees', function () { _homes() && _homes().open('asa'); }, 'The aircraft\u2019s bottom-up verification trees, one for each PASA fault tree'],
         'sl-nav-sys-plan':         ['Analysis plan', function () { var id = _sysScope(); try { if (id != null && root.PROGRAM_PLAN && typeof root.PROGRAM_PLAN.openSystemPlanModal === 'function') root.PROGRAM_PLAN.openSystemPlanModal(id); } catch (_) {} }, 'The analyses this system is to have (copied from the aircraft\u2019s plan when the system was made, then its own): they decide the sections and tabs below'],
-        'sl-nav-pssa-alloc':       ['Allocation and DAL', function () { _openWs('pssa'); }, 'This system\u2019s allocation and DAL overview'],
+        'sl-nav-pssa-alloc':       ['PSSA', function () { _openWs('pssa'); }, 'This system\u2019s PSSA Autopilot: its report and its questions'],
         'sl-nav-pssa-req':         ['Requirements', function () { _openWs('req'); }, 'This system\u2019s requirements'],
         'sl-nav-trees-pssa':       ['Fault trees', function () { _homes() && _homes().open('pssa', _sysScope()); }, 'This system\u2019s top-down fault trees'],
         'sl-nav-diag-pssa':        ['Diagrams', function () { _homes() && _homes().openDiagrams('pssa', _sysScope()); }, 'Bow-ties, event trees, Markov models, monitors, exposure cases and frequency for this system'],

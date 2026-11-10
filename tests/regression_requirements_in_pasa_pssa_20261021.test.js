@@ -32,10 +32,12 @@ check('the Aircraft Safety (AFHA) tabs no longer offer requirements', acHeader.l
 check('the AFHA area tab bar (prove_tabs) no longer carries requirements', require('../site/prove_tabs.js').AREAS.every(a => a.label !== 'AFHA' || a.tabs.every(x => x.t !== 'ac-req')) && require('../site/prove_tabs.js').AREAS.every(a => a.tabs.every(x => x.t !== 'ac-req')));
 check('the AFHA tab map no longer lists ac-req', !/'ac-req'\s*:/.test(ui));
 check('the AFHA tab highlighter no longer lists req', /\['func','fcim','fha','asm'\]\.forEach\(s => \{\s*const btn = document\.getElementById\('ac-ws-tab-'/.test(helpers));
-const pasaNav = idx.slice(idx.indexOf('id="pasa-subnav"'), idx.indexOf('</div>', idx.indexOf('id="pasa-subnav"')));
-check('the PASA tab bar offers Aircraft Requirements', /id="pasa-tab-req" onclick="switchTab\('ac-req'\)"/.test(pasaNav));
-check('every other PASA tab opens the PASA first (the bar also shows above the requirements)', ['cockpit', 'interdep', 'mac', 'mfms', 'coffe'].every(k => new RegExp('id="pasa-tab-' + k + '"[^>]*onclick="pasaGo\\(\'' + k + '\'\\)"').test(pasaNav)));
-check('pasaGo opens the PASA when it is not on screen, then the page', /function pasaGo\(name\) \{[\s\S]{0,200}if \(cur !== 'pasa' && typeof switchTab === 'function'\) switchTab\('pasa'\);\s*pasaSub\(name\);/.test(misc) && /window\.pasaGo = pasaGo;/.test(sl));
+// 10 Nov 2026 (the PASA Autopilot): the PASA page's own tab row is gone; the aircraft PASA area's tabs across the top are
+// PASA (the Autopilot), Aircraft requirements (the one home for them), Fault trees and Diagrams (nav_areas.js)
+const NAVA = S('nav_areas.js');
+check('the PASA area offers Aircraft requirements as one of its tabs (PASA, Aircraft requirements, Fault trees, Diagrams)', /key: 'pasa', label: 'PASA', ic: '[^']+', scope: 'aircraft', items: \['snav-pasa', 'snav-ac-req', 'snav-fta', 'sl-nav-diag-pasa'\]/.test(NAVA));
+check('the old PASA tab row (and its duplicate Aircraft Requirements button) is gone from the page', idx.indexOf('id="pasa-subnav"') < 0 && idx.indexOf('id="pasa-tab-req"') < 0);
+check('pasaGo lands where each old tab now is (MAC model, MF&MS beside the trees; the rest the PASA)', /function pasaGo\(name\) \{[\s\S]{0,300}const to = \{ mac: 'mac', mfms: 'mfms', cea: 'cea', resources: 'resources', fta: 'fta' \}\[name\] \|\| 'pasa';/.test(misc) && /window\.pasaGo = pasaGo;/.test(sl));
 check('the sidebar lists Aircraft requirements under the PASA group', (() => { const a = idx.indexOf('id="asb-grp-pasa"'), b = idx.indexOf('id="asb-grp-asa"'), r = idx.indexOf('id="snav-ac-req"'); return a > 0 && r > a && r < b; })());
 check('the sidebar opens the PASA group for it, not the AFHA group', /inAfha = cur\.indexOf\('ac-'\) === 0 && cur !== 'ac-req'/.test(helpers) && /inPasa = \['pasa','ac-req',/.test(helpers));
 check('switchTab moves the PASA bar on every tab change', /_syncPasaNav\(tabId\)/.test(sup));

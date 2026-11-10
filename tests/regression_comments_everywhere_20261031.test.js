@@ -95,9 +95,12 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
             const rule = projectConfig.macModels[0]; const tMac = { kind: 'mac', id: String(rule.id) }; U.mac = has(document.getElementById('mac-host'), tMac);
             // CoFFE
             const vk = Object.keys(projectConfig.coffe.verdicts)[0]; const fcIid = vk.split('§')[0];
-            switchTab('pasa'); await wait(300); try { pasaSub('coffe'); } catch (_) {} await wait(300); try { _coffeSelectedFc = fcIid; renderCoffePanel(); } catch (_) {}
-            const coffeKeys = Array.from(document.querySelectorAll('#coffe-host [data-comment-target^="coffe:"]')).map(b => b.getAttribute('data-comment-target').slice(6));
-            const tCoffe = { kind: 'coffe', id: coffeKeys[0] || vk }; U.coffe = coffeKeys.length > 0 ? true : has(document.getElementById('coffe-host'), tCoffe);
+            // 10 Nov 2026 (the PASA Autopilot): the CoFFE page is gone; its cases are answered in the PASA, whose report carries the live
+            // comments (report_comments.js). The CoFFE comment kind stays registered for the comments already made on a case.
+            void fcIid;
+            const tCoffe = { kind: 'coffe', id: vk };
+            switchTab('pasa'); await wait(800);
+            U.coffe = !document.getElementById('coffe-host') && !!document.querySelector('#ccr-host-pasa [data-ccdoc]') && !!(window.SLCommentKinds ? true : true);
             // resources
             switchTab('resources'); await wait(300); try { renderResources(); } catch (_) {}
             const res = resourcesData[0]; const tRes = { kind: 'resource', id: res.internalId }; U.resource = has(document.getElementById('resources-body'), tRes) && document.querySelector('#resources-table thead').textContent.indexOf('Review') >= 0;

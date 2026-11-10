@@ -297,7 +297,7 @@ console.log('\n[7] each member takes the strictest DAL across failure conditions
         ftaPages[0].root.children[1].allocatedDAL === 'C' && ftaPages[1].root.children[1].allocatedDAL === 'B' && sRow && / B\.$/.test(sRow.text), sRow && sRow.text);
     const qRow = rows.find(r => /:Q$/.test(r.reqSource.sourceId));
     check('the claimed member is developed to the reduced DAL, and its rationale names the independence it rests on and what it reverts to',
-        ftaPages[1].root.children[0].allocatedDAL === 'D' && qRow && / IDAL D\.$/.test(qRow.text) && /rests on the independence requirements derived at/.test(qRow.rat) && /CMA pending/.test(qRow.rat) && /reverts to IDAL B/.test(qRow.rat), qRow && (qRow.text + ' | ' + qRow.rat));
+        ftaPages[1].root.children[0].allocatedDAL === 'D' && qRow && / IDAL D\.$/.test(qRow.text) && /rests on the independence requirements derived at/.test(qRow.rat) && /A common mode analysis must show them \(not done yet\)/.test(qRow.rat) && /reverts to IDAL B/.test(qRow.rat), qRow && (qRow.text + ' | ' + qRow.rat));
     // strictest smoothing of the would-be DAL within one tree
     globalThis.ftaPages = [{ id: 'p3', name: 'T', root: { id: 3, type: 'gate', gateType: 'OR', children: [
         { id: 31, logicalId: 'R', type: 'basic' },

@@ -23,7 +23,7 @@ console.log('[1] source');
   check('the why is capped at 20 words and the model is told the reply must fit', /at most 20 words/.test(src) && /Keep every why short: the reply must fit/.test(src));
   check('the toast names the first reason; the last sweep is exposed for the harness', /failures \+ ' failed — ' \+ reasons\[0\]/.test(src) && /window\.__idpSweepLast = \{ proposed: proposedN/.test(src));
   check('the harness keeps the sweep log', /sweepLog\.push\(window\.__idpSweepLast\)/.test(drv) && /sweepLog: sweepLog/.test(drv));
-  check('pin bumped (interdep_ai 1.2)', /interdep_ai\.js\?v=1\.2/.test(idx));
+  check('pin bumped (interdep_ai 1.2 or later)', parseFloat((/interdep_ai\.js\?v=([0-9.]+)/.exec(idx) || [])[1]) >= 1.2);
 }
 
 console.log('\n[2] executed — a cut-off reply lands its complete cells and reports the cut');

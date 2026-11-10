@@ -117,7 +117,7 @@ const asm = (over) => Object.assign({
         out.map(r => r.reqSource.generator).join(','));
     check('the action QUOTES the analyst, it does not paraphrase',
         by('hf-op-action').text.indexOf('"The PF re-trims manually within 3 s of an uncommanded trim input."') > 0 &&
-        /reproduced verbatim from the assumption/.test(by('hf-op-action').rat));
+        /The task is worded as the assumption words it\./.test(by('hf-op-action').rat));   // 10 Nov 2026 (Waqas: rationales in plain words, no tool notes): same meaning, plain words
     check('the timing requirement carries the number and the phase',
         /shall complete the task credited by ASM-HF-001 within 3 seconds during Approach\./.test(by('hf-op-timing').text));
     check('…and reports the share of the response window it eats',
@@ -129,15 +129,15 @@ const asm = (over) => Object.assign({
         /presented via the visual channel during Approach\./.test(by('hf-op-info').text),
         'got: ' + by('hf-op-info').text);
     check('…and says why the others were excluded rather than dropping them quietly',
-        /also declares cognitive, psychomotor/.test(by('hf-op-info').rat) &&
-        /not what the system must present/.test(by('hf-op-info').rat));
+        /also names cognitive, psychomotor/.test(by('hf-op-info').rat) &&
+        /not what the system must show/.test(by('hf-op-info').rat));
     check('every row is Operational class, Human Factors analysis, L1',
         out.every(r => r.type === 'Operational' && r.analysis === 'Human Factors' && r.level === 'L1'),
         'this is the type that had zero generators');
     check('the §5.1.8 mandate is on every rationale',
         out.every(r => /ARP4754B §5\.1\.8/.test(r.rat)));
-    check('an unvalidated credit says so, and names the invariant',
-        /is NOT yet validated/.test(by('hf-op-action').rat) && /INV-35/.test(by('hf-op-action').rat));
+    check('an unvalidated credit says so (in plain words: no invariant number in a rationale)',
+        /the credit is not shown yet, so the cautious case applies until it is/.test(by('hf-op-action').rat) && !/INV-35/.test(by('hf-op-action').rat));
     check('the failure condition it holds up is named, with its severity flagged',
         /Relied on by FC-01 \(includes a Catastrophic\/Hazardous condition\)/.test(by('hf-op-action').rat));
     check('sourceIds are stable and distinct per element',
@@ -173,17 +173,17 @@ console.log('\n[hf] …and what it refuses to invent');
     const noBasis = runGen([asm({ hf: Object.assign({}, asm().hf, { taskTimeBasis: '' }) })], []);
     const t = noBasis.find(r => r.reqSource.generator === 'hf-op-timing');
     check('an unsubstantiated task time is called one',
-        /No basis is recorded for this task time — it is an assumed number until one is\./.test(t.rat) &&
+        /No basis is recorded for this task time, so it is an assumed number until one is\./.test(t.rat) &&
         t.verifMethod === 'Analysis');
 
     const noWin = runGen([asm({ hf: Object.assign({}, asm().hf, { responsePhase: 'Cruise' }) })], []);
     check('a phase with no authored window says the saturation check is silent there',
-        /INV-36 saturation is silent here and this time is unbounded by anything/.test(
+        /so nothing yet limits how long this task may take/.test(
             noWin.find(r => r.reqSource.generator === 'hf-op-timing').rat));
 
     const over = runGen([asm({ hf: Object.assign({}, asm().hf, { taskTimeS: 27 }) })], []);
     check('a task time past the 80% red line is flagged on the requirement itself',
-        /past the 80% time-occupancy red line before any co-activated task is counted \(INV-36\)/.test(
+        /already past the 80% limit of the crew's time before any task at the same time is counted/.test(
             over.find(r => r.reqSource.generator === 'hf-op-timing').rat));
 
     const prev = runGen([asm({ hf: Object.assign({}, asm().hf, { direction: 'prevention' }) })], []);
@@ -195,7 +195,7 @@ console.log('\n[hf] …and what it refuses to invent');
 
     const orphan = runGen([asm()], []);
     check('an unlinked credit is reported rather than looking load-bearing',
-        /Not yet linked to a failure condition — the credit is recorded but nothing rests on it\./.test(
+        /It is not linked to a failure condition yet, so nothing rests on this credit so far\./.test(
             orphan.find(r => r.reqSource.generator === 'hf-op-action').rat));
 }
 

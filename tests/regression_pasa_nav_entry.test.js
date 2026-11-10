@@ -14,8 +14,9 @@ let pass = 0, fail = 0;
 function check(name, cond, detail) { if (cond) { pass++; console.log('  PASS  ' + name); } else { fail++; console.log('  FAIL  ' + name + (detail ? ' — ' + detail : '')); } }
 const grp = idx.slice(idx.indexOf('id="asb-grp-pasa"'), idx.indexOf('id="asb-grp-asa"'));
 check('the PASA group opens with an entry for the PASA workspace itself', /<a class="asb-item sub" id="snav-pasa" onclick="switchTab\('pasa'\)"/.test(grp));
-check('… it says what is on the page in words (no internal codes)', /PASA — interdependence · MAC · MF&amp;MS · CoFFE/.test(grp) && /Interdependence & Common Resources, MAC Model, MF&MS and CoFFE present as tabs on the page/.test(grp));
+// 10 Nov 2026: the PASA page is the PASA Autopilot (interdependence, common resources and CoFFE answered in it)
+check('… it says what is on the page in words (no internal codes)', /<span class="asb-lbl">PASA Autopilot<\/span>/.test(grp) && /interdependence, common resources and CoFFE are answered in it/.test(grp));
 check('… and it comes BEFORE Fault Tree Analysis', grp.indexOf('id="snav-pasa"') < grp.indexOf('id="snav-fta"'));
-check('switchTab knows the pasa tab and opens it on the Cockpit sub-tab', /'pasa'/.test(sup.slice(sup.indexOf('function switchTab('), sup.indexOf('function switchTab(') + 6000)) && /if \(tabId === 'pasa'\)\s+\{ try \{ pasaSub\('cockpit'\); \}/.test(sup));
+check('switchTab knows the pasa tab; the old sub-pages (interdep, coffe, cockpit) open the PASA', /'pasa'/.test(sup.slice(sup.indexOf('function switchTab('), sup.indexOf('function switchTab(') + 6000)) && /if \(tabId === 'interdep' \|\| tabId === 'coffe' \|\| tabId === 'cockpit'\) \{ switchTab\('pasa'\); return; \}/.test(sup));
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

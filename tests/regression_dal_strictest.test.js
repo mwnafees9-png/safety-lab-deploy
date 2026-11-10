@@ -67,7 +67,7 @@ check('one register row per shared event — not one per tree', xRows.length ===
 check('the register takes the MAX of the resulting DALs (A over C)', xRows[0] && / A\.$/.test(xRows[0].text), xRows[0] && xRows[0].text);
 check('sourceId carries the GOVERNING page (no churn for the strict tree)', xRows[0].reqSource.sourceId === 'ac:dalgebra:p1:X');
 check('rationale NAMES the disagreeing derivation and refuses to merge arguments',
-  /PASA · Major derives C/.test(xRows[0].rat) && /not merged/.test(xRows[0].rat) && /Governing derivation: PASA · Cat/.test(xRows[0].rat),
+  /PASA · Major derives C/.test(xRows[0].rat) && /each tree's case for a lower level stands on its own/.test(xRows[0].rat) && /The level comes from the tree for PASA · Cat/.test(xRows[0].rat),   // 10 Nov 2026 (Waqas: rationales in plain words, no tool notes): 
   xRows[0].rat);
 check('context.disagree records the competing tree', Array.isArray(xRows[0].reqSource.context.disagree) && xRows[0].reqSource.context.disagree.length === 1);
 
@@ -107,7 +107,7 @@ check('... and still one requirement per EVENT (gates 1,2 + lids X,12: X once, n
   comp.length === 4 && comp.every(r => r.reqSource.generator === 'dalgebra'), JSON.stringify(comp.map(r => r.reqSource.sourceId)));
 const compX = comp.find(r => r.reqSource.sourceId.endsWith(':X'));
 check('... the shared event lands at the max, disagreement named, no "Exception to default" wording',
-  !!compX && / A\.$/.test(compX.text) && /not merged/.test(compX.rat) && !/Exception to default/.test(compX.rat), compX ? compX.rat : 'missing');
+  !!compX && / A\.$/.test(compX.text) && /stands on its own/.test(compX.rat) && !/Exception to default/.test(compX.rat), compX ? compX.rat : 'missing');
 projectConfig.autoreqDalMode = 'explicit';
 
 // ---- A11: linkedFhaIds-only pages seed --------------------------------------

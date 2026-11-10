@@ -1,4 +1,6 @@
 // ============================================================================
+// req_basis.js v1.3 (10 Nov 2026): a requirement with no rationale says "Rationale missing" (an imported one too, never blank);
+// a promoted assumption's rationale is a plain sentence (req_trace.js adds where each requirement is driven from).
 // req_basis.js — v1.1 — Q1 + Q2 + Q3 (27 Sep 2026): the basis of a requirement.
 //
 // Three small hardenings from the CCA list, one module, because they share the
@@ -170,10 +172,10 @@
     // Build the requirement row for an assumption. Pure: returns the row, writes nothing.
     function buildPromotion(a, st) {
         var text = String(a.text || a.statement || '').trim();
-        var rat = 'Promoted from assumption ' + a.asmId + (a.origin ? ' (' + a.origin + ')' : '') + '.';
+        var rat = 'The analysis rests on assumption ' + a.asmId + (a.origin ? ' (' + a.origin + ')' : '') + ', so it is made a requirement.';
         if (!_blank(a.rationale)) rat += ' ' + String(a.rationale).trim();
-        if (isCredited(a)) rat += ' Credited posture: ' + String(a.credited).trim() + '.';
-        if (!_blank(a.uncredited)) rat += ' Uncredited posture: ' + String(a.uncredited).trim() + '.';
+        if (isCredited(a)) rat += ' With the credit: ' + String(a.credited).trim() + '.';
+        if (!_blank(a.uncredited)) rat += ' Without the credit: ' + String(a.uncredited).trim() + '.';
         var tag = tagOfAsm(a);
         var by = '';
         try { if (typeof _signoffReviewerName === 'function') by = _signoffReviewerName() || ''; } catch (_) {}
@@ -414,7 +416,8 @@
             tr.setAttribute('data-rb-tag', tag);
             var cells = tr.querySelectorAll('td');
             if (tag && cells.length > 3) cells[3].insertAdjacentHTML('beforeend', tagPill(tag, tagSource(r)));
-            if (isSafetyDerived(r) && _blank(r.rat) && cells.length > 5) cells[5].insertAdjacentHTML('beforeend', '<span style="font-size:10px;color:#9A6200;font-weight:700;" title="A safety requirement needs a rationale">● no rationale</span>');
+            // 10 Nov 2026: written out on every row that has none (an imported row too), never left blank (req_trace.js styles it)
+            if (_blank(r.rat) && cells.length > 5) cells[5].insertAdjacentHTML('afterbegin', '<span class="rt-miss" data-rt-miss="rationale" title="Every requirement needs a rationale">Rationale missing</span>');
             tr.setAttribute('data-rb', '1'); n++;
         });
         return n;

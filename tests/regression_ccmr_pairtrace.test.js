@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 /*
+ * 10 Nov 2026: the rationale assertions follow the plain-words rewrite (Waqas: no tool notes, no source keys, no invariant numbers in rationales).
  * Regression — the CCMR pair-trace batch (Waqas's rulings, recorded in
  * HANDOFF §1b "CCMR τ vs the NTE bound"):
  *
@@ -50,10 +51,12 @@ check('NO new requirement text: the three text templates are byte-identical to t
   am.includes('shall provide continuous failure monitoring achieving a mean repair rate of at least ${(+node.mu).toExponential(2)} per hour.') &&
   am.includes('shall not exceed ${pFc.toExponential(2)} per flight.'),
   'the 3 Aug refinement: the safety requirement keeps its ORIGINAL probabilistic wording; τ stays authored');
-check('the App I receipt cites §I.3.3.2 by clause number AND title, no SAE prose',
-  am.includes('ARP4761A App I §I.3.3.2, "The Relationship Between TSF and Periodic Inspection/Repair Times"') &&
+// 10 Nov 2026 (Waqas: "Rewrite AutoReq rationales that read like tool notes ... into plain sentences"): the receipt says what
+// the check means in plain words (how long a hidden failure lasts with it), no clause tags in the requirement text.
+check('the receipt is in plain words (how long a hidden failure lasts with this check), no SAE prose',
+  am.includes('with this check a hidden failure lasts on average about') &&
   !/could be scheduled and transition/.test(am),
-  'SAE copyright posture: clause numbers + titles only');
+  'SAE copyright posture: no standard text in the rationale');
 const pinOf = re => parseFloat((idx.match(re) || [])[1]);
 check('index.html floors: helpers ≥ 2.26, assurance ≥ 1.18 (floors from birth — §7.3)',
   pinOf(/helpers_modules\.js\?v=([0-9.]+)/) >= 2.26 && pinOf(/assurance_modules\.js\?v=([0-9.]+)/) >= 1.18);
@@ -157,12 +160,12 @@ check('context carries the cross-trace: governedBy = the derived fha-prob source
   aInt.reqSource.context.governedBy === 'ac:fha:prob:11' &&
   aInt.reqSource.context.governingFcId === 'SF-77-TL' &&
   aInt.reqSource.context.governingSeverity === 'Catastrophic');
-check('the rationale names the governing safety requirement, both-ways style',
-  aInt.rat.includes('Implements and verifies the governing probabilistic safety requirement for SF-77-TL (Catastrophic) — ac:fha:prob:11'));
+check('the rationale names the governing safety requirement (by its failure condition, never by a source key), both-ways style',
+  aInt.rat.includes('It makes good the probability requirement of SF-77-TL (Catastrophic).') && !aInt.rat.includes('ac:fha:prob:11'));
 check('ACCEPTED pair: no preview caveat, context.governingAccepted true',
   aInt.reqSource.context.governingAccepted === true && !aInt.rat.includes('not yet in the register'));
 check('the CCMR CONFLICT rationale fires from the MIRROR row (allocation row alone has no bound)',
-  aInt.rat.includes('CCMR CONFLICT') && aInt.rat.includes('320'),
+  aInt.rat.includes('Conflict: the longest check interval the analysis allows') && aInt.rat.includes('320'),
   'before this build the lookup only saw the allocation page\'s own row, whose nte is always null');
 check('the fingerprint carries the governing link and register state',
   aInt.reqSource.fingerprint.includes('ac:fha:prob:11') && aInt.reqSource.fingerprint.includes('gov-accepted'));
@@ -174,8 +177,8 @@ const bInt = intervalOf(B.__out.fta());
 check('the trace is STILL emitted against the derived sourceId (the FHA row is the anchor)',
   bInt.reqSource.context.governedBy === 'ac:fha:prob:11');
 check('…and the rationale names the gap and the remedy',
-  bInt.rat.includes('not yet in the register (fha-prob preview only)') &&
-  bInt.rat.includes('run AutoReq with the FHA generator'));
+  bInt.rat.includes('That probability requirement is not in the register yet') &&
+  bInt.rat.includes('accept the failure condition requirements'));
 check('register state rides the fingerprint: accepting the safety req re-flags the pair (self-heal)',
   bInt.reqSource.fingerprint.includes('gov-preview') &&
   bInt.reqSource.fingerprint !== aInt.reqSource.fingerprint);
@@ -186,12 +189,12 @@ const C = world({ pages: PAGES({ repairModel: 'monitored', mu: 2e-3 }), acFha: [
 const cInt = intervalOf(C.__out.fta());
 check('the monitored-repair requirement carries the same cross-trace',
   !!cInt && cInt.reqSource.context.governedBy === 'ac:fha:prob:11' &&
-  cInt.rat.includes('Implements and verifies the governing probabilistic safety requirement') &&
+  cInt.rat.includes('It makes good the probability requirement of SF-77-TL') &&
   cInt.reqSource.fingerprint.includes('gov-accepted'));
 const E = world({ pages: [{ id: 'pg-x', name: 'Unlinked', root: { id: 3, logicalId: 601, type: 'basic', name: 'Orphan latent', probability: '1e-5', repairModel: 'periodic', tau: 400 } }], acFha: [FHA_ROW], acReq: [], sweep: [] });
 const eInt = E.__out.fta().find(r => r.reqSource.sourceId === 'ac:fta-interval:601');
 check('a page with NO linked FHA emits the interval req with no phantom trace',
-  !!eInt && eInt.reqSource.context.governedBy === undefined && !eInt.rat.includes('governing probabilistic safety requirement'));
+  !!eInt && eInt.reqSource.context.governedBy === undefined && !eInt.rat.includes('It makes good the probability requirement'));
 
 // ---- [5] App I §I.3.3.2 receipt (fold-in ruled 4 Aug) -----------------------
 console.log('\n[pairtrace] App I §I.3.3.2 interval↔rate equivalence receipt');
@@ -201,20 +204,20 @@ const dInt = intervalOf(D.__out.fta());
 // Independent math: T_TSF = τ/(1 − e^(−λτ)) − 1/λ  (λ=1e-4, τ=500 → ≈252 h), μ_eq = 1/T_TSF.
 const tsf = 500 / (1 - Math.exp(-1e-4 * 500)) - 1 / 1e-4;
 check('the receipt appears with the EXACT dwell (not the τ/2 shortcut) — independently recomputed here',
-  dInt.rat.includes('§I.3.3.2') && dInt.rat.includes((+tsf).toPrecision(3) + ' h') && Math.abs(tsf - 252.08) < 0.1,
-  'rat: ' + dInt.rat.slice(dInt.rat.indexOf('Interval↔rate')));
-check('…and the equivalent continuous repair rate μ_eq = 1/T_TSF (§I.3.3.3 form)',
-  dInt.rat.includes((1 / tsf).toExponential(2) + '/h'));
+  dInt.rat.includes('lasts on average about ' + (+tsf).toPrecision(3) + ' hours') && Math.abs(tsf - 252.08) < 0.1,
+  'rat: ' + dInt.rat);
+check('…and the equivalent continuous repair rate μ_eq = 1/T_TSF, in words',
+  dInt.rat.includes('the same as repairing it at about ' + (1 / tsf).toExponential(2) + ' per hour'));
 check('…and names the model\'s actual repair transition so the two lanes reconcile',
-  dInt.rat.includes('Markov model "Pitch FCC pair"') && dInt.rat.includes('Failed→Working @ 2.00e-3/h') &&
-  dInt.rat.includes('must tell one story'));
+  dInt.rat.includes('Markov model "Pitch FCC pair"') && dInt.rat.includes('Failed to Working at 2.00e-3 per hour') &&
+  dInt.rat.includes('must agree'));
 check('the receipt rides the fingerprint (model edits re-stale the pair)',
   dInt.reqSource.fingerprint.includes('appI') && dInt.reqSource.fingerprint.includes('mkv-1'));
-check('no Markov link → no receipt (world A is receipt-free)', !aInt.rat.includes('§I.3.3.2'));
+check('no Markov link → no receipt (world A is receipt-free)', !aInt.rat.includes('Markov model'));
 const D2 = world({ pages: PAGES({ repairModel: 'periodic', tau: 500, markovModelId: 'mkv-2' }), acFha: [FHA_ROW], acReq: [], sweep: [],
   markov: { 'mkv-2': { id: 'mkv-2', name: 'No-repair model', states: [{ name: 'Up', isFailed: false }, { name: 'Down', isFailed: true }], transitions: [{ from: 'Up', to: 'Down', rate: 1e-4 }] } }, lambda: 1e-4 });
 check('a model with NO repair transition gets told to add one at μ_eq, not silently passed',
-  intervalOf(D2.__out.fta()).rat.includes('declares no repair transition out of a failed state'));
+  intervalOf(D2.__out.fta()).rat.includes('The model has no repair out of a failed state'));
 
 // ---- [6] reverse trace on the safety requirement ---------------------------
 console.log('\n[pairtrace] reverse trace — fha-prob names its implementing maintenance reqs');
@@ -222,15 +225,15 @@ const F = world({ pages: PAGES({ repairModel: 'periodic', tau: 500 }), acFha: [F
 const fProb = F.__out.fha().find(r => r.reqSource && r.reqSource.generator === 'fha-prob');
 check('the safety requirement text is UNTOUCHED — original probabilistic form, one shall',
   !!fProb && /^The probability of total loss of pitch control shall not exceed \S+ per flight\.$/.test(fProb.text), fProb && fProb.text);
-check('context.implementedBy lists the interval sourceId; rationale cross-refs it + INV-46',
+check('context.implementedBy lists the interval sourceId; the rationale says in words that the check requirement carries the credit and a longer interval is a conflict (no source key, no invariant number)',
   JSON.stringify(fProb.reqSource.context.implementedBy) === '["ac:fta-interval:501"]' &&
-  fProb.rat.includes('Implemented and verified by the repair-credit maintenance requirement(s) ac:fta-interval:501') &&
-  fProb.rat.includes('INV-46'));
+  fProb.rat.includes('The check requirement for the event whose hidden failure the tree counts on being found carry the repair credit') &&
+  fProb.rat.includes('is shown as a conflict') && !fProb.rat.includes('INV-46') && !fProb.rat.includes('ac:fta-interval:501'));
 check('…and the pair tokens ride the fingerprint', fProb.reqSource.fingerprint.includes('"impl"'));
 const G = world({ pages: [], acFha: [FHA_ROW], acReq: [], sweep: [] });
 const gProb = G.__out.fha().find(r => r.reqSource && r.reqSource.generator === 'fha-prob');
 check('NO repair-credit events → empty implementedBy, no rationale line, and — the churn pin — a fingerprint IDENTICAL to the pre-batch form',
-  gProb.reqSource.context.implementedBy.length === 0 && !gProb.rat.includes('Implemented and verified') &&
+  gProb.reqSource.context.implementedBy.length === 0 && !gProb.rat.includes('carry the repair credit') &&
   !gProb.reqSource.fingerprint.includes('"impl"'),
   'projects without repair models (every current demo) must see ZERO fha-prob re-stale churn from this batch');
 

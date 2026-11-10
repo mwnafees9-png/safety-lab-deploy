@@ -164,9 +164,9 @@ const GATED = [
   ['helpers_modules.js',   'renderMacPage',         'mac-host',                'mac'],
   ['fta_quant_modules.js', 'renderMarkovModels',    'markov-models-container', 'markov'],
   ['helpers_modules.js',   'renderInterdepPage',    'interdep-host',           'interdep'],
-  ['helpers_modules.js',   'renderCoffePanel',      'coffe-host',              'pasa'],
+  ['helpers_modules.js',   'renderCoffePanel',      'coffe-host',              null],   // 10 Nov 2026: the CoFFE page is gone (its cases are answered in the PASA Autopilot): no host, the panel draws nothing
   ['helpers_modules.js',   'renderSystemDirectory', 'sys-directory-grid',      'sys-dir'],
-  ['helpers_modules.js',   'renderMfmsPanel',       'mfms-host',               'pasa'],
+  ['helpers_modules.js',   'renderMfmsPanel',       'mfms-host',               'mfms'],   // 10 Nov 2026: MF&MS is its own page beside the fault trees
   ['helpers_modules.js',   'renderItems',           'item-body',               'items'],
   ['helpers_modules.js',   'renderCockpitPage',     null,                      null],   // host is 'ckpt-page-' + key, built at run time
   ['fta_view_modules.js',  'renderFTASidebar',      'fta-sidebar-list',        'fta'],
@@ -200,7 +200,8 @@ console.log('[L9] arrival hooks and export settles');
   const st = sup.slice(sup.indexOf('function switchTab('), sup.indexOf('Phase 53.70'));
   check('switchTab flushes after showing the view', /SLLazy\.flush\(\)/.test(st) && st.indexOf('SLLazy.flush()') > st.indexOf("tabId === 'fta'"));
   const ps = misc.slice(misc.indexOf('function pasaSub('), misc.indexOf('function pasaSub(') + 3000);
-  check('pasaSub flushes after showing the lane', /SLLazy\.flush\(\)/.test(ps) && ps.indexOf('SLLazy.flush()') > ps.indexOf("name === 'coffe'"));
+  // 10 Nov 2026: the PASA tab row is gone; pasaSub lands on the page through switchTab, which flushes after showing it
+  check('pasaSub lands on the page through switchTab (which flushes after showing the view)', /function pasaSub\(name\) \{ pasaGo\(name\); \}/.test(misc) && /if \(typeof switchTab === 'function'\) switchTab\(to\);/.test(ps.length ? misc.slice(misc.indexOf('function pasaGo('), misc.indexOf('function pasaGo(') + 400) : ''));
   const settles = (dop.match(/SLLazy\.settle\('fta-svg'\)/g) || []).length;
   check('both fault-tree exports settle the canvas before reading it', settles === 2, String(settles));
   const svgReads = (dop.match(/getElementById\('fta-svg'\)/g) || []).length;

@@ -1,4 +1,4 @@
-// cca_report.js (SLCcaReport v1.9, 10 Nov 2026: the AI drafts only once the questions are answered; live comments in the margin; images and captions centered; v1.8 10 Nov 2026; v1.7 9 Nov 2026; v1.6 9 Nov 2026; v1.5 9 Nov 2026; v1.4 9 Nov 2026; v1.3 9 Nov 2026; v1.2 8 Nov 2026): the shared report frame of the PRA, ZSA and CMA Autopilots.
+// cca_report.js (SLCcaReport v2.0, 10 Nov 2026: reports with a front and appendices, the dropdown picks the front or one appendix, parts written once per report (the PASA and PSSA Autopilots); v1.9 10 Nov 2026: the AI drafts only once the questions are answered; live comments in the margin; images and captions centered; v1.8 10 Nov 2026; v1.7 9 Nov 2026; v1.6 9 Nov 2026; v1.5 9 Nov 2026; v1.4 9 Nov 2026; v1.3 9 Nov 2026; v1.2 8 Nov 2026): the shared report frame of the PRA, ZSA and CMA Autopilots.
 // v1.8 (10 Nov 2026): Waqas: "we also need to fix how we are not using the full width of the page for the text", for all the
 // reports. Paragraphs, leads, lists, captions and the written parts now run the full width of the document column, the
 // same width as the tables (the 78ch and 980px caps are gone). A section may carry { k:'html', html } (preview only, never in
@@ -104,6 +104,12 @@
 //                 once ready (every question for it answered); the part says what is left. Without it, always ready.
 //   (v1.9) every preview is decorated with live comments in its margin (report_comments.js); written parts' paragraphs carry
 //                 data-cc-authp so a comment on them can be fixed with the AI.
+//   appendices    optional (v2.0): true: a report is its front (front, inputs and outputs, after, outputs and acceptance) and then
+//                 one appendix per section ("Appendix A: ...", sub-headings A.1, tables and figures A.1); { k:'rauth', aid?,
+//                 asHeading? } in front or after places the parts written once for the whole report (spec.reportAuthored,
+//                 same shape as authored; the AI drafts them with spec.reportFacts(reportId) and the report's sections).
+//   tabs.parts    optional (v2.0, with appendices): the dropdown lists each report's front and its appendices; the tab is
+//                 '<report>' or '<report>::<section>'; R.ridOf(tab), R.partOf(tab); renderQuestions(R, tab) gets the whole tab.
 //   shotsFocus()  optional (v1.3, pages without tabs): the section whose pictures the left pane asks about now.
 //   live(nodeId)  optional: where the program stands for a figure box (shown in the panel only, on request)
 //   node(nodeId)  optional: the panel for the module's own figure boxes: { title, does, inputs: [what], outputs:
@@ -118,7 +124,7 @@
 // text (live counts appear only in the panel when asked), plain words, no em dashes.
 (function (root) {
     'use strict';
-    var VERSION = '1.9';   // 1.9 10 Nov 2026: the AI drafts a part only once its questions are answered (spec.aiReady);   // 1.8 10 Nov 2026: text the full width of the document column; { k:'html' } preview-only blocks;   // 1.7 9 Nov 2026: column diagrams with squared connectors in their own lanes, never through a box, lit on hover (flow);   // 1.6 9 Nov 2026: the parts the engineer writes (spec.authored): write it or draft it with the AI, accepted by a person;   // 1.5 9 Nov 2026: every subject its own report, picked from one dropdown, with a register (spec.reports)   // 1.4 9 Nov 2026: pictures placed in the story (shotslot), per-source pictures ticked by default; 1.3: 3D model pictures (spec.shots)
+    var VERSION = '2.0';   // 2.0 10 Nov 2026: reports with a front and appendices (spec.appendices), the dropdown picks the front or one appendix (tabs.parts), parts written once per report (spec.reportAuthored, { k:'rauth' });   // 1.9 10 Nov 2026: the AI drafts a part only once its questions are answered (spec.aiReady);   // 1.8 10 Nov 2026: text the full width of the document column; { k:'html' } preview-only blocks;   // 1.7 9 Nov 2026: column diagrams with squared connectors in their own lanes, never through a box, lit on hover (flow);   // 1.6 9 Nov 2026: the parts the engineer writes (spec.authored): write it or draft it with the AI, accepted by a person;   // 1.5 9 Nov 2026: every subject its own report, picked from one dropdown, with a register (spec.reports)   // 1.4 9 Nov 2026: pictures placed in the story (shotslot), per-source pictures ticked by default; 1.3: 3D model pictures (spec.shots)
     function E(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
     function J(v) { return E(JSON.stringify(v)); }
     function g(name) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(name); if (v !== undefined) return v; } } catch (_) {} try { return root[name]; } catch (_) { return undefined; } }
@@ -319,11 +325,14 @@
         // shown with what it rests on and the checks it failed, never in the report until a person accepts it; the run can
         // be stopped). Kept in projectConfig.ccaReports[key].authored[sectionId][partId] = { text, by, at, source, draft }.
         function authDefs() { return Array.isArray(spec.authored) ? spec.authored.filter(function (a) { return a && a.id; }) : []; }
+        // v2.0: the parts written once for a whole report (spec.reportAuthored) are asked for with the report's id
+        function isRepId(sid) { if (!Array.isArray(spec.reportAuthored)) return false; var secs = secsOf(ctxOf()) || []; if (secs.some(function (x) { return x && x.id === String(sid); })) return false; return repList(secs).some(function (r) { return r.id === String(sid); }); }
+        function defsFor(sid) { return isRepId(sid) ? spec.reportAuthored.filter(function (a) { return a && a.id; }) : authDefs(); }
         function authStore(sid, write) { var s0 = store(); if (!s0.authored || typeof s0.authored !== 'object') { if (!write) return {}; s0.authored = {}; } var m = s0.authored[sid]; if (!m || typeof m !== 'object') { if (!write) return {}; m = s0.authored[sid] = {}; } return m; }
         function authOf(sid, aid) { return authStore(sid)[aid] || null; }
-        function authBlocks(sid, forExport) {
+        function authBlocks(sid, forExport, defs) {
             var out = [];
-            authDefs().forEach(function (a) {
+            (defs || authDefs()).forEach(function (a) {
                 var r = authOf(sid, a.id), txt = r && r.text ? String(r.text).trim() : '';
                 out.push({ k: 'part', text: a.title, auth: a.id });
                 if (txt) txt.split(/\n\s*\n/).forEach(function (para) { if (para.trim()) out.push({ k: 'p', text: para.trim().replace(/\s*\n\s*/g, ' '), authp: key + '|' + sid + '|' + a.id }); });
@@ -333,7 +342,7 @@
             return out;
         }
         function authFacts(sid) {
-            var all = secsOf(ctxOf({ forExport: true })) || [], rr = spec.authoredAt === 'report' ? repOf(sid, all) : null;
+            var all = secsOf(ctxOf({ forExport: true })) || [], rr = (spec.authoredAt === 'report' || isRepId(sid)) ? repOf(sid, all) : null;
             var list = rr ? all.filter(function (x) { return rr.sections.indexOf(x.id) >= 0; }) : all.filter(function (x) { return x.id === sid; });
             if (!list.length && !rr) return '';
             var lines = rr ? ['Report: ' + rr.label + (list.length ? '' : ' (nothing in it yet)')] : [];
@@ -343,7 +352,8 @@
                 else if (b.k === 'p' && b.text) lines.push(String(b.text).replace(/\*\*/g, ''));
                 else if (b.k === 'table' && b.rows && b.rows.length) { lines.push('Table: ' + (b.title || b.name)); b.rows.slice(0, 60).forEach(function (r) { lines.push(JSON.stringify(r)); }); if (b.rows.length > 60) lines.push('(' + (b.rows.length - 60) + ' more rows)'); }
             }); });
-            authDefs().forEach(function (a) { var r = authOf(sid, a.id); if (r && r.text) lines.push('', '## ' + a.title + ' (written by the engineer)', String(r.text)); });
+            if (rr && typeof spec.reportFacts === 'function') { var rf = safe(function () { return spec.reportFacts(sid); }, ''); if (rf) lines.unshift(String(rf), ''); }
+            defsFor(sid).forEach(function (a) { var r = authOf(sid, a.id); if (r && r.text) lines.push('', '## ' + a.title + ' (written by the engineer)', String(r.text)); });
             return lines.join('\n').slice(0, 60000);
         }
         // v1.9 (10 Nov 2026, Waqas: "AI doesnt draft till people have answered the questions"): the AI drafts a part only
@@ -354,25 +364,25 @@
             return { ready: !!r.ready, left: Array.isArray(r.left) ? r.left : [] };
         }
         async function authAi(sid, aid) {
-            var a = authDefs().filter(function (x) { return x.id === aid; })[0]; if (!a) throw fail('No such part.');
+            var a = defsFor(sid).filter(function (x) { return x.id === aid; })[0]; if (!a) throw fail('No such part.');
             var gate = aiReady(sid);
             if (!gate.ready) throw fail(('Answer the questions for this part first, then the AI can draft it. Still to answer: ' + gate.left.slice(0, 6).join('; ') + (gate.left.length > 6 ? '; and the rest in the list on the left' : '') + '.').replace(/\?\.$/, '?'));
             var AI = root.SafetyLabAI, RA = root.SLReportAI;
             if (!AI || typeof AI.complete !== 'function' || !RA) throw fail('The AI is not set up in this project. Write this part yourself, or set the AI up in Settings.');
             var heading = String(a.title).replace(/^\d+(\.\d+)*\.?\s*/, '');
             var system = RA.systemPrompt(spec.aiType || spec.code || key.toUpperCase(), { name: spec.title }, { heading: heading, prose: a.purpose || '' });
-            var res = await AI.complete({ feature: 'report.section.draft', system: system, messages: [{ role: 'user', content: 'The project data for this section of the ' + spec.title + ' (' + (repOfSection(sid) || { label: sid }).label + '):\n\n' + authFacts(sid) }], maxTokens: 1400 });
+            var res = await AI.complete({ feature: 'report.section.draft', system: system, messages: [{ role: 'user', content: 'The project data for this section of the ' + spec.title + ' (' + (isRepId(sid) ? (repOf(sid) || { label: sid }).label : (repOfSection(sid) || { label: sid }).label) + '):\n\n' + authFacts(sid) }], maxTokens: 1400 });
             var text = String((res && (res.text || (res.raw && res.raw.content && res.raw.content[0] && res.raw.content[0].text))) || '').trim();
             if (!text) throw fail('The AI returned nothing. Try again, or write this part yourself.');
             var flags = []; try { flags = (RA.guard(text, {}) || []).map(function (f) { return String(f.why || f.token || f); }); } catch (_) {}
             var m = authStore(sid, true), cur = m[aid] || {};
-            cur.draft = { text: text, model: (res && res.model) || '', at: now(), flags: flags, rests: 'This report section as it stands: its method, basis, calculations, results' + (authDefs().some(function (x) { return x.id !== aid && authOf(sid, x.id) && authOf(sid, x.id).text; }) ? ', and the parts already written' : '') + '.' };
+            cur.draft = { text: text, model: (res && res.model) || '', at: now(), flags: flags, rests: (isRepId(sid) ? 'The whole report as it stands: its front and every appendix' : 'This report section as it stands: its method, basis, calculations, results') + (defsFor(sid).some(function (x) { return x.id !== aid && authOf(sid, x.id) && authOf(sid, x.id).text; }) ? ', and the parts already written' : '') + '.' };
             m[aid] = cur; save();
             return cur.draft;
         }
         function authSave(sid, aid, text, source) { var m = authStore(sid, true), cur = m[aid] || {}; cur.text = String(text || '').trim(); cur.by = who(); cur.at = now(); cur.source = source || 'person'; delete cur.draft; m[aid] = cur; save(); }
         function authHtml(sid, aid) {
-            var a = authDefs().filter(function (x) { return x.id === aid; })[0]; if (!a) return '';
+            var a = defsFor(sid).filter(function (x) { return x.id === aid; })[0]; if (!a) return '';
             var r = authOf(sid, aid) || {}, k = sid + '|' + aid, ed = ui0.authEdit === k, busy = ui0.authBusy === k;
             var btn = function (verb, label, extra) { return '<button type="button" class="slap-btn" data-cc-auth="' + E(verb) + '" data-cc-authk="' + E(k) + '" onclick="SLCcaReport.act(' + J(key) + ',\'' + verb + '\',' + J(sid) + ',' + J(aid) + ')"' + (extra || '') + '>' + E(label) + '</button>'; };
             var h = '<div class="ccr-auth" data-cc-authbox="' + E(k) + '">';
@@ -388,7 +398,7 @@
                     : btn('authedit', r.text ? 'Edit' : 'Write it myself') + (aiReady(sid).ready ? btn('authai', r.text ? 'Redraft with AI' : 'Draft with AI') : '<button type="button" class="slap-btn" disabled data-cc-auth="authai-wait" title="Answer the questions first">' + (r.text ? 'Redraft with AI' : 'Draft with AI') + '</button>')) + '</div>';
                 var g0 = aiReady(sid);
                 // said once per section, on its first part (the parts below share the same questions)
-                if (!g0.ready && (authDefs()[0] || {}).id === aid) h += '<div class="ccr-authhint" data-cc-aiwait="' + E(k) + '">' + E(('The AI drafts these parts once the questions for this ' + (spec.tabs && spec.tabs.noun ? spec.tabs.noun : 'part') + ' are answered. Still to answer: ' + g0.left.slice(0, 4).join('; ') + (g0.left.length > 4 ? '; and the rest in the list on the left' : '') + '.').replace(/\?\.$/, '?')) + '</div>';
+                if (!g0.ready && (defsFor(sid)[0] || {}).id === aid) h += '<div class="ccr-authhint" data-cc-aiwait="' + E(k) + '">' + E(('The AI drafts these parts once the questions for this ' + (spec.tabs && spec.tabs.noun ? spec.tabs.noun : 'part') + ' are answered. Still to answer: ' + g0.left.slice(0, 4).join('; ') + (g0.left.length > 4 ? '; and the rest in the list on the left' : '') + '.').replace(/\?\.$/, '?')) + '</div>';
                 if (!r.text && a.purpose) h += '<div class="ccr-authhint">' + E(a.purpose) + '</div>';
             }
             return h + '</div>';
@@ -498,13 +508,16 @@
         function ctxOf(o) { o = o || {}; return { C: C, dark: !!o.dark, forExport: !!o.forExport, key: key }; }
         // number the headings, tables and figures in order and put the numbers into the lead sentences
         function number(blocks) {
-            var h1 = 0, h2 = 0, t = 0, f = 0, out = [];
+            // v2.0: an appendix heading ({ appx: 'A' }) is "Appendix A: ...", its sub-headings A.1, A.2 and its tables and
+            // figures Table A.1, Figure A.1 (so an appendix keeps its numbers when it is shown on its own)
+            var h1 = 0, h2 = 0, t = 0, f = 0, out = [], ax = null, at = 0, af = 0;
             blocks.forEach(function (b) {
                 if (!b) return;
-                if (b.k === 'h' && b.level === 1) { h1++; h2 = 0; b.text = h1 + '. ' + b.text; }
-                else if (b.k === 'h' && b.level === 2) { h2++; b.text = h1 + '.' + h2 + ' ' + b.text; }
-                if (b.k === 'table') { t++; b.n = t; b.caption = 'Table ' + t + ': ' + b.title; if (b.lead) out.push(P(String(b.lead).replace('{N}', 'Table ' + t), { sec: b.sec })); }
-                if (b.k === 'fig' || b.k === 'shot') { f++; b.n = f; b.caption = 'Figure ' + f + ': ' + b.title; if (b.lead) out.push(P(String(b.lead).replace('{N}', 'Figure ' + f), { sec: b.sec })); }
+                if (b.k === 'h' && b.level === 1 && b.appx) { ax = String(b.appx); h2 = 0; at = 0; af = 0; b.text = 'Appendix ' + ax + ': ' + b.text; }
+                else if (b.k === 'h' && b.level === 1) { ax = null; h1++; h2 = 0; b.text = h1 + '. ' + b.text; }
+                else if (b.k === 'h' && b.level === 2) { h2++; b.text = (ax || h1) + '.' + h2 + ' ' + b.text; }
+                if (b.k === 'table') { var tn = ax ? ax + '.' + (++at) : String(++t); b.n = tn; b.caption = 'Table ' + tn + ': ' + b.title; if (b.lead) out.push(P(String(b.lead).replace('{N}', 'Table ' + tn), { sec: b.sec })); }
+                if (b.k === 'fig' || b.k === 'shot') { var fn = ax ? ax + '.' + (++af) : String(++f); b.n = fn; b.caption = 'Figure ' + fn + ': ' + b.title; if (b.lead) out.push(P(String(b.lead).replace('{N}', 'Figure ' + fn), { sec: b.sec })); }
                 out.push(b);
             });
             return out;
@@ -542,6 +555,7 @@
         function repDoc(o) {
             var ctx = Object.assign(ctxOf(o), { report: REP }), b = [], secs = o.secs || secsOf(ctx) || [], r = repOf(REP, secs);
             if (!r) return number([P('This report is no longer in the project.')]);
+            if (spec.appendices) return appxDoc(o, ctx, secs, r);
             var front = typeof spec.front === 'function' ? (safe(function () { return spec.front(ctx); }, []) || []) : [];
             if (front.length) b = b.concat(front.map(function (x) { return Object.assign({}, x); }));
             var io = ioBlocks(); if (io.length) { b.push(H(1, 'Inputs and outputs')); b = b.concat(io); }
@@ -562,6 +576,42 @@
             }
             return number(b);
         }
+        // v2.0 (10 Nov 2026, the PASA and PSSA): Waqas: "one report for the aircraft with each failure condition feeding in as an
+        // appendix (aircraft level cover page then meat in the appendices)", "the PSSA one per system". With spec.appendices
+        // a report is its front (spec.front, the questions about the whole report), inputs and outputs, spec.after, outputs and
+        // acceptance, then one appendix per section ("Appendix A: ..."). { k:'rauth', aid? } in front or after places the parts
+        // the engineer writes once for the whole report (spec.reportAuthored). o.part = one appendix alone (the dropdown's part).
+        function expandR(list, forExport) {
+            var out = [];
+            (list || []).forEach(function (x) {
+                if (x && x.k === 'rauth') { authBlocks(REP, forExport, defsFor(REP).filter(function (a) { return !x.aid || a.id === x.aid; })).forEach(function (y) { if (y.k === 'part' && x.asHeading) out.push(H(x.asHeading, y.text)); else out.push(Object.assign({ sec: REP }, y)); }); return; }
+                out.push(Object.assign({}, x));
+            });
+            return out;
+        }
+        function appxLetter(i) { var s0 = ''; i = i + 1; while (i > 0) { var m = (i - 1) % 26; s0 = String.fromCharCode(65 + m) + s0; i = Math.floor((i - 1) / 26); } return s0; }
+        function appxDoc(o, ctx, secs, r) {
+            var b = [], fx = !!o.forExport;
+            var front = typeof spec.front === 'function' ? (safe(function () { return spec.front(ctx); }, []) || []) : [];
+            b = b.concat(expandR(front, fx));
+            var io = ioBlocks(); if (io.length) { b.push(H(1, 'Inputs and outputs')); b = b.concat(io); }
+            var after = typeof spec.after === 'function' ? (safe(function () { return spec.after(ctx); }, []) || []) : [];
+            b = b.concat(expandR(after, fx));
+            var outs = outputs();
+            if (outs.length) {
+                b.push(H(1, 'Outputs and acceptance'));
+                b.push(P('This report is complete when each output below has been produced and accepted against its criteria by the role named. The acceptance is recorded in Safety Lab with who accepted it and when; if an output changes after it is accepted, its acceptance is reopened.'));
+                b.push({ k: 'table', name: 'outputs', title: 'Outputs and how each is accepted', rows: outs.map(function (x, i) { return { '#': String(i + 1), Output: x.what, 'Accepted when': x.accept || '', 'Accepted by (role)': x.role || docCtl().appr || 'Chief safety engineer', Signature: '', Date: '' }; }), lead: '{N} lists the outputs and how each is accepted.' });
+            }
+            var rs = secs.filter(function (x) { return x && r.sections.indexOf(x.id) >= 0; });
+            rs.forEach(function (x, i) { b.push(H(1, x.title, { appx: appxLetter(i), sec: x.id, edit: x.edit !== false && !!spec.edit, secHead: true })); b = b.concat(secBlocks(x, fx)); });
+            var all = number(b);
+            if (!o.part) return all;
+            var from = -1, to = all.length;
+            all.forEach(function (x, i) { if (x.k === 'h' && x.level === 1) { if (from >= 0 && to === all.length && i > from) to = i; if (x.appx && x.sec === String(o.part)) from = i; } });
+            return from < 0 ? [P('This appendix is no longer in the report.')] : all.slice(from, to);
+        }
+        function appxOf(sid, rid) { var r = repOf(rid); if (!r) return ''; var i = r.sections.indexOf(String(sid)); return i < 0 ? '' : appxLetter(i); }
         // v1.2: one section alone (its tab and its own Word file): its heading, then its blocks, numbered on their own
         function onlyBlocks(id, secs, forExport) {
             var s = (secs || []).filter(function (x) { return x && x.id === id; })[0];
@@ -835,10 +885,14 @@
         function noRegister() { return tabSpec().allLabel === false; }
         // the tab kept for this project (null = All); a tab whose section has gone falls back to All
         function storedTab() { if (!tabsOn()) return null; var s = store(), t = s.tab != null ? s.tab : ui0.tab; return t ? String(t) : null; }
+        // v2.0: with spec.tabs.parts the dropdown also picks one appendix of a report: the tab is '<report>::<section>'
+        function partsOn() { return !!(tabsOn() && tabSpec().parts && spec.appendices); }
+        function ridOf(t) { return t ? String(t).split('::')[0] : null; }
+        function partOf(t) { var i = t ? String(t).indexOf('::') : -1; return i < 0 ? null : String(t).slice(i + 2); }
+        function tabOk(t, list) { list = list || safe(function () { return repList(); }, []) || []; var r = list.filter(function (x) { return x.id === ridOf(t); })[0]; if (!r) return false; var pt = partOf(t); return !pt || (partsOn() && r.sections.indexOf(pt) >= 0); }
         function tab() {
             var t = storedTab(); if (!t && noRegister()) { var f0 = safe(function () { return repList()[0]; }, null); return f0 ? f0.id : null; } if (!t) return null;
-            var ok = safe(function () { return repList().some(function (r) { return r.id === t; }); }, false);
-            return ok ? t : null;
+            return tabOk(t) ? t : null;
         }
         function setTab(id, o) {
             if (!tabsOn()) return false;
@@ -851,9 +905,12 @@
         // v1.5: one dropdown, not a row of tabs (Waqas: "this should be a drop down menu")
         function tabsHtml(list, cur) {
             var all = tabSpec().allLabel, lab = tabSpec().pickLabel || 'Report';
+            var opts = partsOn()
+                ? list.map(function (r) { var o0 = '<option value="' + E(r.id) + '" data-cc-part="front"' + (r.id === cur ? ' selected' : '') + '>' + E(tabSpec().frontLabel || 'Front of the report') + '</option>' + r.sections.map(function (sid, i) { var v = r.id + '::' + sid, lb = safe(function () { return typeof tabSpec().partLabel === 'function' ? tabSpec().partLabel(sid) : sid; }, sid); return '<option value="' + E(v) + '" data-cc-part="' + E(sid) + '"' + (v === cur ? ' selected' : '') + '>' + E('Appendix ' + appxLetter(i) + ': ' + lb) + '</option>'; }).join(''); return list.length > 1 ? '<optgroup label="' + E(r.label) + '">' + o0 + '</optgroup>' : o0; }).join('')
+                : list.map(function (r) { return '<option value="' + E(r.id) + '"' + (r.id === cur ? ' selected' : '') + '>' + E(r.label) + '</option>'; }).join('');
             return '<div class="ccr-pick" data-cctabs="1"><label for="ccr-sel-' + E(key) + '">' + E(lab) + '</label><select id="ccr-sel-' + E(key) + '" data-cctabsel="1" onchange="SLCcaReport.act(' + J(key) + ',\'tab\',this.value)">'
                 + (all === false ? '' : '<option value=""' + (cur ? '' : ' selected') + '>' + E(all || 'All') + '</option>')
-                + list.map(function (r) { return '<option value="' + E(r.id) + '"' + (r.id === cur ? ' selected' : '') + '>' + E(r.label) + '</option>'; }).join('') + '</select></div>';
+                + opts + '</select></div>';
         }
         // v1.5: the register of the reports (the All choice): one row per report, each opens its report
         function conclusionOf(r, secs) {
@@ -889,11 +946,12 @@
             try {
                 if (tabsOn()) {
                     var secs = secsOf(ctxOf({ dark: dark })); list = repList(secs || []);
-                    var t0 = storedTab(); cur = t0 && list.some(function (t) { return t.id === t0; }) ? t0 : null;
+                    var t0 = storedTab(); cur = t0 && tabOk(t0, list) ? t0 : null;
                     if (t0 && !cur) setTab(null, { render: false });
                     if (!cur && noRegister() && list.length) cur = list[0].id;
-                    REP = cur;
-                    if (cur) { var blR = doc({ dark: dark, report: cur, secs: secs }); html = '<div class="ccr-tabdoc" data-cc-tabdoc="' + E(cur) + '">' + frontHtml(blR) + bodyHtml(blR, true) + '</div>'; }
+                    REP = ridOf(cur);
+                    if (cur && partOf(cur)) { var blP = repDoc({ dark: dark, secs: secs, part: partOf(cur) }), dP = docCtl(), rP = repOf(REP, secs); html = '<div class="ccr-tabdoc" data-cc-tabdoc="' + E(cur) + '" data-cc-partdoc="' + E(partOf(cur)) + '"><div class="ccr-tabhead" data-cc-tabhead="1">' + E(spec.title) + (rP && repList(secs).length > 1 ? ' · ' + E(rP.label) : '') + ' · ' + E(dP.no) + ' Rev ' + E(rev()) + ' · ' + E(projName()) + '</div>' + bodyHtml(blP, true) + '</div>'; }
+                    else if (cur) { var blR = doc({ dark: dark, report: cur, secs: secs }); html = '<div class="ccr-tabdoc" data-cc-tabdoc="' + E(cur) + '">' + frontHtml(blR) + bodyHtml(blR, true) + '</div>'; }
                     else html = registerHtml(secs || [], list);
                     cur = cur || null;
                 } else if (false) {
@@ -913,7 +971,7 @@
             h.innerHTML = '<div class="ccr" data-ccr="' + E(key) + '"' + (tabsOn() ? ' data-cctab-open="' + E(cur || '') + '"' : '') + '>' + (spec.lead ? '<p class="ccr-lead">' + E(spec.lead) + '</p>' : '')
                 + (tabsOn() ? tabsHtml(list, cur) : '')
                 + (ui0.msg ? '<div class="ccr-msg' + (ui0.msg.err ? ' err' : '') + '">' + E(ui0.msg.text) + '</div>' : '')
-                + '<div class="ccr-cols"' + (tabsOn() ? ' role="tabpanel" aria-labelledby="ccr-tab-' + E(key) + '-' + E(String(cur || 'all').replace(/[^A-Za-z0-9_-]/g, '_')) + '"' : '') + '><div class="ccr-left"' + (spec.leftId ? ' id="' + E(spec.leftId) + '"' : '') + ' data-ccleft="1">' + left + (tabsOn() ? (cur ? acceptBox() + docPanel() : '') : acceptBox() + docPanel()) + '</div>'
+                + '<div class="ccr-cols"' + (tabsOn() ? ' role="tabpanel" aria-labelledby="ccr-tab-' + E(key) + '-' + E(String(cur || 'all').replace(/[^A-Za-z0-9_-]/g, '_')) + '"' : '') + '><div class="ccr-left"' + (spec.leftId ? ' id="' + E(spec.leftId) + '"' : '') + ' data-ccleft="1">' + left + (tabsOn() ? (cur && !partOf(cur) ? acceptBox() + docPanel() : '') : acceptBox() + docPanel()) + '</div>'
                 + '<div class="ccr-right"><div class="ccr-bar">' + (spec.edit ? '<button type="button" class="p" data-cc-add="1" onclick="SLCcaReport.act(' + J(key) + ',\'add\')">' + E(spec.edit.addLabel || 'Add') + '</button>' : '') + '<span style="flex:1"></span>'
                 + bar + '</div>'
                 + nodePanel() + '<div class="ccr-prev" data-ccdoc="1">' + (ui0.adding ? editForm(null) : '') + html + '</div></div></div></div>';
@@ -966,9 +1024,10 @@
             // v1.2: a section asked for from elsewhere (another page's link, an answer that opens a risk) opens its tab
             if (tabsOn() && /^sec:/.test(target) && !(o && o.stay)) {
                 var sid = target.slice(4), rs0 = safe(function () { return repOfSection(sid); }, null);
-                if (rs0 && tab() !== rs0.id) {
+                var want0 = rs0 ? (partsOn() ? rs0.id + '::' + sid : rs0.id) : null;
+                if (rs0 && tab() !== want0 && !(partsOn() && tab() === rs0.id && o && o.front)) {
                     if (!document.getElementById('ccr-host-' + key)) return false;
-                    setTab(rs0.id, { render: false }); ui0.flash = target; render();
+                    setTab(want0, { render: false }); ui0.flash = target; render();
                     return !!document.querySelector('#ccr-host-' + key + ' [data-ccdoc] [data-ccsec="' + cssq(sid) + '"]');
                 }
             }
@@ -991,7 +1050,7 @@
         function cssq(s) { return String(s).replace(/["\\]/g, '\\$&'); }
         // v1.5: an answer or a pick that names a section ('sec:<id>') opens that section's report first
         function answered(qid) {
-            if (tabsOn() && qid && /^sec:/.test(qid)) { var rq = safe(function () { return repOfSection(String(qid).slice(4)); }, null); if (rq && tab() !== rq.id) setTab(rq.id, { render: false }); }
+            if (tabsOn() && qid && /^sec:/.test(qid)) { var sq = String(qid).slice(4), rq = safe(function () { return repOfSection(sq); }, null), wq = rq ? (partsOn() ? rq.id + '::' + sq : rq.id) : null; if (rq && tab() !== wq) setTab(wq, { render: false }); }
             ui0.flash = qid || null; ui0.msg = null; render();
         }
         function readForm(sec) {
@@ -1005,14 +1064,14 @@
             return out;
         }
         function act(verb, a, b) {
-            var rep0 = REP; REP = tabsOn() ? tab() : null;
+            var rep0 = REP; REP = tabsOn() ? ridOf(tab()) : null;
             try {
                 if (verb === 'pick') { if (typeof spec.answer === 'function') spec.answer(a, b); ui0.flash = a; ui0.msg = null; }
                 else if (verb === 'see') { if (!flash(a)) { render(); flash(a); } return; }
                 else if (verb === 'node') { ui0.node = a || null; }
                 else if (verb === 'tab') { setTab(a || null); return; }
                 else if (verb === 'wordall') { REP = null; wordAll().catch(function (e) { ui0.msg = { text: 'Could not write the Word files: ' + (e && e.message || e), err: true }; render(); }); return; }
-                else if (verb === 'wordsec') { var only = tab(); word(only ? (tabsOn() ? { report: only } : { only: only }) : undefined).catch(function (e) { ui0.msg = { text: 'Could not write the Word file: ' + (e && e.message || e), err: true }; render(); }); return; }
+                else if (verb === 'wordsec') { var only = ridOf(tab()); word(only ? (tabsOn() ? { report: only } : { only: only }) : undefined).catch(function (e) { ui0.msg = { text: 'Could not write the Word file: ' + (e && e.message || e), err: true }; render(); }); return; }
                 else if (verb === 'live') { ui0.live = !ui0.live; }
                 else if (verb === 'accept') { accept(a); ui0.msg = null; }
                 else if (verb === 'unaccept') { unaccept(a); }
@@ -1028,12 +1087,12 @@
                         var nid = res.id || a, wasAdd = !a;
                         ui0.err = null; ui0.editing = null; ui0.adding = false;
                         // v1.2: Add opens the new section's tab; an Edit that renames the open section follows it
-                        if (tabsOn() && nid && (wasAdd || (a && storedTab() === a && nid !== a))) { var rn = repOfSection(nid); setTab(rn ? rn.id : nid, { render: false }); }
+                        if (tabsOn() && nid && (wasAdd || (a && storedTab() === a && nid !== a))) { var rn = repOfSection(nid); setTab(rn ? (partsOn() ? rn.id + '::' + nid : rn.id) : nid, { render: false }); }
                         ui0.flash = 'sec:' + nid;
                     }
                 }
-                else if (verb === 'word') { var wr = tabsOn() ? tab() : null; REP = null; word(wr ? { report: wr } : undefined).catch(function (e) { ui0.msg = { text: 'Could not write the Word file: ' + (e && e.message || e), err: true }; render(); }); return; }
-                else if (verb === 'print') { var pr = tabsOn() ? tab() : null; REP = null; (pr ? Promise.all((repOf(pr) || { sections: [] }).sections.map(function (x) { return shotsReady(x); })) : shotsReady(null)).then(function () { print(pr ? { report: pr } : undefined); }, function () { print(pr ? { report: pr } : undefined); }); return; }
+                else if (verb === 'word') { var wr = tabsOn() ? ridOf(tab()) : null; REP = null; word(wr ? { report: wr } : undefined).catch(function (e) { ui0.msg = { text: 'Could not write the Word file: ' + (e && e.message || e), err: true }; render(); }); return; }
+                else if (verb === 'print') { var pr = tabsOn() ? ridOf(tab()) : null; REP = null; (pr ? Promise.all((repOf(pr) || { sections: [] }).sections.map(function (x) { return shotsReady(x); })) : shotsReady(null)).then(function () { print(pr ? { report: pr } : undefined); }, function () { print(pr ? { report: pr } : undefined); }); return; }
                 else if (verb === 'shot') { shotToggle(a, b); ui0.flash = null; ui0.msg = null; }
                 else if (verb === 'authedit') { ui0.authEdit = a + '|' + b; ui0.authSeed = null; }
                 else if (verb === 'authcancel') { ui0.authEdit = null; ui0.authSeed = null; }
@@ -1070,7 +1129,7 @@
             if (shown0) { try { render(); } catch (_) {} }
             return true;
         }
-        Object.assign(R, { authored: authOf, authSave: authSave, authAi: authAi, authFacts: authFacts, reports: function () { return repList(); }, wordAll: wordAll, withRep: withRep, shotViews: shotViews, shotPicks: shotPicks, shotToggle: shotToggle, shotsReady: shotsReady, shotBlocks: shotBlocks, tab: tab, setTab: setTab, tabs: function () { return tabsOn() ? tabList(secsOf(ctxOf()) || []).map(function (t) { return { id: t.id, label: t.label }; }) : []; }, render: render, doc: doc, fullHtml: fullHtml, model: model, word: word, print: print, flash: flash, answered: answered, acceptance: acceptance, accept: accept, unaccept: unaccept,
+        Object.assign(R, { ridOf: ridOf, partOf: partOf, appxOf: appxOf, appxLetter: appxLetter, authored: authOf, authSave: authSave, authAi: authAi, authFacts: authFacts, reports: function () { return repList(); }, wordAll: wordAll, withRep: withRep, shotViews: shotViews, shotPicks: shotPicks, shotToggle: shotToggle, shotsReady: shotsReady, shotBlocks: shotBlocks, tab: tab, setTab: setTab, tabs: function () { return tabsOn() ? tabList(secsOf(ctxOf()) || []).map(function (t) { return { id: t.id, label: t.label }; }) : []; }, render: render, doc: doc, fullHtml: fullHtml, model: model, word: word, print: print, flash: flash, answered: answered, acceptance: acceptance, accept: accept, unaccept: unaccept,
             docCtl: docCtl, setDoc: setDoc, issue: issue, rev: rev, act: act, mount: mount, outputs: outputs, ROLES: ROLES });
         // v1.5: called from outside, document control and acceptance act on the open report (the series when none is open)
         ['acceptance', 'accept', 'unaccept', 'docCtl', 'setDoc', 'issue', 'rev'].forEach(function (n) { var f = R[n]; R[n] = function () { var a0 = arguments; return REP ? f.apply(null, a0) : withRep(tabsOn() ? tab() : null, function () { return f.apply(null, a0); }); }; });

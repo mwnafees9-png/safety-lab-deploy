@@ -98,7 +98,7 @@ check('it has a template-override slot and a label',
     out.length === 1 && /^Failure conditions FC-11, FC-12 of SF-7 shall be annunciated to the flight crew\.$/.test(out[0].text),
     'atomic by construction — one imperative, and it names what the credit must make visible');
   check('the rationale names the credit and how to withdraw it',
-    out.length === 1 && /credit/.test(out[0].rat) && /withdraws this requirement/.test(out[0].rat));
+    out.length === 1 && /counts on the crew knowing/.test(out[0].rat) && /must be announced to them/.test(out[0].rat));   // 10 Nov 2026 (Waqas: rationales in plain words, no tool notes): the credit and why it needs the annunciation, no tool steps
   check('sourceId and fingerprint ride the pair, AutoReq-merge shaped',
     out.length === 1 && out[0].reqSource.sourceId === 'ac:fcim-monitor:pair-1-2' && /fcim-monitor/.test(out[0].reqSource.fingerprint));
   check('trace lands on the sub-function', out.length === 1 && out[0].traceId === 'SF-7');

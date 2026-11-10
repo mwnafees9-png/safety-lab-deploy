@@ -1,4 +1,4 @@
-// cma_claims.js (SLCmaClaims v1.1, 10 Nov 2026; v1.0 the same day): the independence claims of the CMA, worked out from the project data.
+// cma_claims.js (SLCmaClaims v1.2, 10 Nov 2026: figure() draws a whole tree handed in; v1.1 10 Nov 2026; v1.0 the same day): the independence claims of the CMA, worked out from the project data.
 //
 // Waqas, 9 Nov 2026, on the CMA page: "why is this table there and not in the report, why are we not showing them images of
 // the fault trees we are talking about and why have we not pre-written the qualitative analyses for them?". On grouping
@@ -29,7 +29,7 @@
 //                      inputs marked; trees over 40 nodes (or wider than 6 columns) cut into parts (see below).
 (function (root) {
     'use strict';
-    var VERSION = '1.1';
+    var VERSION = '1.2';   // 1.2 10 Nov 2026: figure() draws a whole tree handed in (o.page, o.noMarks, o.metrics) for the PASA and PSSA reports
     function S(v) { return String(v == null ? '' : v); }
     function E(s) { return S(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
     function T(s) { return S(s).replace(/\s*\u2014\s*/g, ', ').replace(/\s+/g, ' ').trim(); }
@@ -322,12 +322,15 @@
     }
     function figure(key, o) {
         o = o || {};
-        var gn = gateNode(key); if (!gn) return null;
+        // v1.2 (10 Nov 2026, the PASA and PSSA Autopilots): o.page draws a whole tree the caller hands in (the integrated tree
+        // built for the report, never stored), with no gate marked (o.noMarks); o.metrics(node) gives the probability line
+        // from the tree's own data, so a tree that is not open on the canvas shows its own numbers
+        var gn = o.page && o.page.root ? { page: o.page, node: o.page.root, path: [o.page.root] } : gateNode(key); if (!gn) return null;
         var d3 = root.d3, shape = gl('getShapePath'), colors = gl('getNodeColors'), metrics = gl('formatNodeMetrics');
         if (!d3 || typeof shape !== 'function' || typeof colors !== 'function') return null;
         var C = o.C || { ink: '#0f172a', sub: '#475569', line: '#94a3b8', paper: '#ffffff', panel: '#ffffff', on: '#1A6EF2', onF: '#EAF2FE', warn: '#B26A00', warnF: '#FDF1DE' };
         var dark = !!o.dark, anchor = o.anchor || ('cmt-' + fp(key)), nodeG = o.nodeG || function (id, inner) { return '<g data-node="' + E(id) + '">' + inner + '</g>'; };
-        var page = gn.page, gateN = gn.node, inputs = kids(gateN), pathSet = new Set(gn.path);
+        var page = gn.page, gateN = o.noMarks ? null : gn.node, inputs = o.noMarks ? [] : kids(gn.node), pathSet = new Set(gn.path);
         var DAL_C = gl('DAL_COLORS') || { A: '#dc3545', B: '#f97316', C: '#eab308', D: '#fcd34d', E: '#cbd5e1' }, prefix = gl('dalPrefixForNode');
         var descDefault = (gl('_FTA_DESC_BOX_HEIGHT') || 100) + 44, vsp = (function () { var f = gl('_ftaNodeVerticalSpacing'); try { return f ? f() : 274; } catch (_) { return 274; } })();
         // ---- cut the tree into parts --------------------------------------------------------------------------------
@@ -377,7 +380,7 @@
                 if (isGate) gatePart = pi;
                 var col = safe(function () { return colors({ data: n }, dark); }, { fill: '#8e8e93', stroke: '#6e6e73' });
                 var lines = wrapC(T(n.name || ''), 30, Math.max(1, Math.floor(descH / 12) - 1)), ly0 = top + descH / 2 - (lines.length - 1) * 6 + 3;
-                var m = ''; try { m = typeof metrics === 'function' ? S(metrics({ data: n })) : ''; } catch (_) { m = ''; }
+                var m = ''; try { m = typeof o.metrics === 'function' ? S(o.metrics(n)) : typeof metrics === 'function' ? S(metrics({ data: n })) : ''; } catch (_) { m = ''; }
                 var g = '<g transform="translate(' + x + ',' + y + ')">'
                     + '<rect x="-80" y="' + (-BOX_TOP - hh) + '" width="160" height="' + descH + '" rx="3" fill="' + C.paper + '" stroke="' + C.line + '" stroke-width="1"/>'
                     + lines.map(function (ln, k) { return '<text x="0" y="' + (ly0 - y + k * 12) + '" text-anchor="middle" font-size="10" fill="' + C.ink + '">' + E(ln) + '</text>'; }).join('')
@@ -401,7 +404,7 @@
                 nodes.push({ id: nid, kind: isGate ? 'gate' : isInput ? 'input' : pathSet.has(n) ? 'path' : 'ctx', label: T((n.displayId ? n.displayId + ' ' : '') + (n.name || '')), inputs: kids(n).map(function (k) { return T((k.displayId ? k.displayId + ' ' : '') + (k.name || '')); }), gateKey: S(key), nodeId: S(n.id), pageId: S(page.id) });
             });
             var ly = HH - 14;
-            body += '<rect x="16" y="' + (ly - 10) + '" width="14" height="11" rx="2" fill="none" stroke="' + C.on + '" stroke-width="2.5"/><text x="36" y="' + ly + '" font-size="10.5" fill="' + C.ink + '">The critical gate</text>'
+            if (!o.noMarks) body += '<rect x="16" y="' + (ly - 10) + '" width="14" height="11" rx="2" fill="none" stroke="' + C.on + '" stroke-width="2.5"/><text x="36" y="' + ly + '" font-size="10.5" fill="' + C.ink + '">The critical gate</text>'
                 + '<rect x="150" y="' + (ly - 10) + '" width="14" height="11" rx="2" fill="none" stroke="' + C.warn + '" stroke-dasharray="4 2" stroke-width="2"/><text x="170" y="' + ly + '" font-size="10.5" fill="' + C.ink + '">An input claimed independent</text>';
             W = Math.max(W, 380);
             out.push({ body: body, W: W, HH: HH, nodes: nodes, part: pi + 1, count: ds.length });

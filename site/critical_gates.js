@@ -1,3 +1,15 @@
+// 10 Nov 2026 (v1.5, Waqas agreed the proposal): the second test is rebuilt. "Taken as certain" (the gate's event set to
+// P = 1) was wrong in principle: for a gate at the top, or under OR gates only, it makes the failure condition happen on
+// every flight, so it could only ever say "critical" with a number that meant nothing (the 11 per flight hour). The real
+// worry is one shared cause (a bad fuel batch, one software error, a bird flock) failing every input at once. Every time
+// that cause strikes, each input fails, so the cause can be no more likely than the least likely input: under one shared
+// cause the gate fails as often as its least likely input (the most it can, with the inputs fully dependent). The gate is
+// replaced by an event with the smallest probability among its inputs (each input's subtree worked out exactly on its
+// own) and the top is worked out again. That is never more than the OR test gives, so the verdict is the OR test's; the
+// shared cause number is shown beside it as the realistic worst case of the dependence. Both tests are judged against the stricter of the class objective and the budget handed down to this tree
+// (page.targetP, written by fc_auto_trees.js from the aircraft tree). Fields: pShared, rateShared, sharedBreaks,
+// sharedEveryFlight, sharedFrom (the input that sets it). explain(g, res) says it in words. A rate shows only when it is
+// real: P within 1e-9 of 1 is said as "every flight". See tests/regression_pasa_autopilot_20261110.test.js
 // 13 Oct 2026 (fix G): SEQ joins the AND family for the critical AND-gate test. See tests/regression_fta_handbuild_20261013b.test.js
 // 13 Oct 2026 (math audit F8): the OR and certain tests compare per-flight-hour rates (SLTopBasis.meets) with the per-flight-hour objective, not per-flight P; the panel shows /FH. See tests/regression_perfh_basis_20261013.test.js
 // 10 Nov 2026 (v1.4): the "if certain" number. Taking a gate as certain often makes the failure condition certain too
@@ -22,7 +34,7 @@
 //   linked to a failure condition, two tests against that condition's
 //   probability objective (the same target the Golden Thread budget check uses):
 //     (a) treat the gate as OR: any single input now passes straight through;
-//     (b) treat the gate as certain: the gate's output is taken as having occurred.
+//     (b) one shared cause fails every input at once (v1.5): the gate fails as often as its least likely input.
 //   If the top event still meets its objective under BOTH, the gate is NOT
 //   critical: independence at that gate is not what keeps the condition inside
 //   its budget, so it needs no common mode review. Otherwise the gate is
@@ -91,14 +103,14 @@
         var obj = res.target != null ? num(res.target) + ' per flight hour' : 'its objective';
         var or = g.orEveryFlight ? 'the failure condition would happen on every flight'
             : 'the failure condition would be expected about ' + num(g.rateAsOr) + ' times per flight hour';
-        var ce = g.certainEveryFlight ? 'the failure condition would follow on every flight, because nothing else stands between this event and the top of the tree'
-            : 'the failure condition would be expected about ' + num(g.rateCertain) + ' times per flight hour';
+        var ce = g.sharedEveryFlight ? 'the failure condition would happen on every flight'
+            : 'the failure condition would be expected about ' + num(g.rateShared) + ' times per flight hour';
         var t1 = 'If its inputs were not independent, so that any one of them failing were enough (the gate counted as an OR gate), ' + or + (g.orBreaks ? ', above' : ', inside') + ' the objective of ' + obj + '.';
-        var t2 = 'If the gate\'s own event had already happened, ' + ce + (g.certainEveryFlight ? '.' : (g.certainBreaks ? ', above the objective.' : ', inside the objective.'));
+        var t2 = 'If one shared cause took out all of its inputs at once' + (g.sharedFrom ? ' (the gate then fails as often as its least likely input, ' + g.sharedFrom + ')' : '') + ', ' + ce + (g.sharedBreaks ? ', above' : ', inside') + ' the objective.';
         var v = g.critical
-            ? (g.orBreaks && g.certainBreaks ? 'Both results break the objective' : 'One of these results breaks the objective') + ', so the failure condition stays inside its budget only because the inputs fail independently. That independence must be shown by this common mode analysis.'
+            ? (g.orBreaks && g.sharedBreaks ? 'Both results break the objective' : 'One of these results breaks the objective') + ', so the failure condition stays inside its budget only because the inputs fail independently. That independence must be shown by a common mode analysis.'
             : 'Both results stay inside the objective, so the budget does not rest on this independence and it needs no common mode review.';
-        return { or: t1, certain: t2, verdict: v, text: t1 + ' ' + t2 + ' ' + v };
+        return { or: t1, shared: t2, verdict: v, text: t1 + ' ' + t2 + ' ' + v };
     }
 
     // ---- failure conditions and targets ------------------------------------
@@ -123,7 +135,11 @@
             var p = t && t.prob != null ? Number(t.prob) : null;
             if (p != null && isFinite(p) && (target == null || p < target)) target = p;
         });
-        return { target: target, fcs: fcs };
+        // v1.5: the budget handed down to this tree (fc_auto_trees.js writes page.targetP per flight hour) when stricter
+        var tp = page && page.targetP != null ? parseFloat(page.targetP) : NaN;
+        var from = 'class';
+        if (target != null && isFinite(tp) && tp > 0 && tp < target) { target = tp; from = 'handed down'; }
+        return { target: target, fcs: fcs, from: from };
     }
 
     // ---- clone with transfers inlined -----------------------------------------
@@ -151,13 +167,16 @@
     }
 
     // ---- the test ---------------------------------------------------------------
+    var _cloneOrig = null;
+    function _origOf(n) { if (!n) return null; if (n.type !== 'gate') return n; var r = (_cloneOrig || []).filter(function (x) { return x.clone === n; })[0]; return r ? r.orig : n; }
     function analyzePage(page) {
         var res = { pageId: page ? page.id : null, pageName: page ? (page.name || page.title || '') : '', target: null, fcs: [], pTop: null, gates: [], skipped: null };
         if (!page || !page.root) return res;
-        var t = targetFor(page); res.target = t.target; res.fcs = t.fcs;
+        var t = targetFor(page); res.target = t.target; res.fcs = t.fcs; res.targetFrom = t.from;
         if (res.target == null) return res;
         var c = clone(page.root, page.id);
         if (c.gates.length > MAX_GATES) { res.skipped = 'tree has ' + c.gates.length + ' gates; the critical-gate test is capped at ' + MAX_GATES; return res; }
+        _cloneOrig = c.gates;
         res.pTop = _exact(c.root);
         // 13 Oct 2026 (math audit F8): the objective is per flight hour; every P(top)
         // here is per flight. Each is converted with the ONE shared normalization
@@ -179,22 +198,25 @@
             g.clone.gateType = 'OR';
             var pOr = _exact(c.root);
             g.clone.gateType = gt;
-            var pCert;
-            if (g.parent) {
-                var idx = g.parent.children.indexOf(g.clone);
-                var certain = { id: 'certain-' + g.clone.id, type: 'basic', probability: 1, logicalId: '__certain__' + g.clone.id };
-                g.parent.children[idx] = certain;
-                pCert = _exact(c.root);
-                g.parent.children[idx] = g.clone;
-            } else { pCert = 1; }   // the gate is the top event: taking it as certain is P = 1
+            // v1.5: one shared cause takes out every input: the gate fails as often as its least likely input
+            var best = null;
+            g.clone.children.forEach(function (k) { var pk = _exact(k); if (pk != null && (best == null || pk < best.p)) best = { p: pk, k: k }; });
+            var pShared = null;
+            if (best) {
+                var shared = { id: 'shared-' + g.clone.id, type: 'basic', probability: best.p, logicalId: '__shared__' + g.clone.id };
+                if (g.parent) { var idx = g.parent.children.indexOf(g.clone); g.parent.children[idx] = shared; pShared = _exact(c.root); g.parent.children[idx] = g.clone; }
+                else pShared = best.p;   // the gate is the top event
+            }
             var orBreaks = breaks(pOr);
-            var certBreaks = breaks(pCert);
+            var sharedBreaks = breaks(pShared);
+            var bk = best && best.k, bo = bk ? _origOf(bk) : null;
             res.gates.push({
                 key: g.pageId + ':' + g.orig.id, pageId: g.pageId, nodeId: g.orig.id,
                 displayId: g.orig.displayId || ('G-' + g.orig.id), name: g.orig.name || '', gateType: gt,
-                pAsOr: pOr, pCertain: pCert, rateAsOr: rateOf(pOr), rateCertain: rateOf(pCert), orBreaks: orBreaks, certainBreaks: certBreaks,
-                orEveryFlight: everyFlight(pOr), certainEveryFlight: everyFlight(pCert),
-                critical: orBreaks || certBreaks
+                pAsOr: pOr, pShared: pShared, rateAsOr: rateOf(pOr), rateShared: rateOf(pShared), orBreaks: orBreaks, sharedBreaks: sharedBreaks,
+                orEveryFlight: everyFlight(pOr), sharedEveryFlight: everyFlight(pShared),
+                sharedFrom: bo ? ((bo.displayId || bo.id) + (bo.name ? ' ' + bo.name : '')) : '',
+                critical: orBreaks || sharedBreaks
             });
         });
         return res;
@@ -265,7 +287,7 @@
                 body += '<tr' + (g.critical && !rev.length ? ' style="background:var(--sev-haz-bg, #FFF6E5);"' : '') + '>'
                     + '<td>' + _esc(fcLabel(res)) + '</td><td>' + _esc(res.pageName) + '</td>'
                     + '<td><b>' + _esc(g.displayId) + '</b>' + (g.name ? ' <span style="color:var(--color-text-secondary);">' + _esc(g.name) + '</span>' : '') + ' <span style="color:var(--color-text-tertiary);">' + _esc(g.gateType) + '</span></td>'
-                    + '<td>' + _exp(res.target) + '</td><td title="P = ' + _exp(g.pAsOr) + ' per flight over a ' + Number(res.missionHours).toFixed(3) + ' h flight">' + cell(g.rateAsOr, g.orEveryFlight) + '</td><td title="P = ' + _exp(g.pCertain) + ' per flight over a ' + Number(res.missionHours).toFixed(3) + ' h flight">' + cell(g.rateCertain, g.certainEveryFlight) + '</td>'
+                    + '<td>' + _exp(res.target) + '</td><td title="P = ' + _exp(g.pAsOr) + ' per flight over a ' + Number(res.missionHours).toFixed(3) + ' h flight">' + cell(g.rateAsOr, g.orEveryFlight) + '</td><td title="P = ' + _exp(g.pShared) + ' per flight over a ' + Number(res.missionHours).toFixed(3) + ' h flight">' + cell(g.rateShared, g.sharedEveryFlight) + '</td>'
                     + '<td>' + (g.critical ? '<span style="font-weight:700;color:var(--color-danger);">Critical</span>' : '<span style="color:var(--color-success);">Not critical</span>') + '<div style="font-size:11px;color:var(--color-text-secondary);">' + why + '</div></td>'
                     + '<td>' + revCell + '</td></tr>';
             });
@@ -275,10 +297,10 @@
         var summary = nGates + ' AND gates tested · <b>' + nCrit + ' critical</b> · ' + nRev + ' of those reviewed · ' + (nCrit - nRev) + ' need a review';
         return '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px;">'
             + '<div><div style="font-size:14px;font-weight:700;">Which independence claims carry the budget</div>'
-            + '<div style="font-size:12px;color:var(--color-text-secondary);" title="For every AND gate in a failure condition’s fault tree, the top event is recomputed twice: with the gate treated as OR (any one input passes) and with the gate taken as certain. A gate is critical when either result exceeds the condition’s probability objective. Critical gates are the ones whose independence a common mode analysis must confirm; the rest need no review.">'
+            + '<div style="font-size:12px;color:var(--color-text-secondary);" title="For every AND gate in a failure condition’s fault tree, the top event is recomputed twice: with the gate treated as OR (any one input passes) and with one shared cause taking out all its inputs (the gate then fails as often as its least likely input). A gate is critical when either result exceeds the condition’s probability objective. Critical gates are the ones whose independence a common mode analysis must confirm; the rest need no review.">'
             + 'Each AND gate is tested against the failure condition’s probability objective two ways: as an OR gate, and as if it had already occurred. A gate is critical when either result breaks the budget. Only critical gates need a common mode review.</div></div>'
             + '<div style="font-size:12px;color:var(--color-text-secondary);white-space:nowrap;">' + summary + ' &nbsp; <label style="font-weight:400;"><input type="checkbox" ' + (_showAll ? 'checked' : '') + ' onchange="SLCriticalGates.toggleAll(this.checked)"> show all gates</label></div></div>'
-            + '<div style="overflow-x:auto;"><table style="font-size:12px;"><thead><tr><th>Failure condition</th><th>Fault tree</th><th>Gate</th><th title="Probability objective for the linked failure condition, per flight hour">Objective (/FH)</th><th title="Top event rate per flight hour if the gate were an OR gate (per-flight P(top) divided by the flight time, the same conversion the requirement check and the Budget Ledger use)">If OR (/FH)</th><th title="Top event rate per flight hour if the gate’s event had certainly occurred">If certain (/FH)</th><th>Verdict</th><th>Common mode review</th></tr></thead><tbody>' + body + '</tbody></table></div>';
+            + '<div style="overflow-x:auto;"><table style="font-size:12px;"><thead><tr><th>Failure condition</th><th>Fault tree</th><th>Gate</th><th title="Probability objective for the linked failure condition, per flight hour">Objective (/FH)</th><th title="Top event rate per flight hour if the gate were an OR gate (per-flight P(top) divided by the flight time, the same conversion the requirement check and the Budget Ledger use)">If OR (/FH)</th><th title="Top event rate per flight hour if one shared cause took out all the gate’s inputs at once">If one shared cause (/FH)</th><th>Verdict</th><th>Common mode review</th></tr></thead><tbody>' + body + '</tbody></table></div>';
     }
     // v1.4 (10 Nov 2026): the panel is not drawn on the CMA page any more: every critical gate is in the CMA report.
     // renderPanel takes away a panel an earlier build left; panelHtml stays for anything that asks for the table.
@@ -336,13 +358,13 @@
                 crit++;
                 var rev = reviewedBy(g.key);
                 if (!rev.length) unrev++;
-                lines.push('<b>' + _esc(g.displayId) + '</b>' + (g.name ? ' ' + _esc(g.name) : '') + ' · if OR ' + cell(g.rateAsOr, g.orEveryFlight) + (g.orEveryFlight ? '' : '/FH') + ' · if certain ' + cell(g.rateCertain, g.certainEveryFlight) + (g.certainEveryFlight ? '' : '/FH')
+                lines.push('<b>' + _esc(g.displayId) + '</b>' + (g.name ? ' ' + _esc(g.name) : '') + ' · if OR ' + cell(g.rateAsOr, g.orEveryFlight) + (g.orEveryFlight ? '' : '/FH') + ' · if one shared cause ' + cell(g.rateShared, g.sharedEveryFlight) + (g.sharedEveryFlight ? '' : '/FH')
                     + ' · ' + (rev.length ? 'reviewed by ' + _esc(rev.map(function (r) { return r.cmaId; }).join(', ')) : '<span style="color:#9A6200;font-weight:600;">no common mode review</span>'));
             });
         });
         if (!tested) return '';
         var body = (crit ? lines.join('<br>') : 'No AND gate is critical: the budget holds if any single independence claim is lost.')
-            + '<div style="font-size:11px;color:var(--color-text-secondary);margin-top:4px;">' + tested + ' AND gates tested against the objective as OR and as certain; ' + crit + ' critical, ' + unrev + ' without a review.</div>';
+            + '<div style="font-size:11px;color:var(--color-text-secondary);margin-top:4px;">' + tested + ' AND gates tested against the objective as OR and under one shared cause; ' + crit + ' critical, ' + unrev + ' without a review.</div>';
         var status = unrev ? 'warn' : (crit ? 'ok' : 'info');
         return (typeof _gtStage === 'function') ? _gtStage('Critical gates', body, status) : '';
     }
@@ -375,7 +397,7 @@
     })(50);
 
     var api = { rows: rows, linkedFcs: linkedFcs, targetFor: targetFor, clone: clone, analyzePage: analyzePage, analyzeAll: analyzeAll, reviewedBy: reviewedBy, findings: findings, INV: INV,
-                panelHtml: panelHtml, renderPanel: renderPanel, explain: explain, everyFlight: everyFlight, num: num, VERSION: '1.4', _renderPanelV13: _renderPanelV13, toggleAll: toggleAll, startReview: startReview, threadStage: threadStage, _wrapThread: _wrapThread, _wrapCma: _wrapCma, AND_FAMILY: AND_FAMILY };
+                panelHtml: panelHtml, renderPanel: renderPanel, explain: explain, everyFlight: everyFlight, num: num, VERSION: '1.5', _renderPanelV13: _renderPanelV13, toggleAll: toggleAll, startReview: startReview, threadStage: threadStage, _wrapThread: _wrapThread, _wrapCma: _wrapCma, AND_FAMILY: AND_FAMILY };
     try { root.SLCriticalGates = api; } catch (_) {}
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -40,7 +40,7 @@
 // ============================================================================
 (function (root) {
     'use strict';
-    var VERSION = '1.8';   // 1.8 8 Nov 2026: one tree per failure condition, in any state (see "ONE TREE" below).
+    var VERSION = '1.9';   // 1.9 10 Nov 2026: an SFHA row feeding several aircraft failure conditions gets its branch on each; 1.8 8 Nov 2026: one tree per failure condition, in any state (see "ONE TREE" below).
     // 1.5 30 Oct 2026: makeTree in the API (fc_link.js opens a picked condition's tree).
     // 1.4 26 Oct 2026: a tree whose failure condition was marked not applicable in the FCIM is asked about in those words
     var MAJOR = 3;
@@ -213,12 +213,17 @@
         if (type === 'gate') { n.gateType = 'OR'; n.displayId = 'G-' + id; } else { n.inputMode = 'probability'; n.displayId = (type === 'undeveloped' ? 'UD-' : 'BE-') + id; }
         return Object.assign(n, extra || {});
     }
+    // 10 Nov 2026 (v1.9): an SFHA row may feed several aircraft failure conditions ("FC-05, FC-26"), as the rest of the
+    // tool reads it (findAllAcFhasForSysFc splits on commas); an exact match missed it, so a traced system had no branch.
+    // A trace may name the aircraft row by its FC ID (the SFHA form) or by its internal ID (imported and demo data): both count
+    function _traceList(v) { return String(v == null ? '' : v).split(/[,;]/).map(function (x) { return x.trim(); }).filter(Boolean); }
     // the SFHA failure conditions that trace to an AFHA one (their rows' acTrace), one per system and FC ID
     function _traced(acGroup) {
         var out = [];
         if (!acGroup.fcId) return out;
         _systems().forEach(function (s) {
-            groups(s).forEach(function (sg) { if (sg.rows.some(function (r) { return String(r.acTrace || '').trim() === acGroup.fcId; })) out.push(sg); });
+            var keys = [String(acGroup.fcId).trim()].concat(acGroup.rows.map(function (r) { return String(r.internalId); }));
+            groups(s).forEach(function (sg) { if (sg.rows.some(function (r) { return _traceList(r.acTrace).concat(Array.isArray(r.acTraces) ? r.acTraces.map(String) : []).some(function (t) { return keys.indexOf(t) >= 0; }); })) out.push(sg); });
         });
         return out;
     }
@@ -319,27 +324,40 @@
         // the aircraft trees' bottom events linked to this system failure condition, at the budget the aircraft tree
         // gives them: the tree allocated on a copy (allocateTopDown, from its own target over the flight, the way the
         // open tree is), so a tree nobody has open still answers; per flight, then per flight hour like the class target
-        var ids = rows.map(function (r) { return 'SYS_' + r.internalId; }), best = null;
-        _pages().forEach(function (p) {
-            if (!p || !p.root || p.verifies || p.dupReview || p.treeLevel !== 'aircraft' || (p.mode || 'top-down') !== 'top-down') return;
-            var has = false; (function w(n) { if (!n || has) return; if (n.externalSource && ids.indexOf(String(n.externalSource.targetId)) >= 0) has = true; _kids(n).forEach(w); })(p.root);
-            if (!has) return;
-            var alloc = _allocated(p, ids); if (!alloc) return;
-            (function w(n) {
-                if (!n) return;
-                var share = n.probability;   // the aircraft tree's own share for it (freed on the copy)
-                if (n._wasLinked && ids.indexOf(String(n._wasLinked.targetId)) >= 0 && typeof share === 'number' && isFinite(share) && share > 0) {
-                    var TB = root.SLTopBasis, ph = TB ? TB.perFlightHour(share, p) : null, rate = ph ? ph.rate : share;
-                    if (!best || rate < best.rate) best = { rate: rate, pFlight: share, pageId: p.id, pageName: p.name || p.id, nodeName: n.name || n.displayId || _lid(n), lid: _lid(n) };
-                }
-                _kids(n).forEach(w);
-            })(alloc);
-        });
+        var best = null;
+        shares(page).forEach(function (x) { if (!best || x.rate < best.rate) best = x; });
         if (best) {
             out.aircraft = best;
             if (cls == null || best.rate < cls) { out.rate = best.rate; out.used = 'aircraft'; }
         }
         return out;
+    }
+    // 10 Nov 2026 (v1.9): every budget the aircraft trees hand this system tree (one per linked event or transfer), for the PSSA
+    // Autopilot's "what the aircraft hands down" (the stricter applies; effectiveTarget takes the strictest)
+    function shares(page) {
+        var rows = _rowsOf(page), list = [];
+        if (!rows.length || page.treeLevel !== 'system') return list;
+        var ids = rows.map(function (r) { return 'SYS_' + r.internalId; });
+        _pages().forEach(function (p) {
+            if (!p || !p.root || p.verifies || p.dupReview || p.treeLevel !== 'aircraft' || (p.mode || 'top-down') !== 'top-down') return;
+            // 10 Nov 2026 (v1.9): an aircraft tree may carry this system's branch as a TRANSFER to this very tree (a hand-built
+            // PASA tree does: FC-05's G-7151 transfers to the electrical tree); its share counts like a linked event's, so
+            // the stricter of the budgets handed down applies (it was missed: the system kept a looser budget)
+            var has = false; (function w(n) { if (!n || has) return; if ((n.externalSource && ids.indexOf(String(n.externalSource.targetId)) >= 0) || String(n.transferOutTo || n.linkedPageId || '') === String(page.id)) has = true; _kids(n).forEach(w); })(p.root);
+            if (!has) return;
+            var alloc = _allocated(p, ids); if (!alloc) return;
+            (function w(n) {
+                if (!n) return;
+                var share = n.probability;   // the aircraft tree's own share for it (freed on the copy)
+                var viaTransfer = String(n.transferOutTo || n.linkedPageId || '') === String(page.id);
+                if (((n._wasLinked && ids.indexOf(String(n._wasLinked.targetId)) >= 0) || viaTransfer) && typeof share === 'number' && isFinite(share) && share > 0) {
+                    var TB = root.SLTopBasis, ph = TB ? TB.perFlightHour(share, p) : null, rate = ph ? ph.rate : share;
+                    list.push({ rate: rate, pFlight: share, pageId: p.id, pageName: p.name || p.id, nodeName: n.name || n.displayId || _lid(n), lid: _lid(n), displayId: n.displayId || '' });
+                }
+                _kids(n).forEach(w);
+            })(alloc);
+        });
+        return list;
     }
     function _applyTargets() {
         var n = 0;
@@ -496,7 +514,7 @@
 
     var api = { VERSION: VERSION, groups: groups, route: route,
         governingRows: governingRows, governingOf: governingOf, isGoverning: isGoverning, groupOf: groupOf, byFcId: byFcId, copiesNote: copiesNote, ROUTE_WORDS: ROUTE_WORDS, characterized: characterized, needsChart: needsChart, treeFor: treeFor,
-        sweep: sweep, tick: tick, baseId: baseId, syncFlags: syncFlags, flagsOutOfStep: flagsOutOfStep, effectiveTarget: effectiveTarget, governingPhases: governingPhases, shapeFp: shapeFp,
+        sweep: sweep, tick: tick, baseId: baseId, syncFlags: syncFlags, flagsOutOfStep: flagsOutOfStep, effectiveTarget: effectiveTarget, shares: shares, governingPhases: governingPhases, shapeFp: shapeFp,
         // 30 Oct 2026 (fc_link.js): the tree for a condition picked by hand that has none yet
         makeTree: make };
     try { root.SLFcTrees = api; } catch (_) {}

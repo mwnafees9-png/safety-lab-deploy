@@ -3496,6 +3496,8 @@ function _gtvShowEco(key, graph){
             + ' style="display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:4px 9px; border-radius:6px; border:1px solid ' + (m.flag ? fc : 'var(--color-border-hair)') + '; background:var(--color-surface-1); color:var(--color-text-primary); cursor:' + (nav ? 'pointer' : 'default') + '; transition:background .12s, box-shadow .12s;">'
             + '<span style="width:8px; height:8px; border-radius:2px; background:' + fc + '; flex:none;"></span>' + esc(m.label) + tag + arrow + '</span>'; }).join('') + '</div>'; }
     _GTV_LAYERS.forEach(l => { if(groups[l].length){ html += '<div style="margin-top:11px;"><div style="font-size:12px; font-weight:600; color:var(--color-text-secondary); margin-bottom:6px;">' + _GTV_LNAME[l] + ' (' + groups[l].length + ')</div>' + chips(groups[l]) + '</div>'; } });
+    // 10 Nov 2026: a requirement shows its text, its rationale and where it is driven from (req_trace.js)
+    if(n.kind === 'req' && window.SLReqTrace && n.ref){ try { html += window.SLReqTrace.panelHtml(n.ref); } catch(_){} }
     if(n.kind === 'sys'){
         const sid = esc(String(n.id));
         const btn = 'font-size:11.5px; padding:6px 11px; border-radius:6px; border:1px solid var(--color-border-strong); background:var(--color-surface-1); color:var(--color-text-primary); cursor:pointer;';

@@ -169,7 +169,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
             <a class="asb-item sub" id="snav-afha" onclick="switchTab('ac-fha')" role="button" tabindex="0" title="AFHA: functions, FCIM, FHA and assumptions present as tabs on the page (aircraft requirements live in the PASA)"><span class="asb-lbl">AFHA — hazard assessment</span></a>
             <details class="asb-grp asb-cat asb-nested" id="asb-grp-pasa"><summary><span class="asb-lbl asb-cat-lbl">PASA — preliminary aircraft safety assessment</span><span class="asb-chev">›</span></summary><div class="asb-catsub">
                 <!-- 4 Sep 2026 (Waqas: "clicking PASA just drops down the menu which doesnt have the drop down option for either of the two analyses") — the PASA workspace itself (Cockpit · Interdependence & Common Resources · MAC Model · MF&MS · CoFFE) had no menu entry; only cockpit deep links reached it. -->
-                <a class="asb-item sub" id="snav-pasa" onclick="switchTab('pasa')" role="button" tabindex="0" title="PASA workspace — Interdependence & Common Resources, MAC Model, MF&MS and CoFFE present as tabs on the page"><span class="asb-lbl">PASA — interdependence · MAC · MF&amp;MS · CoFFE</span></a>
+                <a class="asb-item sub" id="snav-pasa" onclick="switchTab('pasa')" role="button" tabindex="0" title="The PASA Autopilot: one report for the aircraft, its questions and its appendices (interdependence, common resources and CoFFE are answered in it)"><span class="asb-lbl">PASA Autopilot</span></a>
                 <!-- 21 Oct 2026 (Waqas: requirements move from the AFHA to the PASA): aircraft requirements are a PASA output. -->
                 <a class="asb-item sub" id="snav-ac-req" onclick="switchTab('ac-req')" role="button" tabindex="0" title="Aircraft requirements, derived and allocated in the PASA (ARP4754B 5.3, ARP4761A Appendix B)"><span class="asb-lbl">Aircraft requirements</span></a>
                 <a class="asb-item sub" id="snav-fta" onclick="switchTab('fta')" role="button" tabindex="0"><span class="asb-lbl">Fault Tree Analysis</span></a>
@@ -520,12 +520,12 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
             <!-- 21 Oct 2026 (Waqas: system requirements move from the SFHA to the PSSA): the PSSA tab has two pages,
                  its allocation and DAL overview and the system requirements. switchWorkspaceTab shows this bar for both. -->
             <div class="sys-workspace-nav" id="ws-pssa-subnav" style="display: none;">
-                <button id="ws-pssa-tab-overview" onclick="switchWorkspaceTab('pssa')">Allocation &amp; DAL</button>
+                <button id="ws-pssa-tab-overview" onclick="switchWorkspaceTab('pssa')">PSSA</button>
                 <button id="ws-pssa-tab-req" onclick="switchWorkspaceTab('req')">System Requirements</button>
             </div>
+            <!-- 10 Nov 2026: the PSSA Autopilot (pssa_autopilot.js) mounts here; the old allocation tiles stay hidden for the code that still draws them -->
             <div id="ws-view-pssa" style="display: none;">
-                <p style="font-size: 12.5px; color: var(--color-text-secondary); margin: 0 0 var(--s-3) 0;">This system's Preliminary System Safety Assessment surface (ARP4761A §3.5, Appendix D): its allocation trees, DAL posture, and verification mirrors. System trees built anywhere in the tool appear here automatically.</p>
-                <div id="ws-pssa-host"></div>
+                <div id="ws-pssa-host" style="display:none"></div>
             </div>
 
             <div id="ws-view-func">
@@ -3008,28 +3008,17 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
              tables + the project's claimed DAL distribution per cert basis. -->
         <div id="view-pasa" style="display: none;">
             <div class="header-with-export">
-                <h3>PASA — Preliminary Aircraft Safety Assessment</h3>
+                <h3>PASA: Preliminary Aircraft Safety Assessment</h3>
             </div>
-            <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0 0 var(--s-3) 0;">The aircraft-level integration workspace (ARP4761A §3.3, Appendix B). The cockpit tracks inputs, completion criteria, and hand-off; the analyses live in the tabs beside it.</p>
-            <div class="sys-workspace-nav" id="pasa-subnav">
-                <button id="pasa-tab-cockpit" class="active" onclick="pasaGo('cockpit')">Cockpit</button>
-                <button id="pasa-tab-interdep" onclick="pasaGo('interdep')">Interdependence &amp; Common Resources</button>
-                <button id="pasa-tab-mac" onclick="pasaGo('mac')">MAC Model</button>
-                <button id="pasa-tab-mfms" onclick="pasaGo('mfms')">MF&amp;MS</button>
-                <button id="pasa-tab-coffe" onclick="pasaGo('coffe')">CoFFE</button>
-                <button id="pasa-tab-req" onclick="switchTab('ac-req')">Aircraft Requirements</button>
-                <button disabled title="Cascading effects — parked (roadmap)">CEA</button>
+        </div>
+
+        <!-- 10 Nov 2026: MF&MS is a page of its own beside the fault trees (pasa_autopilot.js joins them) -->
+        <div id="view-mfms" style="display: none;">
+            <div class="header-with-export">
+                <h3>MF&amp;MS: multifunction and multisystem trees</h3>
             </div>
-            <div id="pasa-sub-cockpit"><div id="ckpt-page-pasa"></div></div>
-            <div id="pasa-sub-coffe" style="display:none;">
-                <p style="font-size: 12.5px; color: var(--color-text-secondary); margin: 0 0 var(--s-3) 0;">Combined Functional Failure Effects (B.4.3.1) — optional method slot, dual-lane: the <strong>computed lane</strong> evaluates loss cases against the compiled MAC breach sets; the <strong>elicited lane</strong> is your signed verdict. The two never overwrite each other — agreement is verification, disagreement is a finding. Malfunction cases have no computed lane; they are the judgment residue.</p>
-                <div id="coffe-host"></div>
-            </div>
-            <div id="pasa-sub-mfms" style="display:none;">
-                <p style="font-size: 12.5px; color: var(--color-text-secondary); margin: 0 0 var(--s-3) 0;">Compiled Multifunction &amp; Multisystem trees (B.4.1) — generated from the MAC rules, equivalence-verified against their breach sets on every compile, and recompiled with a visible diff when a rule changes.</p>
-                <div id="mfms-host"></div>
-            </div>
-            <div id="pasa-subpanels"></div>
+            <p style="font-size: 13px; margin: 0 0 var(--s-3) 0;">Compiled from the MAC rules, checked against their breach sets on every compile, and compiled again with a visible difference when a rule changes.</p>
+            <div id="mfms-host"></div>
         </div>
 
         <div id="view-asa" style="display: none;">
@@ -4251,7 +4240,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          boundary rule, and derived display text. Pure; loaded before its consumers. -->
     <script src="node_identity.js?v=1.1" defer></script>
     <script src="node_identity_ui.js?v=1.6" defer></script>
-    <script src="fta_view_modules.js?v=66.60" defer></script>
+    <script src="fta_view_modules.js?v=66.61" defer></script>
     <!-- 13 Oct 2026 (fix G) — SLFtaEdit: the fault tree built by hand (toolbox, drawn connections, unattached nodes, canvas λ/P, model link, overview map) and the ONE change path (SLFtaEdit.applyEdit). After fta_view_modules.js. -->
     <script src="fta_canvas_edit.js?v=1.2" defer></script>
     <!-- 27 Oct 2026 (customer report): fta_warn_pill.js (SLFtaWarn): the fault tree canvas's warning pill and the properties box warnings. After fta_view_modules.js. -->
@@ -4267,7 +4256,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="system_admin.js?v=1.0" defer></script>
     <script src="data_ops_modules.js?v=66.68" defer></script>
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
-    <script src="support_modules.js?v=66.63" defer></script>
+    <script src="support_modules.js?v=66.64" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
     <script src="helpers_modules.js?v=3.69" defer></script>
     <script src="cloud_writer.js?v=1.3" defer></script>
@@ -4279,7 +4268,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- P2 batch 6 — residual function layer (182 validated segments, 310 functions). NOTE: CutsetExplosionError intentionally overrides fta_engine.js's page-side copy, exactly as the monolith did. -->
     <!-- 16 Oct 2026: the shared AI inputs file ("safetylab-ai-inputs" v1, the same in Safety Lab, Sys Lab and Cert Lab); the source document store hashes with it. -->
     <script src="ai_inputs_exchange.js?v=1.0" defer></script>
-    <script src="misc_fn_modules.js?v=66.97" defer></script>
+    <script src="misc_fn_modules.js?v=66.98" defer></script>
     <script src="safety_lab.js?v=65.80" defer></script>
     <!-- Phase 66.34 — read access to the app's top-level lexical globals. MUST load
          after the declarations exist. Top-level `let` is NOT on window; anything that
@@ -4305,21 +4294,22 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="p23_assessment_level.js?v=1.0" defer></script>
     <script src="zsa_record.js?v=1.0" defer></script>
     <script src="ai_audit.js?v=1.2" defer></script>
-    <script src="pra_scenarios.js?v=1.1" defer></script>
-    <script src="usoc.js?v=1.1" defer></script>
+    <script src="pra_scenarios.js?v=1.2" defer></script>
+    <script src="usoc.js?v=1.2" defer></script>
     <script src="pa_audit.js?v=1.0" defer></script>
     <script src="ub_stimuli.js?v=1.0" defer></script>
     <script src="qual_arg.js?v=1.0" defer></script>
     <!-- Q7 (26 Sep 2026) — the critical AND-gate test that scopes the CMA: which independence claims the
          failure condition's budget depends on (as OR / as certain, BDD-exact). Panel on the CMA page, a stage on
          the Golden Thread, INV-58. Loads after qual_arg.js; wraps renderCMA and _renderGoldenThread lazily. -->
-    <script src="critical_gates.js?v=1.4" defer></script>
+    <script src="critical_gates.js?v=1.5" defer></script>
     <!-- 27 Sep 2026 (Q1-Q3) — assumption → requirement, rationale required, source-analysis tag. -->
-    <script src="req_basis.js?v=1.2" defer></script>
+    <script src="req_basis.js?v=1.3" defer></script>
     <!-- 27 Sep 2026 (Q4-Q6) — alert independence, crew response credit, engine / propeller severity anchors. -->
     <script src="crew_credit.js?v=1.2" defer></script>
     <!-- 27 Sep 2026 (Q8) — requirement wording check + EARS templates. -->
     <script src="req_lint.js?v=1.0" defer></script>
+    <script src="req_trace.js?v=1.0" defer></script>
     <!-- 27 Sep 2026 (Q11) — PRA survivability framing: taken as certain, nature groups, minimization argument. -->
     <script src="pra_framing.js?v=1.1" defer></script>
     <!-- 27 Sep 2026 (Q10) — per-item zonal threats: emits / susceptible, co-location and carry-over. -->
@@ -4328,7 +4318,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="design_baseline.js?v=1.0" defer></script>
     <!-- Phase 76 — these modules read safety_lab.js constants at definition time (or are only referenced at runtime), so they load AFTER the monolith. None are referenced at the monolith's top level. -->
     <script src="req_taxonomy.js?v=1.1" defer></script>
-    <script src="assurance_modules.js?v=1.46" defer></script>
+    <script src="assurance_modules.js?v=1.47" defer></script>
     <script src="engine_modules.js?v=1.3" defer></script>
     <!-- Backlog #1 — AI confidence-tied-to-fidelity badges (born modular; deterministic verdicts from recorded provenance; decorates worksheets, feeds reports + evidence package). Loads BEFORE reports.js so final outputs pick up the labels. -->
     <script src="ai_badges.js?v=1.4" defer></script>
@@ -4340,7 +4330,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="report_ai.js?v=1.0" defer></script>
     <!-- 6 Nov 2026: markov_ai.js (SLMarkovAI): the AI drafts a Markov model's states and transitions; every rate is the sum of the project's own recorded rates it names. -->
     <script src="markov_ai.js?v=1.0" defer></script>
-    <script src="reports.js?v=66.24" defer></script>
+    <script src="reports.js?v=66.25" defer></script>
     <!-- Phase F — R&M module (born modular; wraps switchTab, zero monolith edits). Pro+ gated. -->
     <script src="ram_modules.js?v=1.12" defer></script>
     <!-- FRACAS-2 — the incident ledger (case manager) under the statistical FRACAS;
@@ -4368,7 +4358,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- WS-C — R&M ↔ AI wiring (text-only drafting: FRACAS narratives, MSG-3 rationale; review-gated; wraps renders, edits nothing). -->
     <script src="ram_ai.js?v=1.3" defer></script>
     <!-- Phase D gap 4 (D1) — Interdependence AI sweep: proposals over EMPTY cells only, engineer signature decides (born modular). -->
-    <script src="interdep_ai.js?v=1.2" defer></script>
+    <script src="interdep_ai.js?v=1.3" defer></script>
     <!-- Phase P1 — evidence package export (born modular). -->
     <script src="evidence_package.js?v=2.8" defer></script>
     <!-- Phase P3 — 4754B App A objectives matrix (born modular; paraphrased summaries, live evidence). -->
@@ -4590,7 +4580,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- 4 Nov 2026: the ZSA and PRA Autopilots (the shared look first) -->
     <script src="report_comments.js?v=1.0" defer></script>
     <script src="autopilot_ui.js?v=1.5" defer></script>
-    <script src="cca_report.js?v=1.9" defer></script>
+    <script src="cca_report.js?v=2.0" defer></script>
     <script src="zsa_type_hazards.js?v=1.0" defer></script>
     <script src="zsa_autopilot.js?v=1.9" defer></script>
     <script src="pra_autopilot.js?v=2.8" defer></script>
@@ -4666,7 +4656,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="prove_tabs.js?v=1.9" defer></script>
     <!-- 24 Oct 2026: nav_areas.js (SLNavAreas) lays the left menu out the way Sys Lab does: a Working on picker, sections, and each section's pages as tabs above the page. After support_modules.js, helpers_modules.js, program_plan.js and prove_tabs.js. -->
     <script src="level_view.js?v=1.2" defer></script>
-    <script src="nav_areas.js?v=2.1" defer></script>
+    <script src="nav_areas.js?v=2.2" defer></script>
     <script src="fta_tree_picker.js?v=1.6" defer></script>
     <!-- 25 Aug 2026 — the way back from a golden-thread jump (reviewer: "to go
          back you have to click on the golden thread"). Wraps _gtvShowEco /
@@ -4691,7 +4681,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="fha_phase_cover.js?v=1.0" defer></script>
     <script src="fc_tree_flow.js?v=1.05" defer></script>
     <!-- 24 Oct 2026: fc_auto_trees.js (SLFcTrees): every Major-or-worse failure condition the 1309 chart sends to a quantitative analysis (or whose chart is not answered) gets its PASA or PSSA tree, its top event filled in; a system tree takes the stricter of the aircraft allocation and its class target. After fc_tree_flow.js. -->
-    <script src="fc_auto_trees.js?v=1.8" defer></script>
+    <script src="fc_auto_trees.js?v=1.9" defer></script>
     <!-- 30 Oct 2026: fc_link.js (SLFcLink): a PASA or PSSA tree's link always comes from the failure condition it was made for; picking another condition opens that condition's own tree (no question); hand-built trees live in Standalone; old wrong links are fixed quietly with a change-log note; ANEM gets each condition's FCIM mode and fills the empty tree. After fc_auto_trees.js. -->
     <script src="fc_link.js?v=2.0" defer></script>
     <!-- 8 Nov 2026 (live student data): fta_dedupe.js (SLFtaDedupe) cleans up duplicate auto trees once per project load, before the first sweep (copies with nothing extra are kept aside in projectConfig.retiredDuplicateTrees, extra events merged into the original, real work left flagged for review). stale_revive.js (SLStaleRevive) relinks rows marked stale when their function or failure condition comes back (asks when the name changed) and clears aircraft trees a system change wrongly flagged obsolete. After fc_auto_trees.js, rename_guard.js and safety_lab.js; fta_dedupe.js before stale_revive.js. -->
@@ -4706,8 +4696,11 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- 31 Oct 2026: iface_reqs.js (SLIfaceReqs): requirements on interfacing systems. The need and its budget come from the trees (an event another system provides); the interfaces stay owned by Sys Lab; ANEM drafts the wording only and the budget must stand in it exactly. After rate_sources.js. -->
     <script src="iface_reqs.js?v=1.0" defer></script>
     <!-- 8 Nov 2026: cma_autopilot.js (SLCmaAuto): the CMA Autopilot. Plain questions per independence claim (the gates, the claim, every common mode category, how each concern is closed), answered through SLCmaFlow into the CMA rows, and the CMA report content (one section per claim), inputs and outputs, and inline Edit / Add a CMA. After cma_flow.js and autopilot_ui.js. -->
-    <script src="cma_claims.js?v=1.1" defer></script>
+    <script src="cma_claims.js?v=1.2" defer></script>
     <script src="cma_autopilot.js?v=1.5" defer></script>
+    <!-- 10 Nov 2026: pasa_autopilot.js (SLPasaAuto): the PASA Autopilot, one report for the aircraft with an appendix per failure condition (cca_report.js 2.0 frame). After cma_claims.js (the tree pictures), req_trace.js and assurance_modules.js (AutoReq). -->
+    <script src="pasa_autopilot.js?v=1.0" defer></script>
+    <script src="pssa_autopilot.js?v=1.0" defer></script>
     <script src="cca_models.js?v=1.05" defer></script>
     <!-- Skills V1 — versioned drafting-instruction registry. Loads EAGERLY (tiny,
          static) and BEFORE ai_loader so the engine finds window.SLABSkills on its

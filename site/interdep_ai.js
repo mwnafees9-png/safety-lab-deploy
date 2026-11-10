@@ -1,4 +1,5 @@
 // ============================================================================
+// interdep_ai.js v1.3 (10 Nov 2026): idpAiSweep({ fcIds }) drafts one failure condition's empty cells (the PASA Autopilot).
 // interdep_ai.js — v1.1 — Phase D gap 4 (D1): the Interdependence AI sweep.
 // v1.1 (21 Aug 2026, A10): candidates are system-FUNCTION columns (Q.4-1).
 //
@@ -68,9 +69,12 @@
 
     const IDP_SWEEP_FC_CAP = 25;   // per run — rerun for the rest, honestly reported
 
-    async function idpAiSweep() {
+    // 10 Nov 2026: opts.fcIds limits the sweep to those failure conditions (internal IDs): the PASA Autopilot drafts one
+    // failure condition's empty cells from the architecture; proposals still wait for a person to accept or reject them
+    async function idpAiSweep(opts) {
         if (typeof idpColumns !== 'function' || typeof _idpCellRaw !== 'function' || typeof _idpStore !== 'function' || typeof _idpCellKey !== 'function') { _toast('Interdependence machinery not loaded.', 'error'); return; }
-        const fcs = (typeof acFhaData !== 'undefined' && acFhaData) || [];
+        const only = opts && Array.isArray(opts.fcIds) ? opts.fcIds.map(String) : null;
+        const fcs = ((typeof acFhaData !== 'undefined' && acFhaData) || []).filter(f => !only || (f && only.indexOf(String(f.internalId)) >= 0));
         const syss = (typeof systemsData !== 'undefined' && systemsData) || [];
         // EMPTY CELLS ONLY — collect per FC.
         const work = [];

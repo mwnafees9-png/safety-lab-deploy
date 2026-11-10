@@ -2469,53 +2469,15 @@ function renderWsPssaPanel() {
     host.innerHTML = html;
 }
 
-function _pasaReparent() {
-    if (_pasaReparented) return;
-    const panels = document.getElementById('pasa-subpanels');
-    if (!panels) return;
-    ['view-interdep', 'view-mac'].forEach(id => {
-        const v = document.getElementById(id);
-        if (v) { v.style.display = 'none'; panels.appendChild(v); }
-    });
-    // Resources has no tab of its own: its matrix renders inside the interdependence
-    // view, and the row editor tucks underneath in a collapsible section.
-    const interdepView = document.getElementById('view-interdep');
-    const resView = document.getElementById('view-resources');
-    if (interdepView && resView) {
-        const det = document.createElement('details');
-        det.id = 'idp-resource-editor';
-        det.innerHTML = '<summary style="cursor:pointer; font-size:12.5px; color: var(--color-text-secondary); padding: 8px 0;">Resource editor — add or edit provide/consume rows</summary>';
-        resView.style.display = '';
-        det.appendChild(resView);
-        interdepView.appendChild(det);
-    }
-    _pasaReparented = true;
-}
-// A PASA tab from wherever its bar is showing (it also sits above the aircraft requirements,
-// 21 Oct 2026): open the PASA first when it is not on screen, then the page.
+// 10 Nov 2026 (the PASA Autopilot): the PASA page and its tab row are gone. The PASA is the Autopilot (pasa_autopilot.js);
+// interdependence, common resources and CoFFE are answered inside it; the MAC model and MF&MS are pages beside the fault
+// trees. Old callers of pasaGo / pasaSub land where the page now is.
+function _pasaReparent() {}
 function pasaGo(name) {
-    let cur = '';
-    try { cur = window._slCurrentTab || ''; } catch (_) {}
-    if (cur !== 'pasa' && typeof switchTab === 'function') switchTab('pasa');
-    pasaSub(name);
+    const to = { mac: 'mac', mfms: 'mfms', cea: 'cea', resources: 'resources', fta: 'fta' }[name] || 'pasa';
+    if (typeof switchTab === 'function') switchTab(to);
 }
-function pasaSub(name) {
-    _pasaReparent();
-    if (name === 'resources') name = 'interdep';   // merged
-    const map = { cockpit: 'pasa-sub-cockpit', interdep: 'view-interdep', mac: 'view-mac', mfms: 'pasa-sub-mfms', coffe: 'pasa-sub-coffe' };
-    Object.entries(map).forEach(([k, id]) => {
-        const el = document.getElementById(id);
-        if (el) el.style.display = (k === name) ? '' : 'none';
-        const btn = document.getElementById('pasa-tab-' + k);
-        if (btn) btn.classList.toggle('active', k === name);
-    });
-    if (name === 'cockpit') { try { renderCockpitPage('PASA'); } catch (_) {} }
-    if (name === 'interdep') { try { renderInterdepPage(); _populateResourceMultiselects({}); renderResources(); } catch (_) {} }
-    if (name === 'mac') { try { renderMacPage(); } catch (_) {} }
-    if (name === 'mfms') { try { renderMfmsPanel(); } catch (_) {} }
-    if (name === 'coffe') { try { renderCoffePanel(); } catch (_) {} }
-    try { if (typeof SLLazy !== 'undefined') SLLazy.flush(); } catch (_) {}   // lazy_render.js: the lane just shown renders its pending work now
-}
+function pasaSub(name) { pasaGo(name); }
 
 function rateEquivalentForProb(P, t) {
     if (P == null) return 0;

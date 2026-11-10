@@ -68,18 +68,20 @@ const fc = (id, sev) => ({ internalId: id, fcId: 'FC-' + id, fcDesc: 'cond ' + i
     check('C1: objective is the Catastrophic target', res.target === 1e-9);
     check('C1: baseline P(top) inside the objective', res.pTop != null && res.pTop <= 1e-9, String(res.pTop));
     check('C1: a gate that breaks the budget as OR is critical', by(gOnly.id) && by(gOnly.id).critical && by(gOnly.id).orBreaks, JSON.stringify(by(gOnly.id)));
-    check('C1: a gate that breaks the budget only as certain is critical', by(gInner1.id) && by(gInner1.id).critical && !by(gInner1.id).orBreaks && by(gInner1.id).certainBreaks, JSON.stringify(by(gInner1.id)));
+    // 10 Nov 2026 (v1.5, Waqas agreed): the second test is one shared cause taking out every input; the gate then fails as often
+    // as its least likely input (never more than the OR test), so a gate inside the objective both ways is not critical
+    check('C1: under one shared cause the gate is its least likely input: the top worked out again with that value, never above the OR test', by(gInner1.id) && by(gInner1.id).pShared > res.pTop && by(gInner1.id).pShared <= by(gInner1.id).pAsOr && /^1\d\d/.test(by(gInner1.id).sharedFrom) && !by(gInner1.id).critical, JSON.stringify(by(gInner1.id)));
     check('C1: a gate that breaks it neither way is not critical', by(gInner2.id) && !by(gInner2.id).critical, JSON.stringify(by(gInner2.id)));
     check('C1: INHIBIT, PAND and SPARE are tested', [gInh, gPand, gSpare].every(g => by(g.id) && by(g.id).critical));
     check('C1: OR and VOTING gates are not tested', !by(gOr.id) && !by(gVote.id));
     check('C1: a one-input AND gate is not tested', !by(gOne.id));
-    check('C1: the outer AND gates are critical too (they carry the inner ones)', by(gOuter1.id).critical && by(gOuter2.id).critical);
+    check('C1: the outer AND gates are critical too (they carry the inner ones: as OR their inputs break the objective)', by(gOuter1.id).critical && by(gOuter1.id).orBreaks && by(gOuter2.id).critical);
     // top gate as certain
     const topAnd = gate('AND', [leaf(1e-5), leaf(1e-5)]);
     const page2 = { id: 'p2', name: 'Top and', root: topAnd, linkedFhaIds: [1] };
     const sb2 = load({ ftaPages: [page2], acFhaData: [fc(1, 'Catastrophic')], systemsData: [], cmaData: [] });
     const r2 = sb2.SLCriticalGates.analyzePage(page2);
-    check('C1: the top gate taken as certain is P = 1 and critical', r2.gates.length === 1 && r2.gates[0].pCertain === 1 && r2.gates[0].critical);
+    check('C1: a top gate under one shared cause is its least likely input (never P = 1), and critical when that breaks the objective', r2.gates.length === 1 && r2.gates[0].pShared === 1e-5 && r2.gates[0].sharedBreaks && r2.gates[0].critical);
 }
 
 // ---- C2 the objective --------------------------------------------------------------------
@@ -175,7 +177,7 @@ const fc = (id, sev) => ({ internalId: id, fcId: 'FC-' + id, fcDesc: 'cond ' + i
     const thread = sb._renderGoldenThread(sb.acFhaData[0]);
     const iStage = thread.indexOf('STAGE Critical gates warn'), iCC = thread.indexOf('Common cause');
     check('C5: the thread stage is inserted before Common cause and says CHECK for an unreviewed critical gate', iStage >= 0 && iCC > iStage, thread.slice(0, 300));
-    check('C5: the thread stage names the gate and the two results', /G-\d+.*if OR.*if certain/.test(thread) && /no common mode review/.test(thread));
+    check('C5: the thread stage names the gate and the two results', /G-\d+.*if OR.*if one shared cause/.test(thread) && /no common mode review/.test(thread));
     // 10 Nov 2026 (critical_gates.js v1.4, the asked-for change): the panel is no longer drawn on the CMA page; every critical gate is in the CMA report
     check('C5: renderCMA still returns its result and draws no panel on the page (the gates are in the CMA report)', sb.renderCMA() === 'rendered' && !els['critical-gates-panel'] && !(els['view-cma'].children || []).some(c => /Which independence claims carry the budget/.test(c.innerHTML || '')));
     S.startReview('p1:' + g1.id);

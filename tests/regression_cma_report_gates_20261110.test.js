@@ -12,7 +12,8 @@
  * On the Aeolus HL-1 demo, in the real app, with the production CSP:
  *   [S]  pins and headers: critical_gates 1.4, cma_claims 1.1 (before cma_autopilot), helpers_modules 3.68, cma_autopilot 1.4, cca_report 1.8,
  *        plan_autopilot 2.3; no em dashes in what changed; the 78ch and 980px text caps gone
- *   [N]  the "if certain" number: a gate taken as certain that makes the failure condition certain reads "every flight", never
+ *   [N]  (10 Nov late, critical_gates 1.5) the second test is "one shared cause takes out all the inputs": a real rate (the gate at
+ *        its least likely input), "every flight" only when it is, never 34.5 / flight time. Before (1.4): the "if certain" number: a gate taken as certain that makes the failure condition certain reads "every flight", never
  *        a rate (no 34.5 / flight time anywhere); other values convert as before (G-7098: -ln(1 - P) / 3 h); the words say it
  *   [P]  the standalone panel is gone from the CMA page; SLCriticalGates and its API stay
  *   [G]  every critical gate has its section in the right report (aircraft or its system), under its failure condition by ID
@@ -44,7 +45,7 @@ const check = (n, c, d) => { if (c) { pass++; console.log('  PASS  ' + n); } els
 const SITE = path.join(__dirname, '..', 'site');
 const MUT = process.env.SL_CMAG_MUTATE || '';
 const MUTS = {
-    certain:   ['critical_gates.js', "var rateOf = function (p) { if (p == null || everyFlight(p)) return null;", "var rateOf = function (p) { if (p == null) return null;"],
+    certain:   ['critical_gates.js', "if (pk != null && (best == null || pk < best.p)) best = { p: pk, k: k };", "if (pk != null) best = { p: 1, k: k };"],
     panel:     ['critical_gates.js', "var old = d.getElementById('critical-gates-panel'); if (old && old.parentNode) old.parentNode.removeChild(old);\n        return;", "return _renderPanelV13();"],
     group:     ['cma_claims.js', "function claimKey(key) { var ins = inputs(key);", "function claimKey(key) { return 'gate:' + S(key); var ins = inputs(key);"],
     nofig:     ['cma_autopilot.js', "treeFigure(r, x, gid, opts).forEach(function (fig) { blocks.push(fig); });", "void 0;"],
@@ -68,8 +69,8 @@ const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y
     console.log('\n[S] pins, headers, no em dashes, no text caps');
     const HTML = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8'), at = f => HTML.indexOf('src="' + f + '?v=');
     const R = n => fs.readFileSync(path.join(SITE, n), 'utf8');
-    check('S1 critical_gates.js 1.4, cma_claims.js 1.1, helpers_modules.js 3.68 or later, cma_autopilot.js 1.5, cca_report.js 1.9, plan_autopilot.js 2.4 pinned (10 Nov: the AI drafts only once the questions are answered), headers the same', /critical_gates\.js\?v=1\.4"/.test(HTML) && /cma_claims\.js\?v=1\.1"/.test(HTML) && (m => !!m && +m[1] >= 68)(HTML.match(/helpers_modules\.js\?v=3\.(\d+)"/)) && /cma_autopilot\.js\?v=1\.5"/.test(HTML) && /cca_report\.js\?v=1\.9"/.test(HTML) && /plan_autopilot\.js\?v=2\.4"/.test(HTML)
-        && /critical_gates\.js v1\.4/.test(R('critical_gates.js').slice(0, 2500)) && /SLCmaClaims v1\.1/.test(R('cma_claims.js').slice(0, 200)) && /SLCmaAuto v1\.5/.test(R('cma_autopilot.js').slice(0, 200)) && /SLCcaReport v1\.9/.test(R('cca_report.js').slice(0, 200)) && /v2\.4/.test(R('plan_autopilot.js').slice(0, 400)));
+    check('S1 critical_gates.js 1.5, cma_claims.js 1.2, helpers_modules.js 3.68 or later, cma_autopilot.js 1.5, cca_report.js 2.0, plan_autopilot.js 2.4 pinned (10 Nov late: the shared cause test, whole trees drawn for the PASA and PSSA, appendices), headers the same', /critical_gates\.js\?v=1\.5"/.test(HTML) && /cma_claims\.js\?v=1\.2"/.test(HTML) && (m => !!m && +m[1] >= 68)(HTML.match(/helpers_modules\.js\?v=3\.(\d+)"/)) && /cma_autopilot\.js\?v=1\.5"/.test(HTML) && /cca_report\.js\?v=2\.0"/.test(HTML) && /plan_autopilot\.js\?v=2\.4"/.test(HTML)
+        && /critical_gates\.js v1\.4/.test(R('critical_gates.js').slice(0, 4000)) && /v1\.5, Waqas agreed/.test(R('critical_gates.js').slice(0, 300)) && /SLCmaClaims v1\.2/.test(R('cma_claims.js').slice(0, 200)) && /SLCmaAuto v1\.5/.test(R('cma_autopilot.js').slice(0, 200)) && /SLCcaReport v2\.0/.test(R('cca_report.js').slice(0, 200)) && /v2\.4/.test(R('plan_autopilot.js').slice(0, 400)));
     check('S2 cma_claims.js loads after critical_gates.js and cma_flow.js and before cma_autopilot.js', at('cma_claims.js') > at('critical_gates.js') && at('cma_claims.js') > at('cma_flow.js') && at('cma_claims.js') < at('cma_autopilot.js') && at('critical_gates.js') > 0);
     check('S3 no em dashes in the files this change wrote', ['critical_gates.js', 'cma_claims.js', 'cma_autopilot.js', 'cca_report.js'].every(f => R(f).indexOf('\u2014') < 0) && fs.readFileSync(__filename, 'utf8').indexOf('\u2014') < 0);
     check('S4 the report text caps are gone (78ch paragraphs, 980px leads)', R('cca_report.js').indexOf('max-width:78ch') < 0 && !/\.ccr-lead\{[^}]*max-width:980px/.test(R('cca_report.js')) && !/\.pla-lead\{[^}]*max-width:980px/.test(R('plan_autopilot.js')));
@@ -106,11 +107,13 @@ const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y
             const fake = 34.538776394910684 / hours;
             out.n = {
                 count: crit.length,
-                noFake: crit.every(x => x.g.rateCertain == null || Math.abs(x.g.rateCertain - fake) / fake > 1e-6),
-                everyIsNull: crit.filter(x => x.g.pCertain >= 1 - 1e-9).every(x => x.g.certainEveryFlight === true && x.g.rateCertain === null && x.g.certainBreaks === true),
-                manyEvery: crit.filter(x => x.g.certainEveryFlight).length,
-                g7098: (() => { const x = crit.find(c => c.g.displayId === 'G-7098' && c.res.pageId === 'pg-eps-total'); return x ? { p: x.g.pCertain, rate: x.g.rateCertain, want: -Math.log1p(-x.g.pCertain) / hours } : null; })(),
-                words: (() => { const x = crit.find(c => c.g.certainEveryFlight); const w = CG.explain(x.g, x.res); return w && w.text; })(),
+                // 10 Nov 2026 (late, v1.5): the second test is "one shared cause takes out all the inputs" (Waqas agreed); the
+                // gate then fails as often as its least likely input, so the number is a real rate
+                noFake: crit.every(x => x.g.rateShared == null || Math.abs(x.g.rateShared - fake) / fake > 1e-6),
+                everyIsNull: crit.filter(x => x.g.pShared >= 1 - 1e-9).every(x => x.g.sharedEveryFlight === true && x.g.rateShared === null && x.g.sharedBreaks === true),
+                manyReal: crit.filter(x => x.g.rateShared != null && x.g.rateShared < 1).length,
+                g7098: (() => { const x = crit.find(c => c.g.displayId === 'G-7098' && c.res.pageId === 'pg-eps-total'); return x ? { p: x.g.pShared, rate: x.g.rateShared, want: -Math.log1p(-x.g.pShared) / hours, from: x.g.sharedFrom } : null; })(),
+                words: (() => { const x = crit.find(c => c.g.displayId === 'G-7086'); const w = CG.explain(x.g, x.res); return w && w.text; })(),
                 wordsRate: (() => { const x = crit.find(c => c.g.displayId === 'G-7098'); const w = CG.explain(x.g, x.res); return w && w.text; })(),
                 thread: (() => { const f = acFhaData.find(z => z && /FC-05/.test(z.fcId || '')); return f ? CG.threadStage(f) : ''; })()
             };
@@ -137,7 +140,7 @@ const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y
             out.g.sameClaim = cl('pg-fcs-pitch:7068') && cl('pg-fcs-pitch:7068') === cl('pg-fcs-pitch-v:7309');
             out.g.subsetOwn = cl('pg-prp-allout:7086') && cl('pg-prp-sameside:7089') && cl('pg-prp-allout:7086') !== cl('pg-prp-sameside:7089') && cl('pg-prp-sameside:7089') !== cl('pg-prp-sameside:7092');
             out.g.testsInWords = secs.filter(s => s.virtual).every(s => s.blocks.some(b => /^The budget tests? for /.test(b.text || '') && /per flight hour/.test(b.text) && !/as OR: exceeds|as certain/.test(b.text)));
-            out.g.everyFlightWords = secs.some(s => s.blocks.some(b => /would follow on every flight/.test(b.text || '')));
+            out.g.everyFlightWords = secs.some(s => s.blocks.some(b => /one shared cause took out all of its inputs at once/.test(b.text || '')));   // 10 Nov late: the shared cause test in words
             // ---- [F] the tree pictures ---------------------------------------------------------------------------------------
             out.f = { bad: [] };
             gates.forEach(gt => {
@@ -236,12 +239,12 @@ const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y
             return out;
         }), 240000, 'the CMA report checks');
 
-        console.log('\n[N] the "if certain" number');
+        console.log('\n[N] the shared cause number (was "if certain")');
         check('N1 no critical gate reports the meaningless 34.5 / flight time (11.5 per flight hour on the demo)', r.n.noFake && r.n.count > 20, r.n.count);
-        check('N2 a certain failure condition reads "every flight": no rate, and it breaks the objective', r.n.everyIsNull && r.n.manyEvery > 10, r.n.manyEvery);
-        check('N3 other values convert as before: G-7098 if certain = -ln(1 - P) / 3 h', r.n.g7098 && r.n.g7098.p < 1e-3 && Math.abs(r.n.g7098.rate - r.n.g7098.want) / r.n.g7098.want < 1e-9 && r.n.g7098.rate > 1e-8 && r.n.g7098.rate < 1e-6, JSON.stringify(r.n.g7098));
-        check('N4 the test said in words: every flight, and a rate in powers of ten for the others', /would follow on every flight/.test(r.n.words) && /per flight hour/.test(r.n.words) && /10⁻/.test(r.n.wordsRate) && !/e[+-]\d/.test(r.n.words + r.n.wordsRate), r.n.words);
-        check('N5 the Golden Thread stage shows "every flight", not 1.10e+1', /every flight/.test(r.n.thread) && !/1\.1\d?e\+1/.test(r.n.thread), r.n.thread.slice(0, 300));
+        check('N2 the shared cause test gives real rates (the gate at its least likely input); "every flight" only when it is, with no rate', r.n.everyIsNull && r.n.manyReal > 20, r.n.manyReal);
+        check('N3 G-7098 under one shared cause = -ln(1 - P) / 3 h with P worked out from its least likely input (generator 1)', r.n.g7098 && r.n.g7098.p < 1e-3 && Math.abs(r.n.g7098.rate - r.n.g7098.want) / r.n.g7098.want < 1e-9 && r.n.g7098.rate > 1e-9 && r.n.g7098.rate < 1e-6 && /BE-7094/.test(r.n.g7098.from), JSON.stringify(r.n.g7098));
+        check('N4 the test said in words: one shared cause, the gate at its least likely input, a rate in powers of ten', /one shared cause took out all of its inputs at once/.test(r.n.words) && /per flight hour/.test(r.n.words) && /10⁻/.test(r.n.wordsRate) && !/e[+-]\d/.test(r.n.words + r.n.wordsRate), r.n.words);
+        check('N5 the Golden Thread stage shows the shared cause number, never 1.10e+1', /if one shared cause/.test(r.n.thread) && !/1\.1\d?e\+1/.test(r.n.thread), r.n.thread.slice(0, 300));
         console.log('\n[P] the panel');
         check('P1 the standalone critical gates panel is gone from the CMA page', !r.p.panel && !r.p.text);
         check('P2 SLCriticalGates keeps its API (analyzeAll, startReview, threadStage, INV-58, panelHtml)', r.p.api);

@@ -1,3 +1,4 @@
+// 10 Nov 2026: the requirement's rationale in plain words (no standard-clause tags, "not acceptable: the design must change").
 // ============================================================================
 // pra_scenarios.js — v1.0 — particular-risk SCENARIOS and the requirement
 // cascade (23 Sep 2026, standards gap G3; ARP4761A Appendix L, Q.15.2.7.2).
@@ -190,13 +191,13 @@
             var text = fcs.length
                 ? 'If the particular risk "' + threat + '" occurs within zone(s) ' + zStr + ' (scenario ' + s.scnId + '), it shall not result in ' + fcs.map(function (f) { return (f.fcId ? f.fcId + ' ' : '') + '"' + (f.fcDesc || 'failure condition') + '"'; }).join(' or ') + '.'
                 : 'If the particular risk "' + threat + '" occurs within zone(s) ' + zStr + ' (scenario ' + s.scnId + '), the aircraft shall retain ' + (affected.length ? affected.join(', ') : 'the aircraft sub-functions housed in those zones') + '.';
-            var acc = s.acceptable === 'yes' ? 'acceptable' : s.acceptable === 'no' ? 'NOT acceptable — design change needed' : 'not yet decided';
-            var rat = 'Origin: PRA ' + (row.praId || '') + ', scenario ' + s.scnId + ' (ARP4761A Appendix L). ' +
+            var acc = s.acceptable === 'yes' ? 'acceptable' : s.acceptable === 'no' ? 'not acceptable: the design must change' : 'not yet decided';
+            var rat = 'From particular risk ' + (row.praId || '') + ', scenario ' + s.scnId + '. ' +
                 'Hit together: ' + (affected.length ? affected.join(', ') : 'none recorded') + '. ' +
                 'Aircraft effect: ' + (String(s.effect || '').trim() || 'not stated') + '. ' +
                 'Failure condition(s): ' + (fcs.length ? fcs.map(function (f) { return (f.fcId || f.internalId) + ' (' + (f.severity || '?') + ')'; }).join(', ') : 'none linked') + (cls ? '; classification ' + cls : '') + '. ' +
-                'Acceptability: ' + acc + (String(s.rationale || '').trim() ? ' — ' + String(s.rationale).trim() : '') + '. ' +
-                'Allocated to: ' + (owners.length ? owners.join(', ') : 'no owning system resolved') + '. ' +
+                'Acceptability: ' + acc + (String(s.rationale || '').trim() ? ', because ' + String(s.rationale).trim() : '') + '. ' +
+                'Allocated to: ' + (owners.length ? owners.join(', ') : 'no system named yet') + '. ' +
                 'Interrelated with: ' + (inter.length ? inter.join(', ') + ' (shared zone or function; changes to one can affect the other)' : 'no other particular risk') + '.' +
                 (row.mitigation ? ' Mitigation: ' + row.mitigation + '.' : '') + _asmText(row);
             var fcIdList = fcs.map(function (f) { return String(f.internalId); }).sort();

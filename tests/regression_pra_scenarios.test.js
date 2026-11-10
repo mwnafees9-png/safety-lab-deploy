@@ -108,7 +108,7 @@ check('R4: with failure conditions linked, the one "shall" names them', /\(scena
 check('R4: with none linked, it keeps the functions hit', /the aircraft shall retain F-BRAKE, F-HYD, F-PITCH\./.test(reqs[1].text), reqs[1].text);
 const rat = reqs[0].rat;
 check('R4: rationale carries origin, effect, classification, acceptability, allocation, interrelation, mitigation and assumption impact',
-    /Origin: PRA PRA-1, scenario S1/.test(rat) && /Aircraft effect: not stated/.test(rat) && /FC-PITCH \(Catastrophic\); classification Catastrophic/.test(rat) && /Acceptability: acceptable/.test(rat) &&
+    /From particular risk PRA-1, scenario S1/.test(rat)   /* 10 Nov 2026 (Waqas: rationales in plain words, no tool notes): */ && /Aircraft effect: not stated/.test(rat) && /FC-PITCH \(Catastrophic\); classification Catastrophic/.test(rat) && /Acceptability: acceptable/.test(rat) &&
     /Allocated to: Hydraulics, Flight controls/.test(rat) && /Interrelated with: PRA-2/.test(rat) && /Mitigation: Kevlar shield/.test(rat) && /ASM-7 \(if wrong: cone widens → S1 recurs\)/.test(rat), rat);
 const fp1 = reqs[0].reqSource.fingerprint;
 a.acceptable = 'no';

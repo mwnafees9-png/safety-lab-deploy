@@ -840,9 +840,10 @@ const Reports = (function() {
                 'Level':      r.level || '',
                 'Type':       r.type || '',
                 'Requirement': r.text || '',
-                'Rationale':  r.rat || '',
+                // 10 Nov 2026: never blank, and where it is driven from (req_trace.js)
+                'Rationale':  String(r.rat || '').trim() || 'Rationale missing',
+                'Driven from': (window.SLReqTrace ? window.SLReqTrace.drivenText(r) : '') || _srcTag('req', r, sys),
                 'Verification': r.verifStatus || r.vvStatus || 'Pending',
-                'Source':     _srcTag('req', r, sys),
             })), reqSource, sys ? 'sysReq' : 'acReq', sys ? sys.id : null),
 
             // 27 Sep 2026 (Q3) — the by-source-analysis appendix: every requirement and

@@ -122,7 +122,7 @@ const req = (iid, extra) => Object.assign({ internalId: iid, type: 'Safety', tex
     const RB = sb.SLReqBasis;
     const built = RB.buildPromotion(a1, RB.storeFor('ac'));
     check('B2: the row is a Safety requirement at L1 carrying the statement', built.type === 'Safety' && built.level === 'L1' && built.text === a1.text);
-    check('B2: the rationale carries the assumption ID, origin, rationale and both postures', /Promoted from assumption A-1 \(PRA\)/.test(built.rat) && built.rat.indexOf('Bird mass') >= 0 && built.rat.indexOf('Credited posture: no penetration') >= 0 && built.rat.indexOf('Uncredited posture: penetration') >= 0, built.rat);
+    check('B2: the rationale carries the assumption ID, origin, rationale and both postures, in plain words (10 Nov 2026)', /The analysis rests on assumption A-1 \(PRA\), so it is made a requirement\./.test(built.rat) && built.rat.indexOf('Bird mass') >= 0 && built.rat.indexOf('With the credit: no penetration') >= 0 && built.rat.indexOf('Without the credit: penetration') >= 0, built.rat);
     check('B2: the tag is inherited and the source names the assumption', built.sourceAnalysis === 'PRA' && built.reqSource.generator === 'assumption' && built.reqSource.sourceId === 'asm:A-1' && built.linkedAsmIds[0] === 'A-1');
     check('B2: traced to the first linked failure condition sub-function', built.traceId === 'SF-1');
     check('B2: derived, no verification yet', built.derivationType === 'derived' && built.verifStatus === '' && typeof built.reqSource.promotedAt === 'string');
@@ -237,7 +237,8 @@ const req = (iid, extra) => Object.assign({ internalId: iid, type: 'Safety', tex
     check('B6: appendix rows come in vocabulary order with Untagged last', t.map(r => r.Source).join(',') === 'FHA,CMA,CMA,ZSA,HF,Untagged', t.map(r => r.Source).join(','));
     const a1 = t.find(r => r.Kind === 'Assumption' && r.ID === 'A-1');
     check('B6: an assumption row carries its state and the requirement holding it, by ID', a1 && /Validated · held by REQ-4/.test(a1.Status) && Object.keys(a1).join(',') === 'Source,Kind,ID,Statement,Rationale,Status', JSON.stringify(a1));
-    check('B6: reports.js puts the Source column on the requirements and assumptions tables', /'Source':\s+_srcTag\('req', r, sys\)/.test(REPORTS) && /'Source':\s+_srcTag\('asm', a, sys\)/.test(REPORTS));
+    // 10 Nov 2026: the requirements table's source is "Driven from" (req_trace.js), with the analysis tag as the fallback
+    check('B6: reports.js puts where each requirement is driven from (the analysis tag as the fallback) and the assumptions\' Source column on the tables', /'Driven from': \(window\.SLReqTrace \? window\.SLReqTrace\.drivenText\(r\) : ''\) \|\| _srcTag\('req', r, sys\)/.test(REPORTS) && /'Source':\s+_srcTag\('asm', a, sys\)/.test(REPORTS));
     check('B6: reports.js builds src_table from req_basis and parses {{appendix:src}}', /src_table: _srcRows\(sys\)/.test(REPORTS) && /const out = \[\], re = \/\\\{\\\{\(appendix:\[a-z\]\+\|/.test(REPORTS) && (REPORTS.match(/'\{\{appendix:src\}\}',/g) || []).length === 8);
     check('B6: the six core reports allow the appendix and the modal offers it', ['AFHA', 'PASA', 'ASA', 'SFHA', 'PSSA', 'SSA'].every(k => new RegExp(k + ":\\s*\\{[^\\n]*'src'\\]").test(REPORTS)) && (REPORTS.match(/id="rpt-appx-src"/g) || []).length === 2 && (REPORTS.match(/\['fta','zsa','pra','cma','src'\].forEach/g) || []).length === 5);
     // 31 Oct 2026: both formats come from one writer; every appendix table is data[<name>_table] under _appxTitle
@@ -264,7 +265,8 @@ const req = (iid, extra) => Object.assign({ internalId: iid, type: 'Safety', tex
     check('B7: every requirement row is decorated once', RB.decorateReqTable('ac') === 3 && RB.decorateReqTable('ac') === 0);
     const r = (i, j) => reqBody.children[i].children[j].innerHTML;
     check('B7: the tag pill sits by the Type cell and the row carries the tag', /data-rb-tag="PRA"/.test(r(0, 3)) && reqBody.children[0].getAttribute('data-rb-tag') === 'PRA' && /data-rb-tag="FHA"/.test(r(1, 3)) && r(2, 3) === '');
-    check('B7: the no-rationale badge sits by the Rationale cell of the safety row only', /no rationale/.test(r(1, 5)) && !/no rationale/.test(r(0, 5)) && !/no rationale/.test(r(2, 5)));
+    // 10 Nov 2026 (Waqas: "Requirements imported through ReqIF with no rationale or source are flagged 'rationale missing', never shown blank"): every row with none says so
+    check('B7: "Rationale missing" sits by the Rationale cell of every row with none (the safety row and the functional one), never on a row that has one', /Rationale missing/.test(r(1, 5)) && !/Rationale missing/.test(r(0, 5)) && /Rationale missing/.test(r(2, 5)));
     let n = 0; sb.renderACAssumptions = () => { n++; };
     check('B7: a render is wrapped once and still runs', RB._wrapRender('renderACAssumptions', () => {}) === true && RB._wrapRender('renderACAssumptions', () => {}) === false && (sb.renderACAssumptions(), n === 1));
 }

@@ -323,6 +323,10 @@ const Review = (function() {
 // FHA. The requirements page filtered on the §5.3.1 vocabulary while every
 // generator wrote the analysis vocabulary, so four of the five filter chips
 // returned an empty list on the shipped Kestrel showcase.
+// 10 Nov 2026 (the PASA and PSSA Autopilots, Waqas: "Rewrite AutoReq rationales that read like tool notes ... into plain
+// sentences"): every rationale says why in plain words, with no page names, source keys, invariant numbers or "preview only";
+// recomputeFlags runs every generator (crew, monitoring and unsafe operating condition rows were marked orphan on every load)
+// and never marks an imported or promoted row an AutoReq orphan; a CMA concern's requirement goes orphan with its concern.
 const AutoReq = (function(){
     // Tiny non-crypto hash (DJB2) for fingerprinting.
     function hashStr(s){ let h=5381; for(let i=0;i<s.length;i++) h=((h<<5)+h+s.charCodeAt(i))|0; return (h>>>0).toString(36); }
@@ -1014,7 +1018,7 @@ const AutoReq = (function(){
             let linkRat = '';
             if(linkedSysFha){
                 const winner = effSev === fha.severity ? 'AC' : 'System';
-                linkRat = ` Linked to system FC ${linkedSysFha.fcId}; the combined target is the more restrictive of AC (${fha.severity}) and System (${linkedSysFha.severity}) — ${winner} governs.`;
+                linkRat = ` It is linked to the system failure condition ${linkedSysFha.fcId}; the stricter of the aircraft (${fha.severity}) and system (${linkedSysFha.severity}) severities applies, here the ${winner} one.`;
             }
 
             // Top-event probability target is NOT normalized — the cert basis quotes 1e-9/FH
@@ -1026,7 +1030,7 @@ const AutoReq = (function(){
             if (hasNormalization) {
                 const rPct = t.exposureRatio * 100;
                 const rPctStr = rPct < 1 ? rPct.toFixed(2) : rPct.toFixed(1);
-                exposureRat = ` Phase exposure: ${t.exposedHours.toFixed(2)} h of ${t.totalHours.toFixed(2)} h flight (r=${rPctStr}%; ${t.matchedPhases.join(', ')}). Basic-event allocations under this hazard should be expressed as operational rates during these phases (event-allocation normalization, not target rescaling).`;
+                exposureRat = ` It is exposed for ${t.exposedHours.toFixed(2)} of the ${t.totalHours.toFixed(2)} hours of a flight (${rPctStr}%). The failure rates of the events under this failure condition count only while the aircraft is in these phases.`;
             }
 
             // Phase 56.50 — ARP 4761 / AIR6110 form: "The probability of <FC>
@@ -1050,15 +1054,15 @@ const AutoReq = (function(){
             });
             implIds.sort();
             const implRat = implIds.length
-                ? ` Implemented and verified by the repair-credit maintenance requirement(s) ${implIds.join(', ')} (CCMR pair-trace); an authored interval over the CCMR not-to-exceed bound surfaces as a trace conflict — INV-46 — never as a rewrite of this target.`
+                ? ` ${implIds.length > 1 ? 'The check requirements for the ' + implIds.length + ' events' : 'The check requirement for the event'} whose hidden failure the tree counts on being found carry the repair credit this target takes. A check interval longer than the longest one the analysis allows is shown as a conflict; it never changes this target.`
                 : '';
             out.push({
                 text: pFc != null
                     ? `The probability of ${fcSubject}${phaseClause} shall not exceed ${pFc.toExponential(2)} per flight.`
                     : `The probability of ${fcSubject}${phaseClause} shall not exceed ${t.prob.toExponential(2)} per flight hour.`,
-                rat: `${fha.fcId ? fha.fcId + ' — ' : ''}${effSev} per ${certBasis.acRef}.` +
-                     (pFc != null ? ` Equivalent to ≤ ${t.prob.toExponential(2)} per flight hour averaged over the ${mhFc.toFixed(2)} h flight envelope (cert-basis form).` : '') +
-                     `${linkRat} Phase: ${phaseLabel}.${milderRat}${exposureRat}${implRat}`,
+                rat: `${fha.fcId ? fha.fcId + ' is ' : 'This failure condition is '}${effSev}, which sets this objective (${certBasis.acRef}).` +
+                     (pFc != null ? ` That is ${t.prob.toExponential(2)} per flight hour or less, averaged over the ${mhFc.toFixed(2)} hour flight.` : '') +
+                     `${linkRat} The worst case is in ${phaseLabel}.${milderRat}${exposureRat}${implRat}`,
                 level: 'L1', type: 'Safety', analysis: 'Probabilistic',
                 verifMethod: 'Analysis',
                 traceId: fha.subId || '',
@@ -1279,11 +1283,11 @@ const AutoReq = (function(){
             // reference moves to the rationale.
             let repairRat = '';
             if(node.repairModel === 'monitored' && node.mu){
-                repairRat = ` The allocation takes credit for continuous monitoring with repair (μ ≥ ${(+node.mu).toExponential(2)}/h) — see the companion maintenance requirement.`;
+                repairRat = ` The budget counts on the failure being detected and repaired (repair rate at least ${(+node.mu).toExponential(2)} per hour); the maintenance requirement beside this one makes that so.`;
             } else if(node.repairModel === 'periodic' && node.tau){
-                repairRat = ` The allocation takes latent-failure detection credit (periodic test, τ ≤ ${node.tau} h) — see the companion maintenance requirement.`;
+                repairRat = ` The budget counts on a hidden failure being found by a check at least every ${node.tau} hours; the maintenance requirement beside this one makes that so.`;
             }
-            const libRat = node.libraryKey ? ` Component library ref: ${node.libraryKey}.` : '';
+            const libRat = node.libraryKey ? ` The failure rate comes from the component library entry ${node.libraryKey}.` : '';
 
             // Phase-exposure normalization. λ stored on the node is interpreted as the
             // OPERATIONAL rate (failures per hour while exposed). The cert basis target is
@@ -1310,7 +1314,7 @@ const AutoReq = (function(){
             if (exposureNormalized) {
                 const rPct = exp.ratio * 100;
                 const rStr = rPct < 1 ? rPct.toFixed(2) : rPct.toFixed(1);
-                phaseRat = ` Budget accrues while exposed during ${exp.matchedPhases.join(', ')} (${exp.exposedHours.toFixed(2)} h of the ${exp.totalHours.toFixed(2)} h flight envelope, r=${rStr}%; page top hazard ${exp.fhaFcId || ''}).`;
+                phaseRat = ` The event counts only during ${exp.matchedPhases.join(', ')}, ${exp.exposedHours.toFixed(2)} hours of a ${exp.totalHours.toFixed(2)} hour flight (${rStr}%)${exp.fhaFcId ? ', the phases of ' + exp.fhaFcId : ''}.`;
             } else if (missionHours || (exp && exp.totalHours)) {
                 phaseRat = ` Time basis: the ${(missionHours || exp.totalHours).toFixed(2)} h flight.`;
             }
@@ -1326,14 +1330,14 @@ const AutoReq = (function(){
                 const kind = src.kind || (src.targetId && !src.targetNodeId ? 'fha' : (src.targetNodeId ? 'fta' : ''));
                 const scopeStr = src.scope === 'aircraft' ? 'aircraft-level' : ('system ' + (((systemsData || []).find(s => s.id === src.systemId) || {}).name || src.systemId || '?'));
                 if (kind === 'fha') {
-                    extRat = ` Inherited from ${scopeStr} FHA row ${src.targetId}; this event's rate is fixed by that hazard's allocated target.`;
+                    extRat = ` This event stands for a ${scopeStr} failure condition, so its budget is that failure condition's own target.`;
                     extFingerprintTokens = ['ext-fha', src.scope || '', src.systemId || '', src.targetId || ''];
                 } else if (kind === 'fta') {
-                    extRat = ` Inherited from ${scopeStr} FTA node ${src.targetNodeId} on page ${src.targetPageId}; this event's rate is fixed by the linked node's computed probability.`;
+                    extRat = ` This event stands for an event of another ${scopeStr} fault tree, so its budget is the probability worked out there.`;
                     extFingerprintTokens = ['ext-fta', src.scope || '', src.systemId || '', src.targetPageId || '', src.targetNodeId || ''];
                 }
                 if (node._externalAllocation && node._externalAllocation.overrun) {
-                    extRat += ` Allocator flag: apportioned target (${node._externalAllocation.apportioned.toExponential(2)}) exceeded the inherited ceiling (${node._externalAllocation.external.toExponential(2)}); the inherited value governs.`;
+                    extRat += ` The share this tree would give it (${node._externalAllocation.apportioned.toExponential(2)}) is looser than that (${node._externalAllocation.external.toExponential(2)}), so the stricter value applies.`;
                 }
             }
 
@@ -1352,7 +1356,7 @@ const AutoReq = (function(){
                     : (failurePhrased
                         ? `The probability of ${_midSentence(subjName)} shall not exceed ${pStr} per flight.`
                         : `The probability of failure of ${_midSentence(subjName)} shall not exceed ${pStr} per flight.`),
-                rat: `Allocated from the fault tree on page ${page.name}.${phaseRat}${repairRat}${libRat}${extRat}`,
+                rat: `The fault tree for ${page.name} gives this event this share of the failure condition's budget; if the event is more likely than this, the failure condition misses its target.${phaseRat}${repairRat}${libRat}${extRat}`,
                 level: 'L3', type: 'Safety', analysis: 'Probabilistic',
                 verifMethod: 'Analysis',
                 traceId: node.displayId || '',
@@ -1442,10 +1446,10 @@ const AutoReq = (function(){
                     if (swept && swept.nte != null && isFinite(swept.nte) && swept.nte < 1e6) {
                         nteFpTokens = [swept.nte, swept.exceeds ? 'over' : 'within'];
                         nteRat = swept.exceeds
-                            ? ` CCMR CONFLICT: the latent sweep computes a not-to-exceed interval of ${(+swept.nte).toPrecision(3)} h for this event (severity ${swept.severity}, lambda ${(+swept.lambda).toExponential(2)}); the authored interval exceeds it, so this requirement as written does not meet the safety target. Reconcile on the CCMR page before baselining.`
-                            : ` CCMR: within the not-to-exceed bound of ${(+swept.nte).toPrecision(3)} h computed by the latent sweep (severity ${swept.severity}).`;
+                            ? ` Conflict: the longest check interval the analysis allows for this event is ${(+swept.nte).toPrecision(3)} hours (${swept.severity}, failure rate ${(+swept.lambda).toExponential(2)} per hour). The interval written here is longer, so as written it does not meet the target. Set the two to agree on the maintenance requirements page before the baseline.`
+                            : ` This is within the longest interval the analysis allows, ${(+swept.nte).toPrecision(3)} hours (${swept.severity}).`;
                     } else if (swept && swept.note) {
-                        nteRat = ` CCMR: no not-to-exceed bound available (${swept.note}).`;
+                        nteRat = ` The longest allowed interval could not be worked out yet (${swept.note}).`;
                     }
                 }
             } catch (_) { nteRat = ''; }
@@ -1458,8 +1462,8 @@ const AutoReq = (function(){
             const gov = pageGoverning.get(page.id) || null;
             let govRat = '', govFpTokens = [], govCtx = null;
             if (gov && gov.prob != null) {
-                govRat = ` Implements and verifies the governing probabilistic safety requirement for ${gov.fcId} (${gov.effSev}) — ${gov.sourceId} (CCMR pair-trace).` +
-                    (gov.accepted ? '' : ` That safety requirement is not yet in the register (fha-prob preview only) — run AutoReq with the FHA generator and accept it to complete the pair.`);
+                govRat = ` It makes good the probability requirement of ${gov.fcId} (${gov.effSev}).` +
+                    (gov.accepted ? '' : ` That probability requirement is not in the register yet; accept the failure condition requirements to complete the pair.`);
                 govFpTokens = [gov.sourceId, gov.accepted ? 'gov-accepted' : 'gov-preview'];
                 govCtx = { governedBy: gov.sourceId, governingFcId: gov.fcId, governingSeverity: gov.effSev, governingAccepted: !!gov.accepted };
             }
@@ -1495,11 +1499,11 @@ const AutoReq = (function(){
                             const toS = (mdl.states || []).find(s => s && s.name === t.to);
                             return fromS && toS && fromS.isFailed && !toS.isFailed;
                         });
-                        bridgeRat = ` Interval↔rate equivalence receipt (ARP4761A App I §I.3.3.2, "The Relationship Between TSF and Periodic Inspection/Repair Times" — this event also appears in Markov model "${mdl.name}"): mean undetected dwell T_TSF ≈ ${(+tsf).toPrecision(3)} h (${basis})` +
-                            (muEq ? `, equivalent continuous repair rate μ_eq ≈ ${muEq.toExponential(2)}/h (§I.3.3.3 form)` : '') + '.' +
+                        bridgeRat = ` This event is also in the Markov model "${mdl.name}": with this check a hidden failure lasts on average about ${(+tsf).toPrecision(3)} hours (${basis})` +
+                            (muEq ? `, the same as repairing it at about ${muEq.toExponential(2)} per hour` : '') + '.' +
                             (repairs.length
-                                ? ` The model's repair transition(s) ${repairs.map(t => `${t.from}→${t.to} @ ${(+t.rate).toExponential(2)}/h`).join(', ')} and this interval must tell one story — reconcile if they diverge.`
-                                : ' The model declares no repair transition out of a failed state — if it is meant to represent this periodic inspection, add one at μ_eq.');
+                                ? ` The model's repairs (${repairs.map(t => `${t.from} to ${t.to} at ${(+t.rate).toExponential(2)} per hour`).join(', ')}) and this interval must agree.`
+                                : ' The model has no repair out of a failed state; if it stands for this check, it needs one at that rate.');
                         bridgeFpTokens = ['appI', node.markovModelId, Math.round(tsf * 1e6) / 1e6]
                             .concat(repairs.map(t => t.from + '>' + t.to + ':' + t.rate));
                     }
@@ -1510,7 +1514,7 @@ const AutoReq = (function(){
                 intervalEmitted = 'periodic';
                 out.push({
                     text: `${subjName} shall be tested for undetected failure at intervals not exceeding ${node.tau} hours.`,
-                    rat: `The fault-tree allocation for this event on page ${page.name} takes latent-failure detection credit (periodic test, τ ≤ ${node.tau} h); without the interval the allocated probability is invalid. Candidate CMR — coordinate the interval with the scheduled-maintenance program.` + (mSpec ? ` Monitor spec ${mSpec.id} (D.4.3.1) attributes are carried by the linked monitoring-function requirement (${scopeKey}:fta-interval-monitor:${lid}).` : '') + nteRat + govRat + bridgeRat,
+                    rat: `The fault tree for ${page.name} counts on this hidden failure being found by a check at least every ${node.tau} hours; without the check its probability is not what the tree assumes. It is a candidate certification maintenance requirement, to be agreed with the scheduled maintenance program.` + (mSpec ? ` What the monitor must do (${mSpec.id}) is in the monitoring requirement beside this one.` : '') + nteRat + govRat + bridgeRat,
                     level: 'L3', type: 'Maintainability', analysis: 'Maintenance',
                     verifMethod: 'Inspection',
                     traceId: node.displayId || '',
@@ -1526,7 +1530,7 @@ const AutoReq = (function(){
                 intervalEmitted = 'monitored';
                 out.push({
                     text: `${subjName} shall provide continuous failure monitoring achieving a mean repair rate of at least ${(+node.mu).toExponential(2)} per hour.`,
-                    rat: `The fault-tree allocation for this event on page ${page.name} takes credit for monitored repair (μ ≥ ${(+node.mu).toExponential(2)}/h); the monitoring and restoration path is part of the safety case for the allocated probability.` + (mSpec ? ` Monitor spec ${mSpec.id} (D.4.3.1) attributes are carried by the linked monitoring-function requirement (${scopeKey}:fta-interval-monitor:${lid}).` : '') + govRat,
+                    rat: `The fault tree for ${page.name} counts on this failure being detected and repaired (at least ${(+node.mu).toExponential(2)} per hour); the monitoring and the repair are part of why its probability holds.` + (mSpec ? ` What the monitor must do (${mSpec.id}) is in the monitoring requirement beside this one.` : '') + govRat,
                     level: 'L3', type: 'Maintainability', analysis: 'Maintenance',
                     verifMethod: 'Analysis',
                     traceId: node.displayId || '',
@@ -1552,7 +1556,7 @@ const AutoReq = (function(){
                     : `the monitored-repair requirement (${scopeKey}:fta-interval:${lid}, μ ≥ ${(+node.mu).toExponential(2)}/h)`;
                 out.push({
                     text: `The monitoring function for ${subjName} shall satisfy: ${mAttrs.join('; ')}.`,
-                    rat: `Monitor spec ${mSpec.id} (D.4.3.1) attribute set, split from ${intervalRef} so each requirement carries a single imperative. The detection credit taken by the fault-tree allocation on page ${page.name} is valid only if the monitoring function meets these attributes.`,
+                    rat: `The fault tree for ${page.name} counts on this failure being detected. That holds only if the monitor does what this requirement says (${mSpec.id}); it is kept apart from the check interval so each requirement asks one thing.`,
                     level: 'L3', type: 'Maintainability', analysis: 'Maintenance',
                     verifMethod: 'Analysis',
                     traceId: node.displayId || '',
@@ -1594,7 +1598,7 @@ const AutoReq = (function(){
                     : (failurePhrased
                         ? `The probability of ${_midSentence(subj)} shall not exceed ${pStr} per flight.`
                         : `The probability of loss of ${_midSentence(subj)} shall not exceed ${pStr} per flight.`),
-                rat: `Common resource ${rid}, provided by ${_sysLabel(providerId)}. ONE provider requirement at the strictest value across every consumer (A3 / U-2): ` +
+                rat: `Common resource ${rid}, provided by ${_sysLabel(providerId)}. One requirement on the system that provides it, at the strictest value any user needs: ` +
                      uses.map(u => `${u.page.name} allocates ${u.p.toExponential(2)}`).join('; ') +
                      `. The strictest consumer governs (${gov.page.name}); each consuming system carries its own L2 interface requirement pinning the assumption its trees make.`,
                 level: 'L3', type: 'Safety', analysis: 'Probabilistic',
@@ -1660,7 +1664,7 @@ const AutoReq = (function(){
                     text: `${consumerName} shall assume that ${iClause} with a probability no greater than ${pStr} per flight, per the interface with ${_sysLabel(providerId)}.`,
                     rat: `Interface assumption on common resource ${rid} (provider: ${_sysLabel(providerId)}). This system's trees take credit for the resource at: ` +
                          uses.map(u => `${u.page.name} (${u.p.toExponential(2)})`).join('; ') +
-                         `. The strictest of this system's own uses governs. The provider carries the single probabilistic L3 for the resource (${'sys-' + providerId}:fta-resource:${rid}); this row is the consumer-side contract against it (ARP4754B §5.3.1.8).`,
+                         `. The strictest of this system's own uses governs. The providing system carries the probability requirement for the resource; this one is what this system expects of it at the interface.`,
                     level: 'L2', type: 'Interface', analysis: 'Probabilistic',
                     verifMethod: 'Analysis',
                     traceId: gov.node.displayId || '',
@@ -1721,8 +1725,8 @@ const AutoReq = (function(){
                 ? a.kind + ' ' + a.dal + ' set one level below the top under ' + tp2 + ' Option 2 (at least two members one level below the FC DAL), predicated on ' + indepTxt + ' between the members.'
                 : a.kind + ' ' + a.dal + ' reduced to the Option 2 floor under ' + tp2 + ', predicated on ' + indepTxt + ' between the members.';
             if (d.basis === 'no-independence') return a.kind + ' ' + a.dal + ' held at the top level: no functional independence claimed between the AND members, so no reduction is taken (' + tp2 + ' step f).';
-            if (d.basis === 'compromised') return a.kind + ' ' + a.dal + ' held at the top level: functional independence is COMPROMISED (CMA found a common mode), so any reduction is invalid and members revert to the top (' + tp2 + ' step f).';
-            if (d.basis === 'inherit') return a.kind + ' ' + a.dal + ' inherited from the top level — an OR/XOR/VOTING member whose single failure causes the condition takes the full FC DAL (' + tp2 + ', single-member basis).';
+            if (d.basis === 'compromised') return a.kind + ' ' + a.dal + ' held at the top level: the independence is compromised (a common mode analysis found a common mode), so any reduction is invalid and members revert to the top (' + tp2 + ' step f).';
+            if (d.basis === 'inherit') return a.kind + ' ' + a.dal + ' taken from the top level: one failure of this input alone causes the failure condition, so it takes the failure condition\'s full level (' + tp2 + ', single-member basis).';
             return a.kind + ' ' + a.dal + ' allocated by top-down apportionment from the linked failure condition severity (' + tp2 + ').';
         }
         // First pass — collect every unique-logicalId DAL allocation in the
@@ -1798,7 +1802,7 @@ const AutoReq = (function(){
             perLid.push(Object.assign({}, g.gov, { _disagree: distinct }));
         });
         const _disagreeRat = a => a._disagree && a._disagree.length
-            ? ` Strictest across trees: ${a._disagree.join('; ')} for this same event — the max of the resulting DALs governs, and reduction arguments are not merged across derivations (each tree's argument stands alone, ARP4754B §5.2.3). Governing derivation: ${a.page.name || a.page.id}.`
+            ? ` Different fault trees give this same event different levels (${a._disagree.join('; ')}); the highest applies, and each tree's case for a lower level stands on its own. The level comes from the tree for ${a.page.name || a.page.id}.`
             : '';
         const _disagreeFpTokens = a => a._disagree && a._disagree.length
             ? ['a5-strictest', a._disagree.slice().sort()] : [];
@@ -1819,9 +1823,9 @@ const AutoReq = (function(){
             const parts = n._dalRestsOn.map(g => {
                 const ids = st.filter(r => r && !r.deleted && r.reqSource && /:gate-indep(-dev|-phys)?:/.test(String(r.reqSource.sourceId || '')) && String(r.reqSource.sourceId).slice(String(r.reqSource.sourceId).lastIndexOf(':') + 1) === String(g.nodeId))
                     .map(r => r.id || r.traceId || ('REQ-' + r.internalId));
-                return g.label + (ids.length ? ' (' + ids.join(', ') + ')' : ' (functional, physical and development independence, not yet accepted into the register)');
+                return g.label + (ids.length ? ' (' + ids.join(', ') + ')' : ' (independence in function, location and development, not yet in the register)');
             });
-            return ' This DAL rests on the independence requirements derived at ' + parts.join('; ') + '. Common Mode Analysis (ARP4761A App M) must verify them (CMA pending); if it finds a common mode, this ' + (a.node.type === 'basic' ? 'item' : 'function') + ' reverts to ' + a.kind + ' ' + n._dalIfReverted + '.';
+            return ' This DAL rests on the independence requirements derived at ' + parts.join('; ') + '. A common mode analysis must show them (not done yet); if it finds a common mode, this ' + (a.node.type === 'basic' ? 'item' : 'function') + ' reverts to ' + a.kind + ' ' + n._dalIfReverted + '.';
         };
         perLid.forEach(a => {
             out.push({
@@ -2064,7 +2068,7 @@ const AutoReq = (function(){
             let rebalRat = '';
             const rebalFingerprintTokens = [];
             if (node._externalRebalance) {
-                rebalRat = ` Allocator rebalanced this gate's children because ${node._externalRebalance.constrainedCount} of ${node._externalRebalance.constrainedCount + node._externalRebalance.freeCount} carry an external-source link; sibling targets have been adjusted (tightened or loosened) to keep the gate at its allocated probability while honoring the inherited values.`;
+                rebalRat = ` ${node._externalRebalance.constrainedCount} of the ${node._externalRebalance.constrainedCount + node._externalRebalance.freeCount} inputs have budgets set elsewhere, so the other inputs' budgets were adjusted to keep this gate within its own.`;
                 rebalFingerprintTokens.push('rebal', node._externalRebalance.mode, node._externalRebalance.constrainedCount);
             }
 
@@ -2102,7 +2106,7 @@ const AutoReq = (function(){
                 // independence requirement (c) between its members, whatever the severity.
                 out.push({
                     text: `${childAssetSubject} shall be functionally independent.`,
-                    rat: `Derived by AND-family gate ${gateLabel} of the allocation tree per ARP 4754A §5.4.1: the gate's budget split assumes no common cause couples its members, so they must be functionally independent (no shared function, signal, software or development error); physical independence is a companion requirement. Children: ${childLabels}.${rebalRat}${irNote}`,
+                    rat: `Gate ${gateLabel} needs all of its inputs (${childLabels}) to fail before it does, and its budget is worked out as if they fail independently. So nothing may make them fail together: no shared function, signal, software or development error. Physical separation is the requirement beside this one.${rebalRat}${irNote}`,
                     level: 'L2', type: 'Safety', analysis: 'Independence',
                     verifMethod: 'Analysis',
                     traceId: node.displayId || '',
@@ -2150,7 +2154,7 @@ const AutoReq = (function(){
                 {
                     out.push({
                         text: `${childAssetSubject} shall be physically independent.`,
-                        rat: `Derived by AND-family gate ${gateLabel} of the allocation tree: the members share the budget as independent failures${topSev ? ' of a ' + topSev + ' failure condition' : ''}, so a single physical event must not fail more than one of them: separation in location, routing and power source. Coverage is corroborated by ZSA/PRA. Children: ${childLabels}.`,
+                        rat: `Gate ${gateLabel} counts its inputs (${childLabels}) as failing independently${topSev ? ' in a ' + topSev + ' failure condition' : ''}, so one physical event must not take out more than one of them: they need separation in location, routing and power source. The zonal safety analysis and the particular risk assessment check it.`,
                         level: 'L2', type: 'Safety', analysis: 'Independence',
                         verifMethod: 'Inspection',
                         traceId: node.displayId || '',
@@ -2233,7 +2237,7 @@ const AutoReq = (function(){
                         const label = modeLabelMap[m] || m;
                         out.push({
                             text: `The design shall preclude ${_midSentence(label)} from affecting more than one of ${childAssetSubject}.`,
-                            rat: `Derived from ${cmaIdStr} (status: ${status}), which identifies this common mode across the members of AND-family gate ${gateLabel}. CMA closure (Mitigated / Closed — Accepted) is the substantiating evidence.${c.findings ? ' Findings: ' + c.findings : ''}`,
+                            rat: `Derived from ${cmaIdStr} (status: ${status}), which found this common mode across the inputs of gate ${gateLabel}. The analysis closed as mitigated, or closed and accepted, is the evidence.${c.findings ? ' Findings: ' + c.findings : ''}`,
                             level: 'L2', type: 'Safety', analysis: 'Independence',
                             verifMethod: 'Analysis',
                             traceId: node.displayId || '',
@@ -2299,8 +2303,8 @@ const AutoReq = (function(){
                 out.push({
                     text: `No single failure shall result in ${fcSubject}.`,
                     rat: _isTop
-                        ? `Required for ${topSev} failure conditions per 14 CFR 25.1309(b) / AC 25.1309-1B §4.1. Top: ${gateLabel}.${rebalRat}`
-                        : `Derived by OR-family gate ${gateLabel} of the allocation tree: any one of its members (${childLabels}) causes it, and it reaches the ${topSev} failure condition with no redundancy above it, so no single failure may cause it (each member must itself be protected against a single failure; 14 CFR 25.1309(b) / AC 25.1309-1B §4.1).${rebalRat}`,
+                        ? `A ${topSev} failure condition must not follow from one failure (14 CFR 25.1309(b)); this is the top of its fault tree, ${gateLabel}.${rebalRat}`
+                        : `Any one of the inputs of gate ${gateLabel} (${childLabels}) causes it, and nothing above it stands between it and the ${topSev} failure condition. A failure condition this severe must not follow from one failure, so each input must itself be protected against a single failure.${rebalRat}`,
                     level: 'L2', type: 'Safety', analysis: 'Independence',
                     verifMethod: 'Analysis',
                     traceId: node.displayId || '',
@@ -2354,7 +2358,7 @@ const AutoReq = (function(){
             const retainStr = exposedList.length ? exposedList.join(', ') : 'the aircraft sub-functions housed in those zones';
             out.push({
                 text: `If the particular risk "${p.threat || 'unspecified threat'}" occurs within zone(s) ${zonesStr}, the aircraft shall retain ${retainStr}.`,
-                rat: `Derived from PRA ${p.praId || ''}: "${p.desc || ''}". Threat: ${p.threat || '—'}. Zones affected: ${zonesStr}. Exposed sub-functions (via zone housing): ${exposedStr}. Retention may be met by protection of the installation or by an accepted compensating means — either way the exposed functions survive the postulated event.${mitRat} Per ARP4761A App L / 14 CFR 25.1309.`,
+                rat: `Derived from PRA ${p.praId || ''}: "${p.desc || ''}". Threat: ${p.threat || 'not stated'}. Zones affected: ${zonesStr}. Functions housed in those zones: ${exposedStr}. They must survive the event, by protecting the installation or by another accepted means.${mitRat}`,
                 level: 'L2', type: 'Safety', analysis: 'Independence',
                 verifMethod: 'Analysis',
                 traceId: p.praId || '',
@@ -2390,13 +2394,13 @@ const AutoReq = (function(){
             // rationale, and Catastrophic zones get a separate singular physical-
             // separation requirement verified by inspection.
             const strictRat = isCat
-                ? ' The zone is classified Catastrophic; physical (not merely logical) separation is required — see the companion physical-separation requirement.'
+                ? ' The zone holds equipment whose failure is Catastrophic, so the separation must be physical, not only logical; the physical separation requirement beside this one says how.'
                 : '';
             const mitRat = z.mitigation ? ` Existing mitigation reference: ${z.mitigation}.` : '';
             const sourceKey = z.zoneId;
             out.push({
                 text: `A single zonal event within zone ${z.zoneId} shall not compromise more than one of ${housedStr}.`,
-                rat: `Derived from ZSA zone ${z.zoneId} (${z.desc || 'no description'}). Severity: ${z.severity || '—'}. Equipment: ${z.equip || '—'}. Environmental, electrical, mechanical, and installation separation of the housed sub-functions is the design means.${strictRat}${mitRat} Per ARP4761A App K / AC 25.1309-1B Zonal Safety Analysis.`,
+                rat: `Derived from ZSA zone ${z.zoneId} (${z.desc || 'no description'}). Severity: ${z.severity || 'not stated'}. Equipment: ${z.equip || 'not listed'}. The functions housed there are kept apart by separation against the environment and electrical, mechanical and installation causes.${strictRat}${mitRat}`,
                 level: 'L2', type: 'Safety', analysis: 'Independence',
                 verifMethod: 'Analysis',
                 traceId: z.zoneId || '',
@@ -2507,10 +2511,10 @@ const AutoReq = (function(){
             const fcRat = fcs.length
                 ? ` Relied on by ${fcs.map(f => f.fcId || ('#' + f.internalId)).join(', ')}` +
                   (fcs.some(f => /^(Catastrophic|Hazardous)$/i.test(f.severity || '')) ? ' (includes a Catastrophic/Hazardous condition)' : '') + '.'
-                : ' Not yet linked to a failure condition — the credit is recorded but nothing rests on it.';
+                : ' It is not linked to a failure condition yet, so nothing rests on this credit so far.';
             const stateRat = A.isValidated(a.state)
                 ? ` Assumption ${a.asmId} is ${a.state}, so the credited posture holds.`
-                : ` Assumption ${a.asmId} is ${a.state} — the credit is NOT yet validated, so the conservative posture governs until it is (INV-35).`;
+                : ` Assumption ${a.asmId} is ${a.state}: the credit is not shown yet, so the cautious case applies until it is.`;
             const dir = (h.direction || 'recovery');
             const circumstance = (dir === 'prevention')
                 ? 'normal operation (the task prevents the condition arising)'
@@ -2526,7 +2530,7 @@ const AutoReq = (function(){
             // ---- ACTION -------------------------------------------------------
             out.push({
                 text: `The ${crew} shall perform the ${dir} task credited by ${a.asmId}${phaseClause}: "${stmt}"`,
-                rat: `${mandate} Circumstance: ${circumstance}.${fcRat}${stateRat} The task statement is reproduced verbatim from the assumption — it is the analyst's wording, not a restatement.`,
+                rat: `${mandate} Circumstance: ${circumstance}.${fcRat}${stateRat} The task is worded as the assumption words it.`,
                 level: 'L1', type: 'Operational', analysis: 'Human Factors',
                 verifMethod: 'Analysis',
                 traceId: fcs.length ? (fcs[0].fcId || '') : '',
@@ -2547,12 +2551,12 @@ const AutoReq = (function(){
                 const util = win ? (h.taskTimeS / win) : 0;
                 const winRat = win
                     ? ` The ${h.responsePhase} response window is ${win} s, so this task alone occupies ${Math.round(util * 100)}% of it` +
-                      (util > (A.TIME_OCCUPANCY_RED_LINE || 0.8) ? ` — already past the ${Math.round((A.TIME_OCCUPANCY_RED_LINE || 0.8) * 100)}% time-occupancy red line before any co-activated task is counted (INV-36).` : '.')
-                    : ` No response window is authored for ${h.responsePhase || 'this phase'}, so INV-36 saturation is silent here and this time is unbounded by anything.`;
+                      (util > (A.TIME_OCCUPANCY_RED_LINE || 0.8) ? `, already past the ${Math.round((A.TIME_OCCUPANCY_RED_LINE || 0.8) * 100)}% limit of the crew's time before any task at the same time is counted.` : '.')
+                    : ` No time to respond is set for ${h.responsePhase || 'this phase'}, so nothing yet limits how long this task may take.`;
                 out.push({
                     text: `The ${crew} shall complete the task credited by ${a.asmId} within ${h.taskTimeS} seconds${phaseClause}.`,
                     rat: `${mandate} Timing is the element of §5.3.1.4 the register holds most firmly.` +
-                         (basis ? ` Basis: ${basis}.` : ' No basis is recorded for this task time — it is an assumed number until one is.') +
+                         (basis ? ` Basis: ${basis}.` : ' No basis is recorded for this task time, so it is an assumed number until one is.') +
                          winRat + stateRat,
                     level: 'L1', type: 'Operational', analysis: 'Human Factors',
                     verifMethod: byTest ? 'Test' : 'Analysis',
@@ -2575,7 +2579,7 @@ const AutoReq = (function(){
                     text: `The information the ${crew} requires to perform the task credited by ${a.asmId} shall be presented via the ${sensory.join(' and ')} channel${sensory.length > 1 ? 's' : ''}${phaseClause}.`,
                     rat: `${mandate} §5.3.1.4 defines operational requirements as the interface between the flight crew and the functional system; the declared sensory channels ARE that interface.` +
                          ((h.channels || []).length > sensory.length
-                            ? ` The assumption also declares ${(h.channels || []).filter(c => !SENSORY[String(c).toLowerCase()]).join(', ')} — those describe what the crew does with the information, not what the system must present, so they are deliberately not requirements here.`
+                            ? ` The assumption also names ${(h.channels || []).filter(c => !SENSORY[String(c).toLowerCase()]).join(', ')}; those are what the crew does with the information, not what the system must show, so they are not requirements here.`
                             : '') + stateRat,
                     level: 'L1', type: 'Operational', analysis: 'Human Factors',
                     verifMethod: 'Inspection',
@@ -2899,7 +2903,7 @@ const AutoReq = (function(){
             const subId = unaware.subId || r.subId || '';
             out.push({
                 text: `Failure conditions ${fcIds.join(', ')} of ${subId} shall be annunciated to the flight crew.`,
-                rat: `Derived from FCIM aware/unaware pair ${r.pairId} on ${subId}: the AWARE (lower-risk) classification was chosen to govern, which takes credit for crew awareness. The credit holds only if the crew is made aware, so annunciation of the otherwise-unaware condition(s) is required. Per ARP4761A §A.3 crew-awareness distinction and the §xx.1309 warning-information expectation. Unpairing the rows or choosing the unaware risk to govern withdraws this requirement on the next generate.`,
+                rat: `For function ${subId}, the failure condition with the crew aware (${r.pairId}) was taken as the one that applies, which counts on the crew knowing. That holds only if the crew is told, so the condition must be announced to them.`,
                 level: 'L1', type: 'Safety', analysis: 'Human Factors',
                 verifMethod: 'Test',
                 traceId: subId,
@@ -2978,7 +2982,7 @@ const AutoReq = (function(){
                 (g.startsWith('fha') && opts.fha) ||
                 ((g === 'fta-event' || g === 'fta-interval' || g === 'fta-resource' || g === 'fta-resource-iface') && opts.ftaEvent) ||
                 (g.startsWith('dalgebra') && opts.dalgebra) ||
-                (g.startsWith('gate-indep') && opts.gateIndependence) ||
+                ((g.startsWith('gate-indep') || g === 'cma-concern') && opts.gateIndependence) ||   // 10 Nov 2026: a CMA concern's requirement goes orphan when the concern is gone
                 ((g === 'pra-zonal' || g === 'pra-scenario') && opts.praZonal) ||
                 (g.startsWith('zsa') && opts.zsaSeparation) ||
                 (g.startsWith('hf-op') && opts.hfOperational) ||
@@ -3059,7 +3063,10 @@ const AutoReq = (function(){
     // Re-evaluate stale + compromised flags on existing auto-reqs without modifying their content.
     function recomputeFlags(scope){
         scope = scope || 'ac';
-        const merge = generate({ fha:true, ftaEvent:true, dalgebra:true, gateIndependence:true, praZonal:true, zsaSeparation:true }, scope);
+        // 10 Nov 2026: every generator runs here (the crew, monitoring and unsafe operating condition rows were marked orphan on
+        // every load because their generators were left out); rows that AutoReq does not make (ReqIF imports, promoted
+        // assumptions) are never AutoReq orphans
+        const merge = generate({ fha:true, ftaEvent:true, dalgebra:true, gateIndependence:true, praZonal:true, zsaSeparation:true, hfOperational:true, fcimMonitor:true }, scope);
         const store = storeForScope(scope) || [];
         const liveById = new Map();
         merge.isNew.forEach(c => liveById.set(c.reqSource.sourceId, c));
@@ -3067,6 +3074,7 @@ const AutoReq = (function(){
         merge.unchanged.forEach(u => liveById.set(u.next.reqSource.sourceId, u.next));
         store.forEach(r => {
             if(!r.reqSource) return;
+            if(r.reqSource.generator === 'reqif' || r.reqSource.generator === 'assumption' || /^asm:/.test(String(r.reqSource.sourceId || ''))){ r.reqSource.orphan = false; r.reqSource.stale = false; return; }
             const live = liveById.get(r.reqSource.sourceId);
             if(live){
                 r.reqSource.stale = (r.reqSource.fingerprint !== live.reqSource.fingerprint);

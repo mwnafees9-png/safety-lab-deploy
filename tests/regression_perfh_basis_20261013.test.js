@@ -111,12 +111,14 @@ console.log('\n[N1] 0.5 h flight, P = 8e-10 per flight (1.6e-9/FH) against 1e-9/
     // critical gates on the same failure condition: top = AND(G, D), D = 8e-10 per flight. G taken as
     // certain leaves P(top) = 8e-10 per flight = 1.6e-9/FH > 1e-9/FH, so G is critical. Compared
     // per flight (the old code) 8e-10 < 1e-9 and G was called not critical.
-    const g = G('AND', [L('x', 1e-6), L('y', 1e-6)]);
+    // 10 Nov 2026 (critical_gates 1.5): the second test is one shared cause (the gate at its least likely input); inputs of 0.9
+    // per flight make that 0.9 x 8e-10 per flight = 1.44e-9/FH on a 0.5 h flight, above 1e-9/FH
+    const g = G('AND', [L('x', 0.9), L('y', 0.9)]);
     const CP = page({ project: { missionDuration: 0.5 }, fha: [{ internalId: 7, fcId: 'FC-7', severity: 'Catastrophic' }],
         pages: [{ id: 'C', name: 'crit', linkedFhaIds: [7], root: G('AND', [g, L('d', 8e-10)]) }], active: 'C' });
     const res = CP.SLCriticalGates.analyzePage(CP.ftaPages[0]);
     const gr = res.gates.find(x => x.nodeId === g.id);
-    check('N1: critical gates call the gate critical (taken as certain: 1.6e-9/FH exceeds 1e-9/FH)', gr && gr.critical && gr.certainBreaks && !gr.orBreaks && rel(gr.rateCertain, want) < 1e-9 && res.missionHours === 0.5, JSON.stringify(gr));
+    check('N1: critical gates call the gate critical (one shared cause: 1.44e-9/FH exceeds 1e-9/FH, per flight hour on the 0.5 h flight)', gr && gr.critical && gr.sharedBreaks && rel(gr.rateShared, rate(0.9 * 8e-10, 0.5)) < 1e-9 && res.missionHours === 0.5, JSON.stringify(gr));
     check('N1: all three lanes divide by the same flight time (0.5 h)', led.missionHours === 0.5 && ev.tMission === 0.5 && res.missionHours === 0.5);
 }
 

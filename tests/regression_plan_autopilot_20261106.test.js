@@ -50,7 +50,7 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
     check('plan_autopilot.js v2 parses; no eval of any kind (the CSP forbids it); the stores are read through SLEnv', okp && /VERSION = '2\.[2-9]'/.test(SRC) && !/new Function|\beval\(/.test(SRC) && /SLEnv/.test(SRC));
     check('the Plan Autopilot is first under Plan and basis; the certification basis page leaves the menu, its page stays', /items: \['snav-plan-auto', 'snav-arp-process'/.test(NAV) && /id="snav-plan-auto"/.test(HTML) && !/id="snav-defs"/.test(HTML) && /id="view-defs"/.test(HTML) && /id="view-plan-auto"/.test(HTML));
     check('it loads after the shared look, the objectives and the lanes; the pins moved', (() => { const i = s => HTML.indexOf(s); return i('plan_autopilot.js?v=2.4') > i('autopilot_ui.js?v=') && i('plan_autopilot.js?v=2.4') > i('objectives_matrix.js?v=') && i('plan_autopilot.js?v=2.4') > i('program_plan.js?v=') && /report_writer\.js\?v=1\.(3|4|[5-9])/.test(HTML); })());
-    check('the plan-auto tab is registered with switchTab', /const tabs = \['plan-auto', /.test(fs.readFileSync(path.join(SITE, 'support_modules.js'), 'utf8')));
+    check('the plan-auto tab is registered with switchTab', /const tabs = \[('mac', 'mfms', )?'plan-auto', /.test(fs.readFileSync(path.join(SITE, 'support_modules.js'), 'utf8')));   // 10 Nov 2026: the MAC model and MF&MS pages joined the list
     check('the Word writer takes a cover (document control, approvals, revision history) and figures in the run of the text, numbered with the rest', /model\.cover && model\.cover\.tables/.test(RW) && /b\.k === 'img'/.test(RW) && /idx\.figures\.push\(b\)/.test(RW));
 
     let pw = null;

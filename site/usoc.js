@@ -1,3 +1,4 @@
+// 10 Nov 2026: the requirement's rationale in plain words (what is shown so far, where it was found).
 // ============================================================================
 // usoc.js — v1.0 — Unsafe System Operating Conditions
 // (23 Sep 2026, standards gap G5; ASTM F3061/F3061M-22b §4.2.6 and Appendix X2).
@@ -162,8 +163,8 @@
                 'Crew information: ' + det + '. Time available: ' + (u.timeAvailable || 'not stated') + '. ' +
                 'Procedure: ' + (u.procedure === 'afm' ? 'flight manual procedure ' + (u.procedureRef || '(not referenced)') : u.procedure === 'airmanship' ? 'normal airmanship' : 'not yet decided') + '. ' +
                 'Clarity evidence: ' + ((CLARITY.find(function (c) { return c.v === u.clarity; }) || {}).label || 'none yet') + (u.clarityRef ? ' (' + u.clarityRef + ')' : '') + '. ' +
-                'Substantiation — detection acceptable: ' + (s.detect || 'open') + '; action reasonable: ' + (s.action || 'open') + '; achievable before escalation: ' + (s.inTime || 'open') + '.' +
-                (u.source && u.source !== 'manual' ? ' Found from ' + u.source + '.' : '');
+                'Shown so far: the crew can detect it: ' + (s.detect || 'not yet') + '; the action is reasonable: ' + (s.action || 'not yet') + '; it can be done before things get worse: ' + (s.inTime || 'not yet') + '.' +
+                (u.source && u.source !== 'manual' ? ' It was found in the ' + u.source + '.' : '');
             return {
                 text: text, rat: rat, level: 'L1', type: 'Safety', analysis: 'Human Factors',
                 verifMethod: (u.clarity === 'flight-test' || u.clarity === 'ground-test' || u.clarity === 'simulator') ? 'Test' : 'Analysis',
