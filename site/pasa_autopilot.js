@@ -1,4 +1,4 @@
-// pasa_autopilot.js (SLPasaAuto v2.1, 11 Nov 2026): the PASA Autopilot. One Preliminary Aircraft Safety Assessment for the
+// pasa_autopilot.js (SLPasaAuto v2.2, 11 Nov 2026): the PASA Autopilot. One Preliminary Aircraft Safety Assessment for the
 // aircraft: the front of the report (scope, the aircraft, the method, the failure conditions, the requirement levels, what
 // the appendices found, the conclusion) and one appendix per aircraft function, holding every failure condition of that
 // function rated Minor or above.
@@ -54,7 +54,7 @@
 // Every number comes from SLTopBasis and the trees. window.SLPasaAuto.
 (function (root) {
     'use strict';
-    var VERSION = '2.1';
+    var VERSION = '2.2';   // 2.2 11 Nov 2026: a gate whose inputs are all held tighter than their shares says what they use of its budget
     function g(n) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(n); if (v !== undefined) return v; } } catch (_) {} try { return root[n]; } catch (_) { return undefined; } }
     function arr(v) { return Array.isArray(v) ? v : []; }
     function S(v) { return v == null ? '' : String(v); }
@@ -201,8 +201,8 @@
     }
     // gates of the tree the tool rebalanced and nobody has accepted yet, and gates whose inputs take more than their budget
     function gateFlags(gr) {
-        var page = treeOf(gr), out = { rebalanced: [], over: [] }; if (!page || !page.root) return out;
-        walk(page.root, function (n) { var m = n._budgetMargin; if (!m) return; if (m.state === 'rebalanced') out.rebalanced.push(nodeName(n)); else if (m.state === 'over-committed') out.over.push(nodeName(n)); });
+        var page = treeOf(gr), out = { rebalanced: [], over: [], spare: [] }; if (!page || !page.root) return out;
+        walk(page.root, function (n) { var m = n._budgetMargin; if (!m) return; if (m.state === 'rebalanced') out.rebalanced.push(nodeName(n)); else if (m.state === 'over-committed') out.over.push(nodeName(n)); else if (m.state === 'spare-held' || m.state === 'reserve') out.spare.push({ name: nodeName(n), used: m.achieved, budget: m.target, reserve: m.state === 'reserve' }); });
         return out;
     }
 
@@ -413,7 +413,7 @@
         if (routeOf(gr) === 'unanswered') out.push('The 1309 chart for ' + gr.fcId + ' is not answered in the AFHA yet, so it is assessed quantitatively until it is.');
         if (isQuant(gr) && !pageOf(gr)) out.push('No fault tree is generated for ' + gr.fcId + ' yet.');
         else if (isQuant(gr) && !built(gr)) out.push('The fault tree for ' + gr.fcId + ' has not been created yet: link the system trees that are ready, or build it in the Fault trees tab.');
-        var gf = isQuant(gr) ? gateFlags(gr) : { rebalanced: [], over: [] };
+        var gf = isQuant(gr) ? gateFlags(gr) : { rebalanced: [], over: [], spare: [] };
         gf.over.forEach(function (x) { out.push('The inputs of ' + x + ' take more than its budget. Change what holds them, or the target.'); });
         gf.rebalanced.forEach(function (x) { out.push(x + ' was rebalanced by the tool (an input under it is held tighter than its share): accept it, or keep the tighter budgets, in the Budget Ledger.'); });
         if (tf && tf.meets && !tf.meets.pass) out.push('The fault tree is above its objective: ' + sci(tf.rate) + ' per flight hour against ' + sci(tf.objective) + '.');
@@ -563,6 +563,8 @@
             .concat((tf.handed || []).map(function (h) { return { Quantity: 'Handed to ' + h.name, Value: h.p != null ? sci(h.p) + ' per flight' : 'Not allocated', Basis: 'From the tree' }; }))
             .concat([{ Quantity: 'Result', Value: tf.meets ? (tf.meets.pass ? 'Within the objective' : 'Above the objective') : 'Not worked out', Basis: 'Confirmed or not in the SSA with real failure rates' }]);
         b.push({ k: 'table', name: 'num-' + f, title: 'The numbers for ' + f, rows: numRows, lead: '{N} checks the tree against the objective.' });
+        // v2.2: a gate whose inputs do not use its whole budget says so (its inputs never read as if they added up to it)
+        gateFlags(gr).spare.forEach(function (x) { b.push(P(x.name + ' uses ' + sci(x.used) + ' of its budget of ' + sci(x.budget) + ' per flight. ' + (x.reserve ? 'The rest is held as an allowance, by the engineer\'s decision.' : 'Every input under it is held tighter than its share (another tree needs it tighter, or its own class does), so nothing under it can use the rest.'))); });
         var cgr = tf.cg ? tf.cg.gates : [];
         if (cgr.length) {
             var CG = root.SLCriticalGates;

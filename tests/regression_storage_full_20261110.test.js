@@ -9,7 +9,7 @@
  * Rebuild: local_store.js (SLLocalStore); helpers_modules.js keeps the project in IndexedDB only and gives the backend
  * client SLLocalStore.authStorage for its token; auth_gate.js never shows a raw storage error; tab_guard.js reads the
  * newer autosave from IndexedDB.
- *   1  index.html: local_store.js 1.0 loads right after slab_config.js; helpers 3.71, tab_guard 1.4, auth_gate 62.80
+ *   1  index.html: local_store.js 1.0 loads right after slab_config.js; helpers 3.72, tab_guard 1.4, auth_gate 62.80
  *   2  the first load moves every large item out of localStorage, byte for byte, and keeps the small settings
  *   3  ...the migration is marked done, and a moved autosave becomes the current IndexedDB copy when there is none
  *   4  an older localStorage autosave never replaces a newer IndexedDB one, and is still kept as it was
@@ -44,7 +44,7 @@ function mutate(file, body) {
 }
 {
     const HTML = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8');
-    check('1  local_store.js 1.0 loads right after slab_config.js; helpers 3.71, tab_guard 1.4, auth_gate 62.80', /slab_config\.js\?v=1\.5" defer><\/script>\s*<!--[^>]*-->\s*<script src="local_store\.js\?v=1\.0" defer>/.test(HTML) && HTML.indexOf('helpers_modules.js?v=3.71') > 0 && HTML.indexOf('tab_guard.js?v=1.4') > 0 && HTML.indexOf('auth_gate.js?v=62.80') > 0);
+    check('1  local_store.js 1.0 loads right after slab_config.js; helpers 3.72, tab_guard 1.4, auth_gate 62.80', /slab_config\.js\?v=1\.5" defer><\/script>\s*<!--[^>]*-->\s*<script src="local_store\.js\?v=1\.0" defer>/.test(HTML) && HTML.indexOf('helpers_modules.js?v=3.72') > 0 && HTML.indexOf('tab_guard.js?v=1.4') > 0 && HTML.indexOf('auth_gate.js?v=62.80') > 0);
 }
 const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej(new Error('timed out after ' + ms / 1000 + ' s: ' + what)), ms))]);
 (async function main() {

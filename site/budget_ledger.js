@@ -174,7 +174,7 @@
 
     // ---- A9: margin info from the allocation tree ---------------------------
     // Worst-first: over-committed > under-allocated > reserve > absorbed > exact.
-    const _MARGIN_RANK = { 'over-committed': 4, 'rebalanced': 3, 'under-allocated': 3, 'reserve': 2, 'absorbed-by-decision': 1, 'exact': 0 };   // 11 Nov 2026: 'rebalanced' = done by the tool, waiting for the engineer
+    const _MARGIN_RANK = { 'over-committed': 4, 'rebalanced': 3, 'under-allocated': 3, 'reserve': 2, 'spare-held': 1, 'absorbed-by-decision': 1, 'exact': 0 };   // 11 Nov 2026: 'rebalanced' = done by the tool, waiting for the engineer
     function _marginFor(allocPage) {
         const gates = [];
         if (allocPage && allocPage.root) (function walk(n) {
@@ -220,6 +220,7 @@
             overCommitted: r.filter(x => x.marginInfo && x.marginInfo.state === 'over-committed').length,
             underAllocated: r.filter(x => x.marginInfo && x.marginInfo.state === 'under-allocated').length,
             rebalanced: r.filter(x => x.marginInfo && x.marginInfo.state === 'rebalanced').length,
+            spareHeld: r.filter(x => x.marginInfo && x.marginInfo.state === 'spare-held').length,
             reserves: r.filter(x => x.marginInfo && x.marginInfo.state === 'reserve').length,
         };
     }
@@ -454,6 +455,8 @@
             return '<span style="color:#9A6200; font-family:var(--font-mono); font-size:11px; font-weight:600;">rebalanced by the tool</span>' + btn('accept or keep tighter \u2192') + nums;
         if (mi.state === 'under-allocated')
             return '<span style="color:#9A6200; font-family:var(--font-mono); font-size:11px; font-weight:600;">margin held</span>' + btn('decide \u2192') + nums;
+        if (mi.state === 'spare-held')
+            return '<span style="color:var(--color-text-primary); font-family:var(--font-mono); font-size:11px;" title="Every input under this gate is held tighter than its share, by another tree that needs it tighter or by its own class. Nothing under this gate can use the rest, so there is nothing to accept.">spare: every input held tighter</span>' + nums;
         if (mi.state === 'reserve')
             return '<span style="color:#1D6E3E; font-family:var(--font-mono); font-size:11px;">deliberate reserve</span>' + nums;
         if (mi.state === 'absorbed-by-decision')

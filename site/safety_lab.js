@@ -6044,12 +6044,16 @@ window._bulkSel = new Set();
                 const inheritedP = _getExternalSourceTarget(selectedNodeData);
                 if (inheritedP !== null && isFinite(inheritedP) && inheritedP > 0 && inheritedP < 1) {
                     const tExp = (typeof ftaConfig !== 'undefined' && ftaConfig.exposureTime) ? ftaConfig.exposureTime : 1;
-                    const inheritedLambda = -Math.log1p(-inheritedP) / tExp;
+                    // 11 Nov 2026: what the event is given is the link's limit in the event's own unit (over the flight: slExtCap,
+                    // fta_quant_modules.js). An FHA link's value is a class objective per flight hour; it was written into the
+                    // event's per flight probability as it stood. The snapshot below keeps the link's own value (the stale check).
+                    const capP = (typeof slExtCap === 'function') ? (function () { const c = slExtCap(selectedNodeData); return (c !== null && isFinite(c) && c > 0 && c < 1) ? c : inheritedP; })() : inheritedP;
+                    const inheritedLambda = -Math.log1p(-capP) / tExp;
                     // Only overwrite λ on basic / undeveloped events (not gates); gates
                     // have their probability set by the allocator and don't carry λ.
                     if (selectedNodeData.type !== 'gate' && !selectedNodeData._inheritOverride) {
                         if (isFinite(inheritedLambda) && inheritedLambda > 0) selectedNodeData.lambda = inheritedLambda;
-                        selectedNodeData.probability = inheritedP;
+                        selectedNodeData.probability = capP;
                     }
                     selectedNodeData._inheritedAt = {
                         probability: inheritedP,

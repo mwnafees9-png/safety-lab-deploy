@@ -60,7 +60,7 @@
 // ============================================================================
 (function (root) {
     'use strict';
-    var VERSION = '2.0';   // 2.0 11 Nov 2026: no inputs built here, a system failure condition is one shared node linked by the engineer;   // 1.9 10 Nov 2026: an SFHA row feeding several aircraft failure conditions gets its branch on each; 1.8 8 Nov 2026: one tree per failure condition, in any state (see "ONE TREE" below).
+    var VERSION = '2.1';   // 2.1 11 Nov 2026: a node's class limit is worked out over the flight of the tree it is in;   // 2.0 11 Nov 2026: no inputs built here, a system failure condition is one shared node linked by the engineer;   // 1.9 10 Nov 2026: an SFHA row feeding several aircraft failure conditions gets its branch on each; 1.8 8 Nov 2026: one tree per failure condition, in any state (see "ONE TREE" below).
     // 1.5 30 Oct 2026: makeTree in the API (fc_link.js opens a picked condition's tree).
     // 1.4 26 Oct 2026: a tree whose failure condition was marked not applicable in the FCIM is asked about in those words
     var MAJOR = 3;
@@ -344,7 +344,8 @@
             if (tp && tp.treeLevel === 'system') { var rows = _rowsOf(tp); if (rows.length) cls = (_call('getSafetyTarget', _governing(rows).severity) || {}).prob; }
         }
         if (!(typeof cls === 'number' && isFinite(cls) && cls > 0)) return null;
-        var TB = root.SLTopBasis, b = TB && TB.perFlightBudget ? TB.perFlightBudget(cls, null) : null;
+        // over the flight of the tree the node is in (its own mission profile, when the project has no single flight length)
+        var TB = root.SLTopBasis, pg = typeof root.slNodePage === 'function' ? root.slNodePage(n) : null, b = TB && TB.perFlightBudget ? TB.perFlightBudget(cls, pg) : null;
         return b && b.pFlight > 0 ? b.pFlight : cls;
     }
     try { root.slLinkCeiling = ceiling; } catch (_) {}
@@ -468,7 +469,8 @@
                 (function free(n) { if (!n) return; delete n._sharedStrictest; delete n._sharedStrictestConflict; _kids(n).forEach(free); })(copy);
                 var all = new Set(_pages().map(function (x) { return x && x.id; }));
                 var ap = (function () { var c = _g('ftaConfig'); return (c && c.apportion) || 'equal'; })();
-                fn(copy, top, ap, all);
+                var keepPg = root._slAllocPage; root._slAllocPage = p;   // the copy's nodes are in no tree: their limits are worked out for this one
+                try { fn(copy, top, ap, all); } finally { root._slAllocPage = keepPg || null; }
                 res = copy;
             }
         } catch (_) { res = null; }

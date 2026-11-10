@@ -1,4 +1,4 @@
-// pssa_autopilot.js (SLPssaAuto v2.1, 11 Nov 2026): the PSSA Autopilot. One Preliminary System Safety Assessment per system:
+// pssa_autopilot.js (SLPssaAuto v2.2, 11 Nov 2026): the PSSA Autopilot. One Preliminary System Safety Assessment per system:
 // the front of the report for the system (scope, the system, the method, its failure conditions, its requirement levels, what
 // the appendices found, the conclusion) and one appendix per function, holding every failure condition of that function rated
 // Minor or above.
@@ -33,7 +33,7 @@
 // (AutoReq.applyMerge). Numbers from SLTopBasis and the trees. window.SLPssaAuto.
 (function (root) {
     'use strict';
-    var VERSION = '2.1';
+    var VERSION = '2.2';   // 2.2 11 Nov 2026: a gate whose inputs are all held tighter than their shares says what they use of its budget
     function g(n) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(n); if (v !== undefined) return v; } } catch (_) {} try { return root[n]; } catch (_) { return undefined; } }
     function L() { return root.SLPasaAuto && root.SLPasaAuto.lib; }
     function S(v) { return v == null ? '' : String(v); }
@@ -93,7 +93,7 @@
     function TB() { return root.SLTopBasis || null; }
     // true when something is built under the top of the failure condition's tree (a tree made by the tool is its top only)
     function built(gr) { var p = treeOf(gr); return !!(p && p.root && (F() && F().built ? F().built(p) : L().kids(p.root).length > 0)); }
-    function gateFlags(gr) { var p = treeOf(gr), out = { rebalanced: [], over: [] }, l = L(); if (!p || !p.root) return out; l.walk(p.root, function (n) { var m = n._budgetMargin; if (!m) return; if (m.state === 'rebalanced') out.rebalanced.push(l.nodeName(n)); else if (m.state === 'over-committed') out.over.push(l.nodeName(n)); }); return out; }
+    function gateFlags(gr) { var p = treeOf(gr), out = { rebalanced: [], over: [], spare: [] }, l = L(); if (!p || !p.root) return out; l.walk(p.root, function (n) { var m = n._budgetMargin; if (!m) return; if (m.state === 'rebalanced') out.rebalanced.push(l.nodeName(n)); else if (m.state === 'over-committed') out.over.push(l.nodeName(n)); else if (m.state === 'spare-held' || m.state === 'reserve') out.spare.push({ name: l.nodeName(n), used: m.achieved, budget: m.target, reserve: m.state === 'reserve' }); }); return out; }
 
     // ---- what the aircraft hands down: every aircraft budget for this system failure condition, the stricter applying ------
     function acRowsTraced(gr) {
@@ -319,6 +319,7 @@
             { Quantity: 'Hidden failures', Value: hid.length ? hid.map(function (n) { return l.nodeName(n) + (n.tau ? ': checked every ' + n.tau + ' hours' : ': check not set'); }).join('; ') : 'None marked' },
             { Quantity: 'Top event', Value: fx.rate != null ? l.sci(fx.rate) + ' per flight hour (' + l.sci(fx.pTop) + ' per flight)' : 'Not worked out' },
             { Quantity: 'Result', Value: fx.meets ? (fx.meets.pass ? 'Within the budget' : 'Above the budget') : 'Not worked out' }], lead: '{N} checks the tree against the budget.' });
+        gateFlags(gr).spare.forEach(function (x) { b.push(P(x.name + ' uses ' + l.sci(x.used) + ' of its budget of ' + l.sci(x.budget) + ' per flight. ' + (x.reserve ? 'The rest is held as an allowance, by the engineer\'s decision.' : 'Every input under it is held tighter than its share (another tree needs it tighter, or its own class does), so nothing under it can use the rest.'))); });
         b.push(H(3, 'Items and their assurance levels'));
         var its = page ? items(page) : [];
         b.push(its.length ? { k: 'table', name: 'items-' + f, title: 'Items and their assurance levels for ' + f, q: q('dal'), rows: its.map(function (n) { var lvl = (n.type === 'gate' ? 'FDAL ' : 'IDAL ') + n.allocatedDAL; return { Item: l.T(n.name || ''), 'In the tree': S(n.displayId || n.id), Level: lvl, Why: n._dalPending ? 'Lower than the function\'s level because of independence: rests on a common mode analysis showing it (pending)' : rec.indep === 'no' ? 'No independence claim used: the function\'s level' : 'From the tree' }; }), lead: '{N} lists the assurance level the tool allocated to each item.' } : P('No assurance level is allocated in the tree for ' + f + ' yet.', q('dal')));

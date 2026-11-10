@@ -74,7 +74,7 @@ const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y
 (async function main() {
     console.log('\n[S] pins and headers');
     const HTML = src('index.html'), at = f => HTML.indexOf('src="' + f + '?v=');
-    check('S1 pssa_autopilot.js 2.1 pinned after pasa_autopilot.js; header the same; fc_auto_trees.js 2.0 exports shares()', /pssa_autopilot\.js\?v=2\.1"/.test(HTML) && at('pssa_autopilot.js') > at('pasa_autopilot.js') && /SLPssaAuto v2\.1/.test(src('pssa_autopilot.js').slice(0, 200)) && /shares: shares/.test(src('fc_auto_trees.js')));
+    check('S1 pssa_autopilot.js 2.2 pinned after pasa_autopilot.js; header the same; fc_auto_trees.js 2.0 exports shares()', /pssa_autopilot\.js\?v=2\.2"/.test(HTML) && at('pssa_autopilot.js') > at('pasa_autopilot.js') && /SLPssaAuto v2\.2/.test(src('pssa_autopilot.js').slice(0, 200)) && /shares: shares/.test(src('fc_auto_trees.js')));
     check('S2 the system PSSA tab is named PSSA and holds the Autopilot (the old tiles hidden); no em dashes', /id="ws-pssa-tab-overview"[^>]*>PSSA</.test(HTML) && /<div id="ws-pssa-host" style="display:none">/.test(HTML) && ['pssa_autopilot.js', 'ssa_autopilot.js', 'asa_autopilot.js'].every(f => src(f).indexOf(EM) < 0) && fs.readFileSync(__filename, 'utf8').indexOf(EM) < 0);
 
     let pw = null; try { pw = require('playwright'); } catch (_) {}

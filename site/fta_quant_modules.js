@@ -35,7 +35,34 @@ function _apportionWeight(child, siblingCount, strategy) {
 // across the basic and undeveloped events around them (a gate's set-event children are held like any fixed child).
 function slIsSetEvent(n) { return !!n && (n.type === 'house' || n.type === 'conditioning'); }
 try { if (typeof window !== 'undefined') window.slIsSetEvent = slIsSetEvent; } catch (_) {}
-// 11 Nov 2026: an FHA link's value is the linked failure condition's class objective: a ceiling (see the child constraints)
+// 11 Nov 2026 (Waqas: "going forward math must stay at the highest standard possible no matter what happens"; "per flight hour
+// normalization is correct we give them the P actual and P normalized for a reason"). A node's probability is P over the
+// flight; an objective is per flight hour. They are only ever compared through the normalization (SLTopBasis). An FHA link's
+// limit is the linked failure condition's CLASS OBJECTIVE, per flight hour: it was compared with the node's per flight
+// probability directly (a 3 hour flight made the limit 3 times tighter than the class allows). The limit a node's probability
+// is held to is that objective as a budget over the flight of the tree the node is in (slExtCap). The link's own value
+// (_getExternalSourceTarget: what the panel shows and the stale check compares) stays the objective, per flight hour.
+let _slNodePageIdx = { gen: -2, map: null };
+function slNodePage(node) {
+    if (!node || typeof ftaPages === 'undefined' || !Array.isArray(ftaPages)) return null;
+    const dc = (typeof window !== 'undefined') ? window.SLDataChange : null, gen = dc && dc.gen ? dc.gen() : -1;
+    if (_slNodePageIdx.gen !== gen || gen === -1 || !_slNodePageIdx.map) {   // once per change (a copy's nodes are in no tree and must not rebuild it each time)
+        const m = new WeakMap();
+        ftaPages.forEach(function (p) { if (!p || !p.root) return; (function w(n) { if (!n || m.has(n)) return; m.set(n, p); (n.children || n._children || []).forEach(w); })(p.root); });
+        _slNodePageIdx = { gen: gen, map: m };
+    }
+    return _slNodePageIdx.map.get(node) || (typeof window !== 'undefined' && window._slAllocPage) || null;   // a copy being allocated: the tree it was copied from
+}
+function slExtCap(node) {
+    if (typeof _getExternalSourceTarget !== 'function' || !node || !node.externalSource) return null;
+    const v = _getExternalSourceTarget(node);
+    if (v === null || !isFinite(v)) return null;
+    if (!_slExtIsFhaCeiling(node)) return v;   // a link to another tree's node: that node's own probability over the flight
+    try { if (typeof SLTopBasis !== 'undefined' && SLTopBasis && SLTopBasis.perFlightBudget) { const b = SLTopBasis.perFlightBudget(v, slNodePage(node)); if (b && b.pFlight > 0) return b.pFlight; } } catch (_) {}
+    return v;
+}
+try { if (typeof window !== 'undefined') { window.slNodePage = slNodePage; window.slExtCap = slExtCap; } } catch (_) {}
+// an FHA link's value is the linked failure condition's class objective: a ceiling (see the child constraints)
 function _slExtIsFhaCeiling(n) {
     const s = n && n.externalSource; if (!s) return false;
     const kind = s.kind || (s.targetId && !s.targetNodeId ? 'fha' : (s.targetNodeId ? 'fta' : ''));
@@ -101,7 +128,7 @@ function allocateTopDown(node, target, strategy, visited) {
     try {
         let extSrc = null, paste = null;
         if (typeof _getExternalSourceTarget === 'function' && node.externalSource) {
-            extSrc = _getExternalSourceTarget(node);
+            extSrc = slExtCap(node);
         }
         if (typeof _getPasteOriginTarget === 'function' && node._pasteOrigin) {
             paste = _getPasteOriginTarget(node);
@@ -188,7 +215,7 @@ function allocateTopDown(node, target, strategy, visited) {
                 if (pr !== null && isFinite(pr)) prescr = pr;
             }
             if (typeof _getExternalSourceTarget === 'function' && c.externalSource) {
-                const ep = _getExternalSourceTarget(c);
+                const ep = slExtCap(c);
                 if (ep !== null && isFinite(ep)) extSrc = ep;
             }
             if (typeof _getPasteOriginTarget === 'function' && c._pasteOrigin) {
@@ -343,8 +370,11 @@ function allocateTopDown(node, target, strategy, visited) {
 
         // Held children at their caps, free children at their own shares (a signed reserve, an exact gate, or over-committed).
         actualChildren.forEach((child, i) => allocateTopDown(child, _a9Assigned[i], strategy, visited));
+        // 11 Nov 2026: spare budget with NO free child to take it (every input is held tighter than its share: by another tree,
+        // or by its own class) is its own state. Nothing here can use it and there is nothing to accept: the gate says so, and
+        // the reports give what its inputs use against its budget (the top is never shown as if the inputs added up to it).
         const _a9State = _a9Achieved > target * (1 + _A9_TOL) ? 'over-committed'
-                       : _a9Achieved < target * (1 - _A9_TOL) ? ((_a9Decision && _a9Decision.kind === 'reserve') ? 'reserve' : 'under-allocated')
+                       : _a9Achieved < target * (1 - _A9_TOL) ? ((_a9Decision && _a9Decision.kind === 'reserve') ? 'reserve' : (freeChildren.length === 0 ? 'spare-held' : 'under-allocated'))
                        : 'exact';
         node._budgetMargin = {
             state: _a9State, target: target, achieved: _a9Achieved,
@@ -833,10 +863,11 @@ function _slAllocateRootPages(pages) {
         // (SLTopBasis.perFlightBudget, the same call the open tree makes). The raw target was handed out here, so a tree
         // nobody had open held numbers smaller by the flight length than the same tree once opened.
         try {
+            if (typeof window !== 'undefined') window._slAllocPage = p;
             const _t = parseFloat(p.targetP);
             const _b = (typeof SLTopBasis !== 'undefined' && SLTopBasis && SLTopBasis.perFlightBudget) ? SLTopBasis.perFlightBudget(_t, p) : null;
             allocateTopDown(p.root, (_b && _b.pFlight > 0) ? _b.pFlight : _t, ftaConfig.apportion, new Set());
-        } catch (_) {}
+        } catch (_) {} finally { try { if (typeof window !== 'undefined') window._slAllocPage = null; } catch (_) {} }
     });
 }
 function _slSharedStrictestRound() {

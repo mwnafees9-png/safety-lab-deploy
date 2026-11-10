@@ -9,7 +9,7 @@
  * accept as rebalanced, or if they want to keep the tighter budget and accept the spare allowance".
  *
  * On the Aeolus HL-1 demo, in the real app, with the production CSP:
- *   [S]  pins and headers (fc_auto_trees 2.0, fta_quant_modules 66.38, event_reuse 1.5, budget_ledger 1.48, pasa 2.1, pssa 2.1)
+ *   [S]  pins and headers (fc_auto_trees 2.1, fta_quant_modules 66.39, event_reuse 1.5, budget_ledger 1.49, pasa 2.2, pssa 2.2)
  *   [G]  the tool builds no inputs: a generated tree is its top and the placeholder; an old generated tree with FHA-linked
  *        events goes back to its top on load (nobody built on it); where somebody built, the event becomes the shared node;
  *        tracing a system failure condition adds nothing to the tree
@@ -27,8 +27,13 @@
  *   [R]  the reuse menu of the fault tree module offers the system failure conditions first; adopting one makes the event
  *        that shared node
  *   no page errors
+ *   [M5, M6] (Waqas, 11 Nov 2026: "going forward math must stay at the highest standard possible no matter what happens"; "per
+ *        flight hour normalization is correct we give them the P actual and P normalized for a reason") an FHA link's limit is its
+ *        class objective per flight hour, held as a budget over the flight (never compared with a per flight probability as it
+ *        stands); the link's own value stays per flight hour. A gate whose inputs are all held tighter than their shares is
+ *        'spare-held': it says what its inputs use of its budget.
  * MUTATION PROOFS: SL_LINK_MUTATE=autobuild | verbatim | nostrict | noxfer | perfh | noauto | noreserve | nomigrate | noask |
- * notcreated | twonodes. Each one turns this red.
+ * notcreated | twonodes | rawceil | nospare. Each one turns this red.
  * Run: node --no-maglev --no-concurrent-sparkplug tests/regression_tree_linking_20261111.test.js
  */
 'use strict';
@@ -48,6 +53,8 @@ const MUTS = {
     nomigrate: ['fc_auto_trees.js', "        added += migrate();", "        added += 0;"],
     noask:     ['pasa_autopilot.js', "        if (isQuant(gr) && pg) linkCands(gr).forEach(function (c) {\n            var qid = 'fc.' + f + '.link.' + c.key;", "        if (false) linkCands(gr).forEach(function (c) {\n            var qid = 'fc.' + f + '.link.' + c.key;"],
     notcreated: ['pasa_autopilot.js', "        if (isQuant(gr) && !built(gr)) {\n            // v2.1: nothing built under the top is no analysis", "        if (false) {\n            // v2.1: nothing built under the top is no analysis"],
+    rawceil:   ['fta_quant_modules.js', "    if (!_slExtIsFhaCeiling(node)) return v;   // a link to another tree's node: that node's own probability over the flight", "    return v;"],
+    nospare:   ['fta_quant_modules.js', "(freeChildren.length === 0 ? 'spare-held' : 'under-allocated'))", "'under-allocated')"],
     twonodes:  ['fc_auto_trees.js', "        var e = fc ? L.find(function (x) { return String(x.sysId) === sysId && String(x.fcId || '') === fc; }) : null;", "        var e = null;"]
 };
 if (MUT && !MUTS[MUT]) { console.error('unknown mutation ' + MUT); process.exit(3); }
@@ -60,7 +67,7 @@ const near = (a, b, tol) => a != null && b != null && Math.abs(a - b) <= Math.ab
 (async function main() {
     console.log('\n[S] pins and headers');
     const HTML = src('index.html');
-    check('S1 fc_auto_trees.js 2.0, fta_quant_modules.js 66.38, event_reuse.js 1.5, budget_ledger.js 1.48, pasa_autopilot.js 2.1, pssa_autopilot.js 2.1 pinned; headers the same', /fc_auto_trees\.js\?v=2\.0"/.test(HTML) && /fta_quant_modules\.js\?v=66\.38"/.test(HTML) && /event_reuse\.js\?v=1\.5"/.test(HTML) && /budget_ledger\.js\?v=1\.48"/.test(HTML) && /pasa_autopilot\.js\?v=2\.1"/.test(HTML) && /pssa_autopilot\.js\?v=2\.1"/.test(HTML) && /var VERSION = '2\.0';/.test(src('fc_auto_trees.js')) && /SLPasaAuto v2\.1/.test(src('pasa_autopilot.js').slice(0, 200)) && /SLPssaAuto v2\.1/.test(src('pssa_autopilot.js').slice(0, 200)));
+    check('S1 fc_auto_trees.js 2.1, fta_quant_modules.js 66.39, event_reuse.js 1.5, budget_ledger.js 1.49, pasa_autopilot.js 2.2, pssa_autopilot.js 2.2 pinned; headers the same', /fc_auto_trees\.js\?v=2\.1"/.test(HTML) && /fta_quant_modules\.js\?v=66\.39"/.test(HTML) && /event_reuse\.js\?v=1\.5"/.test(HTML) && /budget_ledger\.js\?v=1\.49"/.test(HTML) && /pasa_autopilot\.js\?v=2\.2"/.test(HTML) && /pssa_autopilot\.js\?v=2\.2"/.test(HTML) && /var VERSION = '2\.1';/.test(src('fc_auto_trees.js')) && /SLPasaAuto v2\.2/.test(src('pasa_autopilot.js').slice(0, 200)) && /SLPssaAuto v2\.2/.test(src('pssa_autopilot.js').slice(0, 200)));
     check('S2 no em dashes in this test or in fc_auto_trees.js\'s new section', fs.readFileSync(__filename, 'utf8').indexOf(EM) < 0 && (s => s.slice(s.indexOf('a system failure condition is one shared node (v2.0)'), s.indexOf('function make(g)')).indexOf(EM) < 0)(src('fc_auto_trees.js')));
 
     let pw = null; try { pw = require('playwright'); } catch (_) {}
@@ -136,7 +143,12 @@ const near = (a, b, tol) => a != null && b != null && Math.abs(a - b) <= Math.ab
             allocateTopDown(g1, 3e-9, 'equal', new Set());
             const g2 = { id: ++nid, logicalId: nid, type: 'gate', gateType: 'OR', name: 'detached 2', probability: 0, children: [linkEv('sys-fcs', 'FC-FCS01'), ev('free a'), ev('free b')] };
             allocateTopDown(g2, 3e-5, 'equal', new Set());
-            out.m3 = { g1: g1.children.map(c => c.probability), g2: g2.children.map(c => c.probability), g2state: g2._budgetMargin && g2._budgetMargin.state, cat: getSafetyTarget('Catastrophic').prob };
+            out.m3 = { g1: g1.children.map(c => c.probability), g2: g2.children.map(c => c.probability), g2state: g2._budgetMargin && g2._budgetMargin.state, cat: getSafetyTarget('Catastrophic').prob,
+                catFlight: B.perFlightBudget(getSafetyTarget('Catastrophic').prob, null).pFlight, hours: B.missionHours(null).hours, own: _getExternalSourceTarget(g2.children[0]) };
+            // every input held tighter than its share, none free: spare-held (what they use against the budget)
+            const g3 = { id: ++nid, logicalId: nid, type: 'gate', gateType: 'OR', name: 'detached 3', probability: 0, children: [Object.assign(ev('held a'), { _sharedStrictest: { prob: 1e-9, rate: 1e-9 / 3, fromPageName: 'x', instances: 2 } }), Object.assign(ev('held b'), { _sharedStrictest: { prob: 1e-9, rate: 1e-9 / 3, fromPageName: 'x', instances: 2 } })] };
+            allocateTopDown(g3, 3e-5, 'equal', new Set());
+            out.m6 = { kids: g3.children.map(c => c.probability), m: g3._budgetMargin };
             // "Not yet" on one: out of the tree, the others take the budget
             const cEps = A.linkCands(gr).find(c => c.fcId === 'FC-EPS02');
             switchTab('pasa'); await wait(300); U.pick('fc.FC-01.link.' + cEps.key, 'no'); await wait(400); await open('fc-auto-ac-FC-01');
@@ -200,7 +212,9 @@ const near = (a, b, tol) => a != null && b != null && Math.abs(a - b) <= Math.ab
         check('M1 three linked inputs under the OR gate add up to the top, which is the budget over the flight (3.0e-9 for a 1e-9 per flight hour objective on a 3 hour flight)', r.m1.kids.length === 3 && near(r.m1.sum, r.m1.budget) && near(r.m1.top, r.m1.budget) && near(r.m1.budget, 3e-9, 1e-2), JSON.stringify(r.m1));
         check('M2 the class number is never the answer: the Minor input is not at 1e-3 (its class), it is within the budget', r.m1.kids.every(k => k.p < r.m1.budget) && r.m1.classMinor === 1e-3);
         check('M3 the allocator alone, the case reported: three FHA-linked inputs (classes Catastrophic, Minor, Major) under an OR gate of 3e-9 each take a third (1e-9), never 1e-9, 1e-3 and 1e-5', r.m3.g1.every(v => near(v, 1 - Math.pow(1 - 3e-9, 1 / 3))), JSON.stringify(r.m3.g1));
-        check('M4 a class tighter than the share still holds the input (a limit): the Catastrophic one stays at its class under a 3e-5 gate, and the two free inputs take up the rest (rebalanced)', near(r.m3.g2[0], r.m3.cat) && near(1 - r.m3.g2.reduce((m, v) => m * (1 - v), 1), 3e-5) && r.m3.g2state === 'rebalanced', JSON.stringify(r.m3));
+        check('M4 a class tighter than the share still holds the input (a limit): the Catastrophic one stays at its class limit under a 3e-5 gate, and the two free inputs take up the rest (rebalanced)', near(r.m3.g2[0], r.m3.catFlight) && near(1 - r.m3.g2.reduce((m, v) => m * (1 - v), 1), 3e-5) && r.m3.g2state === 'rebalanced', JSON.stringify(r.m3));
+        check('M5 the limit is the class objective per flight hour held as a budget over the flight (1e-9 per flight hour on a 3 hour flight is 3e-9 per flight, never 1e-9 per flight); the link\'s own value stays per flight hour', near(r.m3.catFlight, 1 - Math.exp(-r.m3.cat * r.m3.hours)) && r.m3.hours > 1 && r.m3.g2[0] > r.m3.cat * 1.5 && r.m3.own === r.m3.cat, JSON.stringify({ held: r.m3.g2[0], cat: r.m3.cat, hours: r.m3.hours, own: r.m3.own }));
+        check('M6 every input held tighter than its share and none free: the gate is spare-held and gives what its inputs use (2e-9) against its budget (3e-5); the inputs keep their strictest', r.m6.m && r.m6.m.state === 'spare-held' && near(r.m6.m.achieved, 2e-9) && near(r.m6.m.target, 3e-5) && r.m6.kids.every(v => near(v, 1e-9)), JSON.stringify(r.m6));
 
         console.log('\n[X] one node, one number');
         check('X1 the same system failure condition in a second, looser tree is the same node (one registry entry, one ID) held at the strictest in both', r.x1.sameLid && r.x1.reg === 1 && near(r.x1.p12, r.x1.p1) && r.x1.held12, JSON.stringify(r.x1));

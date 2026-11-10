@@ -11645,7 +11645,7 @@ function _recomputeEffectiveWithExternalCaps(rootNode) {
         let extP = null;
         try {
             if (typeof _getExternalSourceTarget === 'function' && node.externalSource) {
-                extP = _getExternalSourceTarget(node);
+                extP = (typeof slExtCap === 'function') ? slExtCap(node) : _getExternalSourceTarget(node);   // 11 Nov 2026: the limit in the node's own unit (over the flight)
             }
         } catch (e) { extP = null; }
         if (extP !== null && isFinite(extP)) gateP = Math.min(gateP, extP);
