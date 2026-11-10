@@ -35,6 +35,8 @@ function slice(file, start, end) {
   return src.slice(a, b);
 }
 
+// 11 Nov 2026: held = capped from another tree (the strictest instance itself carries an own mark, which is not "held")
+const isHeld = n => !!(n && n._sharedStrictest && !n._sharedStrictest.own);
 let pass = 0, fail = 0;
 function check(name, cond, detail) {
   if (cond) { pass++; console.log('  PASS  ' + name); }
@@ -103,11 +105,12 @@ console.log('\n[1] The strict tree keeps its budget; the loose tree adopts it');
     near(sharedA.probability, natural.A, 1e-6), sharedA.probability.toExponential(3));
   check('the shared event in the LOOSE tree is held at the strict budget',
     near(sharedB.probability, natural.A, 1e-3), sharedB.probability.toExponential(3));
-  // A9 — the sibling is NOT loosened automatically any more.
-  check('A9: the sibling KEEPS its natural apportionment — no silent absorb',
-    near(siblingB.probability, 1e-6, 1e-3), 'sibling=' + siblingB.probability.toExponential(3));
-  check('A9: the freed budget lands on the gate as an under-allocated margin',
-    pages[1].root._budgetMargin && pages[1].root._budgetMargin.state === 'under-allocated' &&
+  // 11 Nov 2026 (Waqas: rebalancing "needs to be automatic and flagged for the engineer to accept as rebalanced, or if they
+  // want to keep the tighter budget and accept the spare allowance"): the sibling takes up the spare at once, flagged.
+  check('11 Nov 2026: the sibling takes up the spare at once (automatic rebalance)',
+    near(siblingB.probability, 2e-6 - sharedB.probability, 1e-3), 'sibling=' + siblingB.probability.toExponential(3));
+  check('11 Nov 2026: the gate is flagged rebalanced until the engineer decides, and closes on its target',
+    pages[1].root._budgetMargin && pages[1].root._budgetMargin.state === 'rebalanced' &&
     near(pages[1].root._budgetMargin.achieved, sharedB.probability + siblingB.probability, 1e-6),
     JSON.stringify(pages[1].root._budgetMargin));
   check('A9: the strict tree stays exact (its caps equal its naturals)',
@@ -133,8 +136,8 @@ console.log('\n[1] The strict tree keeps its budget; the loose tree adopts it');
   // reverting the decision restores the honest amber
   global.SLBudgetDecisions = { decisionFor: () => null };
   allocateTopDown(pages[1].root, 2e-6, 'weighted');
-  check('reverting the decision is REVERSIBLE — the margin returns',
-    pages[1].root._budgetMargin && pages[1].root._budgetMargin.state === 'under-allocated');
+  check('reverting the decision is REVERSIBLE — the gate is rebalanced and flagged again',
+    pages[1].root._budgetMargin && pages[1].root._budgetMargin.state === 'rebalanced');
   delete global.SLBudgetDecisions;
   check('the cap records where the requirement came from',
     sharedB._sharedStrictest && sharedB._sharedStrictest.fromPageName === 'PSSA · strict tree',
@@ -190,8 +193,8 @@ console.log('\n[3] Same exposure MODE, different windows — the RATE decides, n
   check('per FH it is the LOOSER of the two', rA > rB, rA.toExponential(2) + ' vs ' + rB.toExponential(2));
   const res = RU.strictestPass();
   check('the pass follows the RATE — it caps the takeoff instance, not the mission one',
-    res.capped === 1 && !!A._sharedStrictest && !B._sharedStrictest,
-    'capped=' + res.capped + ' onTakeoff=' + !!A._sharedStrictest + ' onMission=' + !!B._sharedStrictest);
+    res.capped === 1 && isHeld(A) && !isHeld(B) && !!(B._sharedStrictest && B._sharedStrictest.own),   // 11 Nov 2026: the strictest instance is held at its own value (own), never shown as capped
+    'capped=' + res.capped + ' onTakeoff=' + isHeld(A) + ' onMission=' + isHeld(B));
   const held = A._sharedStrictest;
   check('the cap is rendered into THIS tree\'s window, not copied as a raw P',
     held && near(held.prob, -Math.expm1(-held.rate * 0.05), 1e-6),
@@ -216,8 +219,8 @@ console.log('\n[4] It is live, not a ratchet');
   allocateTopDown(pages[1].root, 2e-6, 'weighted');
   const res = RU.strictestPass();
   check('relaxing the strict tree LIFTS the cap instead of ratcheting',
-    !pages[1].root.children[0]._sharedStrictest, JSON.stringify(res));
-  check('...and the other tree becomes the stricter one', !!pages[0].root.children[0]._sharedStrictest);
+    !isHeld(pages[1].root.children[0]), JSON.stringify(res));
+  check('...and the other tree becomes the stricter one', isHeld(pages[0].root.children[0]));
 }
 
 console.log('\n[5] Scope — what the pass must NOT touch');
@@ -248,11 +251,11 @@ console.log('\n[6] Wiring — the cap rides the existing external-cap channel');
   const quant = read('fta_quant_modules.js');
   check('the allocator reads the shared cap', /slSharedStrictestTarget\(node\)/.test(quant));
   check('it is min-ed with the external-source and paste caps',
-    /_caps = \[extSrc, paste, shared\]/.test(quant));
+    /_caps = \[extSrc, paste, shared, linkCeil\]/.test(quant));   // 11 Nov 2026: and the link ceiling (a system failure condition's own class)
   check('A9: the allocator consults the decision register',
     /SLBudgetDecisions/.test(quant) && /decisionFor\(node\.id\)/.test(quant));
-  check('A9: the absorb is opt-in — the pre-A9 redistribute runs only on an accepted decision',
-    /kind === 'absorb'/.test(quant) && /the pre-A9 redistribute, now opt-in/.test(quant));
+  check('11 Nov 2026: the rebalance is automatic and flagged; a reserve decision keeps the tighter budgets, an absorb accepts it',
+    /kind === 'absorb'/.test(quant) && /kind === 'reserve'/.test(quant) && /'rebalanced'/.test(quant) && /needs to be automatic and flagged for the engineer/.test(quant));
   check('A9: the default records _budgetMargin with the tri-state',
     /_budgetMargin/.test(quant) && /'over-committed'/.test(quant) && /'under-allocated'/.test(quant) && /'reserve'/.test(quant));
   check('the cap is a CHILD CONSTRAINT, which is what triggers the redistribute',

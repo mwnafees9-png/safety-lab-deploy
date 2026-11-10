@@ -1,7 +1,16 @@
-// pasa_autopilot.js (SLPasaAuto v2.0, 10 Nov 2026): the PASA Autopilot. One Preliminary Aircraft Safety Assessment for the
+// pasa_autopilot.js (SLPasaAuto v2.1, 11 Nov 2026): the PASA Autopilot. One Preliminary Aircraft Safety Assessment for the
 // aircraft: the front of the report (scope, the aircraft, the method, the failure conditions, the requirement levels, what
 // the appendices found, the conclusion) and one appendix per aircraft function, holding every failure condition of that
 // function rated Minor or above.
+//
+// v2.1 (Waqas, 11 Nov 2026): "why are building the fault trees rather than just saying fault trees have not been created yet?";
+//   "we should ask the user if that failure condition's fault tree ready to be linked or not in the auto pilot". The tool no
+//   longer builds a tree's inputs (fc_auto_trees.js v2.0). For each system failure condition traced to an aircraft one the
+//   Autopilot asks "Is its fault tree ready to be linked into this tree?": Yes links it as the ONE shared node of that system
+//   failure condition (SLFcTrees.link), so the fault tree module's own rule keeps its strictest allocation in every tree; Not
+//   yet leaves it out and the report says so. A tree with nothing built under its top reads "has not been created yet": no
+//   picture, no numbers. The interdependence table and the tree are checked against each other both ways, and a gate the
+//   tool rebalanced, or one whose inputs take more than its budget, is an open item.
 //
 // v2.0 (Waqas, 10 Nov 2026, after v1):
 //   "instead of each failure condition getting an appendix we should go with each function getting an appendix too", "each
@@ -45,7 +54,7 @@
 // Every number comes from SLTopBasis and the trees. window.SLPasaAuto.
 (function (root) {
     'use strict';
-    var VERSION = '2.0';
+    var VERSION = '2.1';
     function g(n) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(n); if (v !== undefined) return v; } } catch (_) {} try { return root[n]; } catch (_) { return undefined; } }
     function arr(v) { return Array.isArray(v) ? v : []; }
     function S(v) { return v == null ? '' : String(v); }
@@ -170,6 +179,33 @@
         return idpRows(gr).filter(function (r) { return r.state === 'feeds' && !tracedFrom(gr, r.sysId).length; }).map(function (r) { return { row: r, ex: ex[r.sysId] || null }; });
     }
 
+    // ---- linking the system trees in (v2.1) ---------------------------------------------------------------------------
+    // true when something is built under the top of the failure condition's tree (a tree made by the tool is its top only)
+    function built(gr) { var p = treeOf(gr), F = Tr(); return !!(p && p.root && (F && F.built ? F.built(p) : kids(p.root).length > 0)); }
+    function linkKey(c) { return S(c.sysId) + '\u00A7' + S(c.fcId); }
+    // every system failure condition traced to this one, from a system that feeds it: linked or not, and how
+    function linkCands(gr) {
+        var page = treeOf(gr), F = Tr(), out = [], st = fcStore(gr.fcId), ex = st.ex; if (!st.link) st.link = {};
+        idpRows(gr).filter(function (r) { return r.state === 'feeds' && !ex[r.sysId]; }).forEach(function (r) {
+            tracedFrom(gr, r.sysId).forEach(function (sg) {
+                var c = { sysId: S(r.sysId), fcId: sg.fcId, sg: sg, name: r.sysName + ': ' + T(sg.gov.fcDesc || sg.fcId), label: sg.fcId + ' ' + T(sg.gov.fcDesc || '') + ' (' + r.sysName + ')' };
+                c.key = linkKey(c); c.tree = treeOf(sg); c.treeBuilt = !!(c.tree && F && F.built && F.built(c.tree));
+                var viaNode = !!(page && F && F.linked && F.linked(page, { sysId: c.sysId, fcId: c.fcId })), viaXfer = false;
+                if (page && c.tree) walk(page.root, function (n) { if (S(n.transferOutTo || n.linkedPageId || '') === S(c.tree.id)) viaXfer = true; });
+                c.via = viaNode ? 'node' : viaXfer ? 'transfer' : null; c.linked = !!c.via;
+                c.answer = c.linked ? 'yes' : (st.link[c.key] === 'no' ? 'no' : null);
+                out.push(c);
+            });
+        });
+        return out;
+    }
+    // gates of the tree the tool rebalanced and nobody has accepted yet, and gates whose inputs take more than their budget
+    function gateFlags(gr) {
+        var page = treeOf(gr), out = { rebalanced: [], over: [] }; if (!page || !page.root) return out;
+        walk(page.root, function (n) { var m = n._budgetMargin; if (!m) return; if (m.state === 'rebalanced') out.rebalanced.push(nodeName(n)); else if (m.state === 'over-committed') out.over.push(nodeName(n)); });
+        return out;
+    }
+
     // ---- shared resources ---------------------------------------------------------------------------------------------
     var COMMON = [
         { key: 'env', name: 'Environment', what: 'Lightning, ice, bird strike, fire, fluids and heat in the same place' },
@@ -239,7 +275,13 @@
         var Eng = root.SLFTAEngine; if (!Eng || !page || !page.root) return null;
         return safe(function () { return Eng.minimalCutsets(Eng.getCutsets(page.root)); }, null);
     }
+    // 11 Nov 2026: the numbers in a tree are whatever its last allocation left there. Before any tree is read for a report the
+    // project-wide allocation runs once per change (every tree its budget over the flight, every shared node at its strictest),
+    // so the report never shows a tree as it stood before a link, or as whichever tree was opened last left it.
+    var _al = { gen: -2 };
+    function allocated() { var G = memoGen(); if (_al.gen === G && G !== -1) return; _al.gen = G; try { if (root.SLFcTrees && root.SLFcTrees.sweep) root.SLFcTrees.sweep({ quiet: true, noAsk: true }); } catch (_) {} try { if (typeof root._slSharedStrictestRound === 'function') root._slSharedStrictestRound(); } catch (_) {} _al.gen = memoGen(); }
     function treeFacts(gr) {
+        allocated();
         var page = pageOf(gr); if (!page) return null;
         var full = integrated(page), cs = cutsets(page), out = { page: page, full: full };
         out.singles = cs ? cs.filter(function (c) { return c.length === 1; }).map(function (c) { return nodeName(c[0]); }) : null;
@@ -277,7 +319,7 @@
         var res = safe(function () { return K.figure(full.id + ':' + full.root.id, { page: full, noMarks: true, C: ctx.C, dark: ctx.dark, metrics: metricsOf(page), anchor: 'pasa-' + gr.fcId, nodeG: function (id, inner, title) { return root.SLCcaReport.nodeG('pasa', id, inner, title); } }); }, null);
         if (!res || !res.parts || !res.parts.length) return [];
         var many = res.parts.length > 1;
-        return res.parts.map(function (pt) { return { k: 'fig', name: 'tree-' + gr.fcId + (many ? '-' + pt.letter : ''), title: fcName(gr) + ', fault tree as the tool generated it' + (full !== page ? ' with the system trees drawn in' : '') + (many ? ', part ' + pt.letter : ''), svg: pt.svg, w: pt.w, h: pt.h }; });
+        return res.parts.map(function (pt) { return { k: 'fig', name: 'tree-' + gr.fcId + (many ? '-' + pt.letter : ''), title: fcName(gr) + ', fault tree as it stands in the tool' + (full !== page ? ' with the system trees drawn in' : '') + (many ? ', part ' + pt.letter : ''), svg: pt.svg, w: pt.w, h: pt.h }; });
     }
 
     // ---- requirements: AutoReq for this failure condition ----------------------------------------------------------------
@@ -359,6 +401,7 @@
         var left = [], rows = idpRows(gr);
         if (rows.some(function (r) { return r.state === 'open' || r.state === 'proposed'; })) left.push('Which systems feed ' + gr.fcId + '? (the interdependence table)');
         untraced(gr).forEach(function (u) { if (!u.ex) left.push(u.row.sysName + ' feeds ' + gr.fcId + ' with nothing traced: trace one of its failure conditions, or say why it does not'); });
+        if (isQuant(gr) && treeOf(gr)) linkCands(gr).forEach(function (c) { if (!c.answer) left.push('Is the fault tree for ' + c.label + ' ready to be linked into the ' + gr.fcId + ' tree?'); });
         resources(gr).forEach(function (r) { if (!resWhere(gr, r)) left.push('Where is ' + lc(r.name) + ' dispositioned?'); });
         if (coffeOn()) coffeCasesOf(gr).forEach(function (k) { if (!coffeVerdictOf(gr, k)) left.push('Does ' + caseWords(k) + ' produce ' + gr.fcId + '?'); });
         return left;
@@ -366,13 +409,17 @@
     // over-committed budgets and unreviewed items: open questions the left pane shows
     function fnLeft(fnId) { var out = []; fnGroups(fnId).forEach(function (gr) { out = out.concat(fcLeft(gr)); }); return out; }
     function openItems(gr) {
-        var out = [], tf = isQuant(gr) ? treeFacts(gr) : null;
+        var out = [], tf = isQuant(gr) && built(gr) ? treeFacts(gr) : null;
         if (routeOf(gr) === 'unanswered') out.push('The 1309 chart for ' + gr.fcId + ' is not answered in the AFHA yet, so it is assessed quantitatively until it is.');
         if (isQuant(gr) && !pageOf(gr)) out.push('No fault tree is generated for ' + gr.fcId + ' yet.');
+        else if (isQuant(gr) && !built(gr)) out.push('The fault tree for ' + gr.fcId + ' has not been created yet: link the system trees that are ready, or build it in the Fault trees tab.');
+        var gf = isQuant(gr) ? gateFlags(gr) : { rebalanced: [], over: [] };
+        gf.over.forEach(function (x) { out.push('The inputs of ' + x + ' take more than its budget. Change what holds them, or the target.'); });
+        gf.rebalanced.forEach(function (x) { out.push(x + ' was rebalanced by the tool (an input under it is held tighter than its share): accept it, or keep the tighter budgets, in the Budget Ledger.'); });
         if (tf && tf.meets && !tf.meets.pass) out.push('The fault tree is above its objective: ' + sci(tf.rate) + ' per flight hour against ' + sci(tf.objective) + '.');
         if (tf && tf.cg) tf.cg.gates.filter(function (x) { return x.critical; }).forEach(function (x) { var rv = cmas().filter(function (c) { return arr(c.linkedGateIds).map(S).indexOf(S(x.key)) >= 0; }); if (!rv.length) out.push('Gate ' + x.displayId + (x.name ? ' ' + T(x.name) : '') + ' carries the budget and has no common mode review yet.'); });
         untraced(gr).forEach(function (u) { if (u.ex) return; out.push(u.row.sysName + ' feeds ' + gr.fcId + ' but none of its failure conditions is traced to it.'); });
-        tracedNotInTree(gr).forEach(function (t) { out.push(t + ' is traced to ' + gr.fcId + ' but is not in its fault tree yet.'); });
+        if (isQuant(gr)) tracedNotInTree(gr).forEach(function (t) { out.push(t + ' is traced to ' + gr.fcId + ' but is not linked into its fault tree yet.'); });
         treeNotInTable(gr).forEach(function (t) { out.push('The fault tree carries ' + t.sys + ' (through ' + t.via + '), but the interdependence table does not show it feeding ' + gr.fcId + '.'); });
         return out;
     }
@@ -385,26 +432,14 @@
             if (!n) return;
             var to = n.transferOutTo || n.linkedPageId, sy = null;
             if (to) { var tp = pages.filter(function (x) { return x && S(x.id) === S(to); })[0]; if (tp && tp.systemId) sy = S(tp.systemId); }
+            if (!sy && n.sysNode && n.sysNode.sysId != null) sy = S(n.sysNode.sysId);
             if (!sy && n.externalSource && /^SYS_/.test(S(n.externalSource.targetId))) { var iid = S(n.externalSource.targetId).slice(4); systems().forEach(function (s0) { if (arr(s0.fha).some(function (r) { return S(r.internalId) === iid; })) sy = S(s0.id); }); }
             if (sy && fs.indexOf(sy) < 0 && !seen[sy]) { seen[sy] = 1; out.push({ sys: sysName(sy), sysId: sy, via: nodeName(n) }); }
             kids(n).forEach(w);
         })(page.root);
         return out;
     }
-    function tracedNotInTree(gr) {
-        var page = pageOf(gr); if (!page) return [];
-        var inTree = {}; walk(integrated(page).root, function (n) { if (n.externalSource && n.externalSource.targetId) inTree[S(n.externalSource.targetId).replace(/^SYS_/, '')] = 1; if (n.name) inTree['name:' + S(n.name)] = 1; });
-        var out = [];
-        feeders(gr).forEach(function (sidv) {
-            tracedFrom(gr, sidv).forEach(function (sg) {
-                var hit = sg.rows.some(function (r) { return inTree[S(r.internalId)]; });
-                // a hand-built tree may carry the system's branch as a transfer to its PSSA tree instead of a linked event
-                var tp = treeOf(sg); if (!hit && tp) walk(page.root, function (n) { if (S(n.transferOutTo || n.linkedPageId) === S(tp.id)) hit = true; });
-                if (!hit) out.push(sg.fcId + ' ' + T(sg.gov.fcDesc || '') + ' (' + sysName(sidv) + ')');
-            });
-        });
-        return out;
-    }
+    function tracedNotInTree(gr) { return treeOf(gr) ? linkCands(gr).filter(function (c) { return !c.linked; }).map(function (c) { return c.label; }) : []; }
 
     // ---- the report: front ---------------------------------------------------------------------------------------------
     function H(level, text, extra) { return Object.assign({ k: 'h', level: level, text: text }, extra || {}); }
@@ -422,7 +457,7 @@
         b.push(P(f.desc === 'own' && f.descText ? T(f.descText) : f.desc === 'project' ? prog + ', with ' + listJoin(sys.map(function (s) { return T(s.name || s.id); })) + '.' : 'Not decided yet: the description of the aircraft.', 'pasa.desc'));
         b.push(H(1, 'Method'));
         b.push(P(f.method === 'own' && f.methodText ? T(f.methodText) : f.method === 'std' ? 'The assessment follows ARP4761A for the safety assessment process and ARP4754B for development assurance, with the objectives of ' + acRef() + ' (' + regulation() + '). Probabilities are per flight hour, worked out over an average flight of ' + hoursWord() + '.' : 'Not decided yet: the method and the numbers.', 'pasa.method'));
-        b.push(P('Each appendix takes one failure condition at its worst case (the most severe flight phase, and the longest exposure where two are equally severe). It first sets out how the systems feed it and what they share, then shows its fault tree as the tool generated it, says what the tree means, checks the numbers against the objective, and ends with the requirements that make it so and how each will be closed. The requirements are generated by AutoReq from the analysis; they are the mitigations.'));
+        b.push(P('Each appendix takes each failure condition of one function at its worst case (the most severe flight phase, and the longest exposure where two are equally severe). It first sets out how the systems feed it and what they share, then shows its fault tree as it stands in the tool (the system trees are linked in by the engineer; a tree nobody has built yet says so), says what the tree means, checks the numbers against the objective, and ends with the requirements that make it so and how each will be closed. The requirements are generated by AutoReq from the analysis; they are the mitigations.'));
         var RT = root.SLReqTrace;
         if (RT) b.push({ k: 'table', name: 'levels', title: 'The level each type of requirement is derived at', q: 'pasa.lvl', rows: RT.TYPES.map(function (t) { var l = RT.levelFor(t.id, {}).level; return { 'Requirement type': t.name, 'What it covers': t.what, 'Derived at': l ? RT.levelLabel(l) : 'Not decided yet' }; }), lead: '{N} lists the level chosen for each type; an appendix says where a failure condition differs.' });
         b.push(H(1, 'The failure conditions'));
@@ -439,8 +474,8 @@
         var b = [H(1, 'What the appendices found')], apx = appendices(), rows = [];
         apx.forEach(function (fid, i) {
             fnGroups(fid).forEach(function (gr) {
-                var q = isQuant(gr), tf = q ? treeFacts(gr) : null, cg = tf && tf.cg ? tf.cg.gates.filter(function (x) { return x.critical; }) : [], o = openItems(gr);
-                rows.push({ Appendix: letter(i), 'Failure condition': fcName(gr), Assessment: q ? 'Quantitative' : 'Qualitative', 'Against the objective': q ? (tf && tf.meets ? (tf.meets.pass ? 'Within' : 'Above') + ' (' + sci(tf.rate) + ' against ' + sci(tf.objective) + ' per flight hour)' : 'Not worked out') : 'Assessed in words', 'The budget rests on': cg.length ? 'Gates ' + listJoin(cg.map(function (x) { return x.displayId; })) : q ? 'No independence claim' : 'Not applicable', Findings: o.length ? o.join(' ') : 'None' });
+                var q = isQuant(gr), bt = q && built(gr), tf = bt ? treeFacts(gr) : null, cg = tf && tf.cg ? tf.cg.gates.filter(function (x) { return x.critical; }) : [], o = openItems(gr);
+                rows.push({ Appendix: letter(i), 'Failure condition': fcName(gr), Assessment: q ? 'Quantitative' : 'Qualitative', 'Against the objective': q ? (!bt ? 'Fault tree not created yet' : tf && tf.meets ? (tf.meets.pass ? 'Within' : 'Above') + ' (' + sci(tf.rate) + ' against ' + sci(tf.objective) + ' per flight hour)' : 'Not worked out') : 'Assessed in words', 'The budget rests on': cg.length ? 'Gates ' + listJoin(cg.map(function (x) { return x.displayId; })) : !q ? 'Not applicable' : bt ? 'No independence claim' : 'Not known yet', Findings: o.length ? o.join(' ') : 'None' });
             });
         });
         if (!rows.length) b.push(P('No aircraft failure condition has a safety effect yet.'));
@@ -477,7 +512,11 @@
         var un = untraced(gr).filter(function (u) { return !u.ex; });
         if (un.length) b.push(P('Finding: ' + listJoin(un.map(function (u) { return u.row.sysName; })) + (un.length > 1 ? ' feed ' : ' feeds ') + f + ', but none of ' + (un.length > 1 ? 'their' : 'its') + ' failure conditions is traced to it. Until one is traced, or the reason it does not contribute is recorded, ' + f + ' may be missing a cause.', q('trace.' + un[0].row.sysId)));
         var tnt = treeNotInTable(gr); if (tnt.length) b.push(P('Finding: the fault tree carries ' + listJoin(tnt.map(function (t) { return t.sys + ' (through ' + t.via + ')'; })) + ', but the interdependence table does not show ' + (tnt.length > 1 ? 'them' : 'it') + ' feeding ' + f + '. The table and the tree must tell one story: answer ' + (tnt.length > 1 ? 'those rows' : 'that row') + ' on the left.', q('idp')));
-        var nit = tracedNotInTree(gr); if (nit.length) b.push(P('Finding: ' + listJoin(nit) + (nit.length > 1 ? ' are' : ' is') + ' traced to ' + f + ' but not yet in its fault tree.', q('idp')));
+        var lks = isQuant(gr) && pageOf(gr) ? linkCands(gr) : [];
+        if (lks.length) b.push({ k: 'table', name: 'link-' + f, title: 'The system trees linked into the ' + f + ' tree', q: q('link'), rowQ: lks.map(function (c) { return q('link.' + c.key); }), rows: lks.map(function (c) {
+            return { 'System failure condition': c.label, 'Its fault tree': !c.tree ? 'None yet' : c.treeBuilt ? 'Built' : 'Its top only, nothing built under it', ['Linked into the ' + f + ' tree']: c.via === 'transfer' ? 'Yes, by a transfer' : c.linked ? 'Yes' : c.answer === 'no' ? 'Not yet (the engineer\'s answer)' : 'Not answered yet' };
+        }), lead: '{N} lists each system failure condition traced to ' + f + ' and whether it is linked into its fault tree. A linked one is the same node in every tree it is in, so it keeps the strictest budget any of them gives it, and its own tree takes that budget as its target.' });
+        var nit = tracedNotInTree(gr); if (nit.length) b.push(P('Finding: ' + listJoin(nit) + (nit.length > 1 ? ' are' : ' is') + ' traced to ' + f + ' but not linked into its fault tree yet. Until ' + (nit.length > 1 ? 'they are' : 'it is') + ', the tree does not count ' + (nit.length > 1 ? 'them' : 'it') + ' and ' + (nit.length > 1 ? 'their trees have' : 'its tree has') + ' no budget from ' + f + '.', q('link')));
         // common resources
         b.push(H(3, 'Resources the systems share'));
         var rs = resources(gr);
@@ -494,15 +533,20 @@
             b.push(H(3, 'Combined functional failure effects (CoFFE)'));
             var ks = coffeCasesOf(gr);
             b.push(ks.length ? { k: 'table', name: 'coffe-' + f, title: 'Which system failures, alone or together, produce ' + f, q: q('coffe'), rowQ: ks.map(function (k) { return q('coffe.' + k.key); }), rows: ks.map(function (k) {
-                var v = coffeVerdictOf(gr, k), inTree = (function () { var hit = false, page = pageOf(gr); if (!page) return false; var ids = k.parts.map(function (p) { return S(p.sysId); }); walk(integrated(page).root, function (n) { var s0 = n.externalSource ? S(n.externalSource.targetId) : ''; systems().forEach(function (sy) { if (ids.indexOf(S(sy.id)) >= 0 && arr(sy.fha).some(function (r) { return ('SYS_' + String(r.internalId)) === s0; })) hit = true; }); }); return hit; })();
+                var v = coffeVerdictOf(gr, k), inTree = (function () { var hit = false, page = pageOf(gr); if (!page) return false; var ids = k.parts.map(function (p) { return S(p.sysId); }); walk(integrated(page).root, function (n) { if (n.sysNode && ids.indexOf(S(n.sysNode.sysId)) >= 0) hit = true; var s0 = n.externalSource ? S(n.externalSource.targetId) : ''; systems().forEach(function (sy) { if (ids.indexOf(S(sy.id)) >= 0 && arr(sy.fha).some(function (r) { return ('SYS_' + String(r.internalId)) === s0; })) hit = true; }); }); return hit; })();
                 return { 'System failure(s)': caseWords(k), ['Produce ' + f]: v ? (v.v === 'yes' ? 'Yes' : 'No') + (v.src === 'mac' ? ' (from the MAC model)' : '') : 'Not decided yet', 'Covered by the tree': inTree ? 'Yes' : 'No' };
             }), lead: '{N} lists each case: a row with one system is that system alone able to cause it.' } : P('The CoFFE has no cases for ' + f + ': no system is shown to feed it yet.'));
         }
-        if (isQuant(gr)) {
+        if (isQuant(gr) && !built(gr)) {
+            // v2.1: nothing built under the top is no analysis: no picture, no numbers
+            b.push(H(3, 'The fault tree'));
+            b.push(P(pageOf(gr) ? 'The fault tree for ' + f + ' has not been created yet. It has its top event and nothing under it. Link the system trees that are ready (the questions beside this report), or build it in the Fault trees tab; what the tree says and its numbers appear here once it is.' : 'No fault tree is generated for ' + f + ' yet.', q('link')));
+            b.push(P('Development assurance: ' + (t.dal ? 'FDAL ' + t.dal + ' for the functions that feed ' + f + ', from its ' + S(fc.severity) + ' severity.' : 'not set.')));
+        } else if (isQuant(gr)) {
         // the tree
         b.push(H(3, 'The fault tree'));
         var figs = treeFigures(gr, ctx);
-        if (figs.length) { b.push(P((figs.length > 1 ? 'The figures below are' : 'The figure below is') + ' the fault tree for ' + f + ' as the tool generated it' + (tf.full && tf.full !== tf.page ? ', with the system trees it transfers to drawn in' : '') + (figs.length > 1 ? ', cut into parts so each stays readable' : '') + '. Each box shows its probability per flight (P) and its rate per flight hour (\u03BB).')); figs.forEach(function (x) { b.push(x); }); }
+        if (figs.length) { b.push(P((figs.length > 1 ? 'The figures below are' : 'The figure below is') + ' the fault tree for ' + f + ' as it stands in the tool' + (tf.full && tf.full !== tf.page ? ', with the system trees it transfers to drawn in' : '') + (figs.length > 1 ? ', cut into parts so each stays readable' : '') + '. Each box shows its probability per flight (P) and its rate per flight hour (\u03BB).')); figs.forEach(function (x) { b.push(x); }); }
         else b.push(P('The fault tree for ' + f + ' could not be drawn just now.'));
         // what the tree says
         b.push(H(3, 'What the tree says'));
@@ -673,7 +717,14 @@
         });
         // 4. the tree: nothing to answer
         var pg = pageOf(gr);
-        if (isQuant(gr)) h += card('fc.' + f + '.tree', '<div class="slap-q">The fault tree, what it says, the numbers</div><div class="paq-x">Generated from the tree. Nothing to answer.</div>' + (pg ? '<button type="button" class="paq-b" onclick="SLPasaAuto.ui.openTree(' + J(pg.id) + ')">Open the fault tree</button>' : ''), true);
+        // v2.1: each system failure condition traced here: is its tree ready to be linked into this one?
+        if (isQuant(gr) && pg) linkCands(gr).forEach(function (c) {
+            var qid = 'fc.' + f + '.link.' + c.key;
+            var state = !c.tree ? 'It has no fault tree yet.' : c.treeBuilt ? 'Its fault tree (' + T(c.tree.name || c.tree.id) + ') has inputs built.' : 'Its fault tree (' + T(c.tree.name || c.tree.id) + ') has its top only so far.';
+            h += card(qid, Q({ id: qid, text: 'Is the fault tree for ' + c.label + ' ready to be linked into the ' + f + ' tree?', why: E(state + ' Linked, it is one node, the same in every aircraft tree it feeds: it keeps the strictest budget any of them gives it, and its own tree takes that budget as its target.') + (c.via === 'transfer' ? '<br>' + E('It is already in the ' + f + ' tree, by a transfer to its tree.') : ''), picked: c.answer,
+                options: [{ id: 'yes', label: 'Yes, link it', impact: 'It goes into the ' + f + ' tree under the top, with its share of the budget. Move it inside the tree in the Fault trees tab if it belongs lower down.' }, { id: 'no', label: 'Not yet', impact: 'It stays out of the ' + f + ' tree. The report says it is not linked yet.' }] }), !!c.answer);
+        });
+        if (isQuant(gr)) h += card('fc.' + f + '.tree', '<div class="slap-q">The fault tree, what it says, the numbers</div><div class="paq-x">' + (built(gr) ? 'Read from the tree. Nothing to answer.' : 'The fault tree for ' + E(f) + ' has not been created yet: link the system trees that are ready, or build it in the Fault trees tab.') + '</div>' + (pg ? '<button type="button" class="paq-b" onclick="SLPasaAuto.ui.openTree(' + J(pg.id) + ')">Open the fault tree</button>' : ''), built(gr));
         return h;
     }
     // one function's questions: each failure condition's, then the function's requirement levels and the register
@@ -723,6 +774,18 @@
                 var sg = sysGroups(m[2]).filter(function (x) { return 'tr:' + x.fcId === opt; })[0]; if (!sg) throw fail('That failure condition is no longer in the system.');
                 sg.rows.forEach(function (r) { var l = traceList(r.acTrace); if (l.indexOf(gr.fcId) < 0 && !l.some(function (t) { return gr.rows.some(function (x) { return S(x.internalId) === t; }); })) { l.push(gr.fcId); r.acTrace = l.join(', '); } });
                 delete fcStore(gr.fcId).ex[m[2]];
+            } else if ((m = /^fc\.(.+)\.link\.([^\u00A7]+)\u00A7(.+)$/.exec(qid))) {
+                var grL = groupOf(m[1]), pgL = grL ? treeOf(grL) : null, FL = Tr(); if (!grL || !pgL || !FL || !FL.link) throw fail('This failure condition has no fault tree to link into.');
+                var cL = linkCands(grL).filter(function (x) { return x.key === m[2] + '\u00A7' + m[3]; })[0]; if (!cL) throw fail('That system failure condition is no longer traced here.');
+                var stL = fcStore(grL.fcId); if (!stL.link) stL.link = {};
+                if (opt === 'yes') { if (!cL.linked) { var rL = FL.link(pgL, { sysId: cL.sysId, fcId: cL.fcId }); if (!rL.ok) throw fail(rL.why || 'Not linked.'); } delete stL.link[cL.key]; }
+                else {
+                    if (cL.via === 'transfer') throw fail('It is in the ' + grL.fcId + ' tree by a transfer. Take the transfer out in the Fault trees tab.');
+                    if (cL.via === 'node') { var uL = FL.unlink(pgL, { sysId: cL.sysId, fcId: cL.fcId }); if (!uL.ok) throw fail(uL.why || 'Not taken out.'); }
+                    stL.link[cL.key] = 'no';
+                }
+                try { if (FL.sweep) FL.sweep({ quiet: true, noAsk: true }); } catch (_) {}
+                try { if (typeof root._slSharedStrictestRound === 'function') root._slSharedStrictestRound(); } catch (_) {}
             } else if ((m = /^fc\.([^.]+)\.res\.(.+)$/.exec(qid))) {
                 if (opt === 'none') { ui.open[qid] = 'none'; var R1 = R0(); if (R1) R1.render(); return; }
                 fcStore(m[1]).res[m[2]] = { where: opt, by: who(), at: now() };
@@ -796,7 +859,8 @@
         _rq.gen = -3; RT.ensureIds(); RT.syncLevels();
         save(); done('fn.' + fnId + '.req');
     }
-    function openTree(pid) { try { if (typeof root.switchFTAPage === 'function') root.switchFTAPage(pid); else if (root.SLTreeHomes) root.SLTreeHomes.open('pasa'); } catch (_) {} }
+    // 11 Nov 2026: opens THAT tree (it opened the list of trees: the function it called does not exist)
+    function openTree(pid) { try { if (typeof root.switchTab === 'function') root.switchTab('fta'); if (typeof root.openFTAPageById === 'function') root.openFTAPageById(pid); else if (root.SLTreeHomes) root.SLTreeHomes.open('pasa'); } catch (_) {} }
 
     // ---- outputs and acceptance (the old completion checklist) -----------------------------------------------------------
     function fpOf(o) { try { return JSON.stringify(o); } catch (_) { return String(Math.random()); } }
@@ -805,7 +869,7 @@
         return [
             { id: 'idp', what: 'How the systems feed each failure condition, confirmed', accept: 'Every system function answered for every appendix; every system that feeds a failure condition traced, or excluded with a reason', role: 'Chief safety engineer', fp: function () { return fpOf(pk.map(function (id) { var gr = groupOf(id); return gr ? idpRows(gr).map(function (r) { return r.sysId + r.state; }).join(',') + JSON.stringify(fcStore(id).ex) : ''; })); } },
             { id: 'cr', what: 'Shared resources and common causes dispositioned', accept: 'Each one points to the review that looks at it, or says why it cannot defeat an independence', role: 'Chief safety engineer', fp: function () { return fpOf(pk.map(function (id) { return fcStore(id).res; })); } },
-            { id: 'budget', what: 'Each fault tree within its objective', accept: 'No appendix above its objective; each critical gate sent to a common mode review', role: 'Safety analyst', fp: function () { return fpOf(pk.map(function (id) { var gr = groupOf(id), tf = gr ? treeFacts(gr) : null; return tf ? [tf.rate, tf.meets && tf.meets.pass] : null; })); } },
+            { id: 'budget', what: 'Each fault tree within its objective', accept: 'No appendix above its objective; each critical gate sent to a common mode review', role: 'Safety analyst', fp: function () { return fpOf(pk.map(function (id) { var gr = groupOf(id), tf = gr && built(gr) ? treeFacts(gr) : null; return tf ? [tf.rate, tf.meets && tf.meets.pass] : null; })); } },
             { id: 'fdal', what: 'Aircraft development assurance levels', accept: 'Each failure condition\'s FDAL set from its severity and carried by its requirements', role: 'Development assurance lead', fp: function () { return fpOf(pk.map(function (id) { var gr = groupOf(id); return gr ? target(gr.gov.severity).dal : null; })); } },
             { id: 'req', what: 'The requirements for each failure condition, in the aircraft requirements', accept: 'Every requirement AutoReq generates for an appendix is in the register, with its rationale and where it is driven from', role: 'Requirements lead', fp: function () { return fpOf(pk.map(function (id) { var gr = groupOf(id); return gr ? reqsFor(gr).map(function (x) { return x.state + x.cand.reqSource.fingerprint; }) : null; })); } },
             { id: 'recon', what: 'System severities agree with the aircraft', accept: 'No system failure condition traced to an aircraft one is rated less severe than its consequence allows', role: 'Chief safety engineer', fp: function () { return fpOf(pk); } },
@@ -870,8 +934,8 @@
 
     // what the PSSA Autopilot shares with this one (pssa_autopilot.js): the same words, numbers and tree pictures
     var lib = { sci: sci, T: T, E: E, S: S, J: J, arr: arr, safe: safe, listJoin: listJoin, lc: lc, rank: rank, SEV_RANK: SEV_RANK, SEV_WORDS: SEV_WORDS, target: target, kids: kids, walk: walk, nodeName: nodeName,
-        cutsets: cutsets, metricsOf: metricsOf, cgOf: cgOf, cmas: cmas, CLOSE: CLOSE, acRef: acRef, regulation: regulation, style: style, sysName: sysName, sysById: sysById, systems: systems, traceList: traceList };
-    var api = { VERSION: VERSION, lib: lib, besideGo: besideGo, placeBeside: placeBeside, candidates: candidates, picks: picks, appendices: appendices, functions: functions, fnGroups: fnGroups, fnSection: fnSection, routeOf: routeOf, isQuant: isQuant, fnLeft: fnLeft, fnOf: fnOf, fnTitle: fnTitle, feeders: feeders, critGates: critGates, treeOf: treeOf, groupOf: groupOf, idpRows: idpRows, untraced: untraced, resources: resources, treeFacts: treeFacts, reqsFor: reqsFor,
+        cutsets: cutsets, metricsOf: metricsOf, allocated: allocated, cgOf: cgOf, cmas: cmas, CLOSE: CLOSE, acRef: acRef, regulation: regulation, style: style, sysName: sysName, sysById: sysById, systems: systems, traceList: traceList };
+    var api = { VERSION: VERSION, lib: lib, besideGo: besideGo, placeBeside: placeBeside, candidates: candidates, picks: picks, appendices: appendices, functions: functions, fnGroups: fnGroups, fnSection: fnSection, routeOf: routeOf, isQuant: isQuant, fnLeft: fnLeft, linkCands: linkCands, built: built, gateFlags: gateFlags, fnOf: fnOf, fnTitle: fnTitle, feeders: feeders, critGates: critGates, treeOf: treeOf, groupOf: groupOf, idpRows: idpRows, untraced: untraced, resources: resources, treeFacts: treeFacts, reqsFor: reqsFor,
         frontLeft: frontLeft, fcLeft: fcLeft, openItems: openItems, tracedNotInTree: tracedNotInTree, treeNotInTable: treeNotInTable, section: section, front: front, coffeOn: coffeOn, store: store, outputs: outputs,
         ui: { pick: pick, text: text, cell: cell, idpNone: idpNone, idpAi: idpAi, level: level, levelReset: levelReset, acceptReqs: acceptReqs, openTree: openTree } };
     try { root.SLPasaAuto = api; } catch (_) {}

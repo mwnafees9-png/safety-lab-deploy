@@ -47,7 +47,7 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
 (async function main() {
     console.log('\n[S] pins and the page');
     const HTML = src('index.html');
-    check('S1 asa_autopilot.js 1.0 pinned after ssa_autopilot.js; the ASA page heading has no em dash; this test has none', /asa_autopilot\.js\?v=1\.0"/.test(HTML) && HTML.indexOf('src="asa_autopilot.js') > HTML.indexOf('src="ssa_autopilot.js') && /<h3>ASA: Aircraft Safety Assessment<\/h3>/.test(HTML) && src('asa_autopilot.js').indexOf(EM) < 0 && fs.readFileSync(__filename, 'utf8').indexOf(EM) < 0);
+    check('S1 asa_autopilot.js 1.1 pinned after ssa_autopilot.js; the ASA page heading has no em dash; this test has none', /asa_autopilot\.js\?v=1\.1"/.test(HTML) && HTML.indexOf('src="asa_autopilot.js') > HTML.indexOf('src="ssa_autopilot.js') && /<h3>ASA: Aircraft Safety Assessment<\/h3>/.test(HTML) && src('asa_autopilot.js').indexOf(EM) < 0 && fs.readFileSync(__filename, 'utf8').indexOf(EM) < 0);
 
     let pw = null; try { pw = require('playwright'); } catch (_) {}
     if (!pw) { console.log('  SKIP  Playwright is not installed here: the browser part did not run'); console.log('\n' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0); }

@@ -13,6 +13,9 @@
  *   unanswered chart gets a tree and is flagged ("a subtle red blinky thing over the skewer"), "only for the worst
  *   case severities not every single instance of that failure condition"; tied phases: "whichever gives us the
  *   most conservative one".
+ * 11 Nov 2026 (fc_auto_trees.js v2.0, Waqas: "why are building the fault trees rather than just saying fault trees have not been
+ *   created yet? the shared node mechanism already exists too"): a tree made here is its top only; the SFHA condition traced
+ *   to it is LINKED BY THE ENGINEER (SLFcTrees.link: its one shared node), and the PSSA target then comes from that node.
  * EXECUTED (Chromium, the real app on the HL-1 showcase with failure conditions added for the test):
  *   [R] the chart route of a row: below Major none; Major or worse unanswered; simple/redundant qualitative;
  *       similar to certified similarity; Hazardous not simple quantitative.
@@ -118,14 +121,17 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
             const ts = treeOf([s1], 'system');
             R.trees = {
                 pasa: t1.length, pasaHome: t1[0] && SLTreeHomes.homeOf(t1[0]).home, govFirst: t1[0] && String(t1[0].linkedFhaIds[0]) === String(g.gov.internalId),
-                top: t1[0] && t1[0].root.name, sysEvent: t1[0] && (t1[0].root.children || []).filter(c => c.externalSource && c.externalSource.targetId === 'SYS_' + s1.internalId).length,
+                top: t1[0] && t1[0].root.name, sysEvent: t1[0] && (t1[0].root.children || []).filter(c => c.externalSource || c.sysNode).length, built: t1[0] && SLFcTrees.built(t1[0]),
                 minor: treeOf([a2], 'aircraft').length, qual: treeOf([a3], 'aircraft').length,
                 pssa: ts.length, pssaHome: ts[0] && SLTreeHomes.homeOf(ts[0]), sysId: String(sys.id),
                 again: sw2.made.length + sw2.added
             };
             // [A] targets, after the allocation runs
+            // v2.0: the engineer links the traced SFHA condition in (its one shared node)
+            const lk = SLFcTrees.link(t1[0], { sysId: sys.id, fcId: s1.fcId }); R.trees.linkOk = lk.ok; R.trees.linkedNode = !!(lk.node && lk.node.sysNode && !lk.node.externalSource);
+            SLDataChange.bump();
             calculateAllProbabilities(); SLFcTrees.sweep({ noAsk: true, quiet: true }); calculateAllProbabilities();
-            const leaf = (t1[0].root.children || []).find(c => c.externalSource && c.externalSource.targetId === 'SYS_' + s1.internalId);
+            const leaf = (t1[0].root.children || []).find(c => c.sysNode && String(c.sysNode.sysId) === String(sys.id) && c.sysNode.fcId === s1.fcId);
             const cls = getSafetyTarget('Major').prob;
             const e = SLFcTrees.effectiveTarget(ts[0]);
             const acRate = getSafetyTarget('Hazardous').prob;   // the PASA tree's own target: its one system event gets all of it
@@ -174,7 +180,7 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
         console.log('\n[T] the trees');
         check('[T] a Hazardous condition, chart unanswered: one PASA tree, the governing row linked first, its top named for it', r.trees.pasa === 1 && r.trees.pasaHome === 'pasa' && r.trees.govFirst && /Loss of test function/.test(r.trees.top), JSON.stringify(r.trees));
         check('[T] a Minor condition and a chart-qualitative one: no tree', r.trees.minor === 0 && r.trees.qual === 0, JSON.stringify(r.trees));
-        check('[T] the SFHA condition traced to it: its PSSA tree, in that system; and the PASA tree has a bottom event linked to it', r.trees.pssa === 1 && r.trees.pssaHome.home === 'pssa' && String(r.trees.pssaHome.systemId) === r.trees.sysId && r.trees.sysEvent === 1, JSON.stringify(r.trees));
+        check('[T] the SFHA condition traced to it: its PSSA tree, in that system; the PASA tree is its top only (v2.0: no event added by the tool) until the engineer links it in, as its shared node', r.trees.pssa === 1 && r.trees.pssaHome.home === 'pssa' && String(r.trees.pssaHome.systemId) === r.trees.sysId && r.trees.sysEvent === 0 && r.trees.built === false && r.trees.linkOk && r.trees.linkedNode, JSON.stringify(r.trees));
         check('[T] a second sweep makes nothing more', r.trees.again === 0, JSON.stringify(r.trees));
         check('[T] reclassified to Minor: the untouched tree goes; the developed one is asked about, and Keep keeps it', r.gone.untouchedGone && r.gone.asked && r.gone.keptStays && r.gone.kept, JSON.stringify(r.gone));
         console.log('\n[A] targets');

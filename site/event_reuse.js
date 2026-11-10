@@ -148,6 +148,17 @@
         if (page.root) _walk(page.root, function (n) { const l = _lid(n); if (l != null) have.add(l); });
 
         const seen = new Set(), out = [];
+        // 11 Nov 2026 (fc_auto_trees.js v2.0): the system failure conditions that may be linked into this aircraft tree come
+        // first: each is ONE shared node, the same in every tree, so the strictest allocation holds for it everywhere
+        try {
+            const FT = (typeof window !== 'undefined') ? window.SLFcTrees : null;
+            if (FT && typeof FT.candidates === 'function') FT.candidates(page).forEach(function (c) {
+                const e = FT.nodeKey(c, true); if (!e || have.has(e.lid) || have.has(String(e.lid)) || seen.has(e.lid)) return;
+                seen.add(e.lid);
+                out.push({ lid: e.lid, name: c.name, displayId: '', pageId: '', pageName: c.matched ? 'System failure condition' : 'System function (no SFHA failure condition matched yet)', systemId: c.sysId,
+                    reason: c.matched ? 'a system failure condition traced to this one' : 'feeds it per the interdependence table', sysNode: true });
+            });
+        } catch (_) {}
         pages.forEach(function (p) {
             if (!p || !p.root || p.id === activeId) return;
             if (p.verifies && p.verifies === activeId) return;          // the twin is not a source
@@ -211,6 +222,8 @@
         if (!target || lid == null) return false;
         target.logicalId = lid;
         if (name) target.name = name;
+        // 11 Nov 2026: a system failure condition's shared node carries what it stands for (fc_auto_trees.js v2.0)
+        try { if (typeof window !== 'undefined' && window.SLFcTrees && window.SLFcTrees.adoptInto) window.SLFcTrees.adoptInto(target, lid); } catch (_) {}
         return true;
     }
 
@@ -294,8 +307,20 @@
         _pages().forEach(function (page) {
             if (!page || !page.root || page.verifies) return;      // allocation pages only
             _walk(page.root, function (n) {
-                if (!n || n.type === 'gate' || n.type === 'house' || n.type === 'conditioning') return;   // 2 Nov 2026: a house or conditioning event keeps the value set on it (slIsSetEvent)
-                const lid = _lid(n);
+                if (!n || n.type === 'house' || n.type === 'conditioning') return;   // 2 Nov 2026: a house or conditioning event keeps the value set on it (slIsSetEvent)
+                // 11 Nov 2026: a TRANSFER to another tree is one node too: every tree that hands its budget to the same
+                // tree hands it the strictest, so that tree's top is one number whichever tree is open (before, its top
+                // took the value of whichever parent was allocated last)
+                // And everything that stands for the same SYSTEM FAILURE CONDITION is one node: its shared node, a transfer to
+                // its own tree, an FHA link to one of its rows (SLFcTrees.keyOf)
+                let lid = null;
+                const FTk = (typeof window !== 'undefined' && window.SLFcTrees && window.SLFcTrees.keyOf) ? window.SLFcTrees.keyOf(n) : null;
+                if (FTk) lid = FTk;
+                else if (n.type === 'gate') {
+                    const to = n.transferOutTo || (n.gateType === 'TRANSFER' ? n.linkedPageId : null);
+                    if (!to) return;
+                    lid = 'xfer:' + String(to);
+                } else lid = _lid(n);
                 if (lid == null) return;
                 if (!byLid.has(lid)) byLid.set(lid, []);
                 byLid.get(lid).push({ node: n, page: page });
@@ -327,12 +352,19 @@
             });
             if (!best) return;
 
+            out.shared = (out.shared || 0) + 1;
             const group = { lid: lid, rate: best.rate, fromPageId: best.page ? best.page.id : null, marked: 0 };
             arr.forEach(function (e) {
-                if (e.node === best.node) return;
                 const t = _instExposure(e.node);
                 const own = _rateOf(e.node.probability, t);
-                if (own == null || !(own > best.rate * 1.0001)) return;   // already at or below the strictest
+                // 11 Nov 2026: an instance already AT the strictest is held there too (own: true). The gates now rebalance by
+                // themselves (allocateTopDown), and without this the strictest instance could be loosened in its own tree
+                // by a sibling held there, leaving one node with two numbers. It is not counted as capped or shown as held.
+                if (e.node === best.node || own == null || !(own > best.rate * 1.0001)) {
+                    const p0 = _probOf(best.rate, t);
+                    if (p0 != null && p0 > 0) e.node._sharedStrictest = { rate: best.rate, prob: p0, naturalProb: e.node.probability, fromPageId: best.from.id, fromPageName: best.from.name || best.from.id, instances: arr.length, exposure: t, own: true };
+                    return;
+                }
                 const p = _probOf(best.rate, t);
                 if (p == null || !(p > 0)) return;
                 e.node._sharedStrictest = {
@@ -353,9 +385,10 @@
 
     // What the allocator reads. Returns the capped probability for THIS instance,
     // in THIS tree's window, or null.
-    function slSharedStrictestTarget(node) {
+    function slSharedStrictestTarget(node, heldOnly) {
         const m = node && node._sharedStrictest;
         if (!m) return null;
+        if (heldOnly && m.own) return null;   // the strictest instance itself: nothing to show or to cap from elsewhere
         const p = (typeof m.prob === 'number' && isFinite(m.prob) && m.prob > 0) ? m.prob : null;
         return p;
     }
@@ -364,7 +397,7 @@
     function slSharedStrictestInfo(node) {
         if (!node) return null;
         if (node._sharedStrictestConflict) return { conflict: node._sharedStrictestConflict };
-        if (node._sharedStrictest) return { held: node._sharedStrictest };
+        if (node._sharedStrictest && !node._sharedStrictest.own) return { held: node._sharedStrictest };
         return null;
     }
 

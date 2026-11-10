@@ -100,10 +100,10 @@ const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y
 (async function main() {
     console.log('\n[S] pins, headers, the old PASA page gone, no em dashes, no tool notes');
     const HTML = src('index.html'), at = f => HTML.indexOf('src="' + f + '?v=');
-    check('S1 pasa_autopilot.js 2.0 (after cma_claims.js 1.2 and assurance_modules.js), cca_report.js 2.1, critical_gates.js 1.5, req_trace.js 1.1 after req_basis.js 1.3, fc_auto_trees.js 1.9 pinned; headers the same',
-        /pasa_autopilot\.js\?v=2\.0"/.test(HTML) && /cca_report\.js\?v=2\.1"/.test(HTML) && /critical_gates\.js\?v=1\.5"/.test(HTML) && /req_trace\.js\?v=1\.1"/.test(HTML) && /req_basis\.js\?v=1\.3"/.test(HTML) && /fc_auto_trees\.js\?v=1\.9"/.test(HTML) && /cma_claims\.js\?v=1\.2"/.test(HTML)
+    check('S1 pasa_autopilot.js 2.1 (after cma_claims.js 1.2 and assurance_modules.js), cca_report.js 2.1, critical_gates.js 1.5, req_trace.js 1.1 after req_basis.js 1.3, fc_auto_trees.js 2.0 pinned; headers the same',
+        /pasa_autopilot\.js\?v=2\.1"/.test(HTML) && /cca_report\.js\?v=2\.1"/.test(HTML) && /critical_gates\.js\?v=1\.5"/.test(HTML) && /req_trace\.js\?v=1\.1"/.test(HTML) && /req_basis\.js\?v=1\.3"/.test(HTML) && /fc_auto_trees\.js\?v=2\.0"/.test(HTML) && /cma_claims\.js\?v=1\.2"/.test(HTML)
         && at('pasa_autopilot.js') > at('cma_claims.js') && at('pasa_autopilot.js') > at('assurance_modules.js') && at('req_trace.js') > at('req_basis.js')
-        && /SLPasaAuto v2\.0/.test(src('pasa_autopilot.js').slice(0, 200)) && /SLCcaReport v2\.1/.test(src('cca_report.js').slice(0, 200)) && /v1\.5/.test(src('critical_gates.js').slice(0, 300)) && /SLReqTrace v1\.1/.test(src('req_trace.js').slice(0, 300)));
+        && /SLPasaAuto v2\.1/.test(src('pasa_autopilot.js').slice(0, 200)) && /SLCcaReport v2\.1/.test(src('cca_report.js').slice(0, 200)) && /v1\.5/.test(src('critical_gates.js').slice(0, 300)) && /SLReqTrace v1\.1/.test(src('req_trace.js').slice(0, 300)));
     check('S2 the old PASA page is gone: no cockpit, no PASA tab row (Interdependence, MAC Model, MF&MS, CoFFE, Aircraft Requirements, CEA); MF&MS has its own page', HTML.indexOf('id="pasa-subnav"') < 0 && HTML.indexOf('id="ckpt-page-pasa"') < 0 && HTML.indexOf('id="pasa-tab-cockpit"') < 0 && HTML.indexOf('id="view-mfms"') > 0);
     check('S3 no em dashes in the files this change wrote', ['pasa_autopilot.js', 'pssa_autopilot.js', 'ssa_autopilot.js', 'asa_autopilot.js', 'req_trace.js', 'cca_report.js', 'critical_gates.js'].every(f => src(f).indexOf(EM) < 0) && fs.readFileSync(__filename, 'utf8').indexOf(EM) < 0);
     const NOTES = ['Allocated from the fault tree on page', 'fha-prob preview only', 'CCMR pair-trace', '(INV-35)', '(INV-36)', 'INV-46', 'Allocator flag', 'event-allocation normalization', 'cert-basis form', 'Component library ref:', 'page top hazard', 'CCMR CONFLICT', 'Interval↔rate equivalence receipt', 'ONE provider requirement', 'Derived by AND-family gate', 'Derived by OR-family gate', 'reproduced verbatim'];
@@ -187,8 +187,11 @@ const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y
             U.pick('fc.FC-05.trace.sys-fue', 'tr:FC-FUE01'); U.pick('fc.FC-05.trace.sys-fue', 'tr:FC-FUE01'); await wait(200);
             const fue = systemsData.find(s => s.id === 'sys-fue').fha.filter(f => f.fcId === 'FC-FUE01');
             out.traceOnce = fue.every(f => String(f.acTrace).split(',').map(x => x.trim()).filter(x => x === 'FC-05').length === 1);
-            const answerAll = id => { const g = A.groupOf(id); U.idpNone(id); A.untraced(g).forEach(u => { const k = 'fc.' + id + '.trace.' + u.row.sysId; const ta = 'paq-ta-' + (k + '.why').replace(/[^A-Za-z0-9_-]/g, '_'); const t = document.createElement('textarea'); t.id = ta; t.value = 'Its own supply'; document.body.appendChild(t); U.text(k + '.why', ta); t.remove(); }); A.resources(g).forEach(rr => U.pick('fc.' + id + '.res.' + rr.key, 'zsa')); };
+            const answerAll = id => { const g = A.groupOf(id); U.idpNone(id); A.untraced(g).forEach(u => { const k = 'fc.' + id + '.trace.' + u.row.sysId; const ta = 'paq-ta-' + (k + '.why').replace(/[^A-Za-z0-9_-]/g, '_'); const t = document.createElement('textarea'); t.id = ta; t.value = 'Its own supply'; document.body.appendChild(t); U.text(k + '.why', ta); t.remove(); }); A.resources(g).forEach(rr => U.pick('fc.' + id + '.res.' + rr.key, 'zsa')); A.linkCands(g).forEach(c => { if (!c.answer) U.pick('fc.' + id + '.link.' + c.key, 'no'); }); };
             A.resources(gr).forEach(rr => U.pick('fc.FC-05.res.' + rr.key, 'new'));
+            // v2.1 (11 Nov 2026): the traced system trees are linked in by the engineer; Propulsion is already in by its transfer
+            out.linkQ = A.linkCands(gr).map(c => c.fcId + ':' + c.answer + ':' + c.via);
+            A.linkCands(gr).forEach(c => { if (!c.answer) U.pick('fc.FC-05.link.' + c.key, 'no'); });
             out.fcLeft = A.fcLeft(gr); out.aiPart = R.spec.aiReady('fn:' + fn);
             A.fnGroups(fn).forEach(g => { if (g.fcId !== 'FC-05') answerAll(g.fcId); });
             out.ai = R.spec.aiReady('fn:' + fn);
@@ -283,6 +286,8 @@ const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y
         check('I3 tracing writes the SFHA trace once, however many times it is answered (no duplicate)', r.traceOnce);
         check('I4 the tree carrying a system the table does not show is flagged (Electrical Power System through G-7151)', r.treeNotInTable.indexOf('sys-eps') >= 0);
         check('I5 FC-05 answered: nothing left for it, but the AI waits for the other failure conditions of the function; ready once they are answered too', r.fcLeft.length === 0 && r.aiPart.ready === false && r.aiPart.left.length > 0 && r.ai.ready, JSON.stringify(r.fcLeft) + JSON.stringify(r.ai.left.slice(0, 3)));
+
+        check('I6 linking is asked, never done by the tool: Propulsion is in the FC-05 tree already (by its transfer), the traced Fuel System one waits for the engineer\'s answer', r.linkQ.some(x => /^FC-PRP\d+:yes:transfer$/.test(x)) && r.linkQ.some(x => /^FC-FUE01:null:null$/.test(x)), JSON.stringify(r.linkQ));
 
         console.log('\n[T] the real tree picture');
         const allSvg = r.figSvgs.join('');

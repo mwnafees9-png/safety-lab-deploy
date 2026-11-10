@@ -1,4 +1,4 @@
-// pssa_autopilot.js (SLPssaAuto v2.0, 10 Nov 2026): the PSSA Autopilot. One Preliminary System Safety Assessment per system:
+// pssa_autopilot.js (SLPssaAuto v2.1, 11 Nov 2026): the PSSA Autopilot. One Preliminary System Safety Assessment per system:
 // the front of the report for the system (scope, the system, the method, its failure conditions, its requirement levels, what
 // the appendices found, the conclusion) and one appendix per function, holding every failure condition of that function rated
 // Minor or above.
@@ -21,6 +21,11 @@
 // atItem); the ticks decide which are taken, and each item row is traced to its system row. The front shows the front only;
 // each appendix is built when opened and memoized per data generation.
 //
+// v2.1 (Waqas, 11 Nov 2026): the tool no longer builds a tree's inputs (fc_auto_trees.js v2.0). A system tree with nothing built
+// under its top reads "has not been created yet" (no picture, numbers, item levels or hidden failure questions). What the
+// aircraft hands down is the share each aircraft tree gives this failure condition's ONE shared node (or a transfer to its
+// tree), each tree's own share, the strictest applying: the same numbers the tree's target is set from (SLFcTrees.shares).
+//
 // Kept here: projectConfig.pssaAuto = { front: { <sysId>: { scope, scopeNote, desc, descText, method } },
 //   fc: { <sysId>|<fcId>: { indep: 'yes'|'no', hid: { <lid>: 'evident'|'hidden' } } } }
 // Written where it lives: the tree's own gates (dalIndependence, then the DAL allocation of that tree) and events (repairModel
@@ -28,7 +33,7 @@
 // (AutoReq.applyMerge). Numbers from SLTopBasis and the trees. window.SLPssaAuto.
 (function (root) {
     'use strict';
-    var VERSION = '2.0';
+    var VERSION = '2.1';
     function g(n) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(n); if (v !== undefined) return v; } } catch (_) {} try { return root[n]; } catch (_) { return undefined; } }
     function L() { return root.SLPasaAuto && root.SLPasaAuto.lib; }
     function S(v) { return v == null ? '' : String(v); }
@@ -86,6 +91,9 @@
     function fnOfSid(s) { return S(s).indexOf('fn:') === 0 ? S(s).slice(3) : null; }
     function fcName(gr) { return gr ? gr.fcId + ' ' + L().T(gr.gov.fcDesc || '') : ''; }
     function TB() { return root.SLTopBasis || null; }
+    // true when something is built under the top of the failure condition's tree (a tree made by the tool is its top only)
+    function built(gr) { var p = treeOf(gr); return !!(p && p.root && (F() && F().built ? F().built(p) : L().kids(p.root).length > 0)); }
+    function gateFlags(gr) { var p = treeOf(gr), out = { rebalanced: [], over: [] }, l = L(); if (!p || !p.root) return out; l.walk(p.root, function (n) { var m = n._budgetMargin; if (!m) return; if (m.state === 'rebalanced') out.rebalanced.push(l.nodeName(n)); else if (m.state === 'over-committed') out.over.push(l.nodeName(n)); }); return out; }
 
     // ---- what the aircraft hands down: every aircraft budget for this system failure condition, the stricter applying ------
     function acRowsTraced(gr) {
@@ -100,14 +108,9 @@
         var ids = gr.rows.map(function (r) { return 'SYS_' + r.internalId; });
         // the aircraft failure conditions it is traced to, at their class objective
         acRowsTraced(gr).forEach(function (a) { var t = l.target(a.severity); if (t.prob != null) out.push({ from: 'PASA ' + S(a.fcId) + ' ' + l.T(a.fcDesc || ''), rate: t.prob, how: 'Its objective (' + S(a.severity) + ')' }); });
-        // the aircraft trees that carry it, at the share each gives it (a linked event or a transfer to this tree), each tree
-        // allocated as the tool allocates it (SLFcTrees.shares: the same numbers the tree's own target is set from)
+        // the aircraft trees it is linked into, at the share each gives it (its shared node, or a transfer to this tree), each
+        // tree allocated as the tool allocates it (SLFcTrees.shares: the same numbers the tree's own target is set from)
         arr(safe(function () { return F().shares(page); }, [])).forEach(function (x) {
-            // the tree as it is drawn (and as the PASA appendix shows it) when it carries a value; otherwise the share the
-            // allocation gives it
-            var sp = null, ap = arr(g('ftaPages')).filter(function (q) { return q && S(q.id) === S(x.pageId); })[0];
-            if (ap) l.walk(ap.root, function (n) { if (sp == null && S(n.logicalId != null ? n.logicalId : n.id) === S(x.lid)) { var v = Number(n.probability); if (isFinite(v) && v > 0) sp = v; } });
-            if (sp != null && B) { var r2 = safe(function () { return B.perFlightHour(sp, ap).rate; }, null); if (r2 != null) { x = Object.assign({}, x, { rate: r2, pFlight: sp }); } }
             out.push({ from: 'Aircraft fault tree ' + l.T(x.pageName || x.pageId).replace(/^PASA\s*\u00B7\s*/, '') + ', ' + l.T((x.displayId ? x.displayId + ' ' : '') + (x.nodeName || '')), rate: x.rate, how: 'The share its fault tree gives it (' + l.sci(x.pFlight) + ' per flight)' }); });
         return out;
     }
@@ -127,6 +130,7 @@
     }
     function factsRaw(sy, gr) {
         var page = treeOf(gr), l = L(), B = TB(); if (!page) return null;
+        if (l.allocated) l.allocated();   // every tree at its budget, every shared node at its strictest (pasa_autopilot.js)
         var cs = l.cutsets(page), out = { page: page };
         out.singles = cs ? cs.filter(function (c) { return c.length === 1; }).map(function (c) { return l.nodeName(c[0]); }) : null;
         out.shortest = cs && cs.length ? cs.reduce(function (m, c) { return Math.min(m, c.length); }, 1e9) : null;
@@ -226,7 +230,7 @@
     }
     function fcLeft(sy, gr) {
         var left = [], rec = fcRec(sy, gr.fcId), page = treeOf(gr);
-        if (!isQuant(gr) || !page) return left;
+        if (!isQuant(gr) || !page || !built(gr)) return left;
         if (andGates(page).length && !rec.indep) left.push('Use independence to set the item assurance levels for ' + gr.fcId + '?');
         leaves(page).forEach(function (n) { var k = lidOf(n), st = rec.hid[k]; if (!st && !(n.repairModel === 'periodic' || n.exposureMode === 'latent')) left.push('Would ' + L().nodeName(n) + ' show itself when it fails?'); else if (st === 'hidden' && !(n.repairModel === 'periodic' && n.tau)) left.push('How often is ' + L().nodeName(n) + ' checked?'); });
         return left;
@@ -237,6 +241,10 @@
         if (r0 === 'unanswered') out.push('The 1309 chart for ' + gr.fcId + ' is not answered in the system FHA yet, so it is assessed quantitatively until it is.');
         if (isQuant(gr) && !page) { out.push('No fault tree is generated for ' + gr.fcId + ' yet: generate it in the Fault trees tab.'); return out; }
         if (!isQuant(gr)) return out;
+        if (!built(gr)) { out.push('The fault tree for ' + gr.fcId + ' has not been created yet: build it in the Fault trees tab.'); return out; }
+        var gf = gateFlags(gr);
+        gf.over.forEach(function (x) { out.push('The inputs of ' + x + ' take more than its budget. Change what holds them, or the target.'); });
+        gf.rebalanced.forEach(function (x) { out.push(x + ' was rebalanced by the tool (an input under it is held tighter than its share): accept it, or keep the tighter budgets, in the Budget Ledger.'); });
         var fx = facts(sy, gr);
         if (fx && fx.meets && !fx.meets.pass) out.push('The fault tree is above its budget: ' + l.sci(fx.rate) + ' per flight hour against ' + l.sci(fx.budget) + '.');
         if (fx && fx.cg) fx.cg.gates.filter(function (x) { return x.critical; }).forEach(function (x) { if (!l.cmas().some(function (c) { return arr(c.linkedGateIds).map(S).indexOf(S(x.key)) >= 0; })) out.push('Gate ' + x.displayId + (x.name ? ' ' + l.T(x.name) : '') + ' carries the budget and has no common mode review yet.'); });
@@ -267,7 +275,7 @@
     function after(ctx) {
         var sy = sysNow(), l = L(); if (!sy || !l) return [];
         var b = [H(1, 'What the appendices found')], apx = appendices(sy), rows = [];
-        apx.forEach(function (k, i) { fnGroups(sy, k).forEach(function (gr) { var q = isQuant(gr), fx = q ? facts(sy, gr) : null, o = openItems(sy, gr); rows.push({ Appendix: letter(i), 'Failure condition': fcName(gr), Assessment: routeWords(gr), 'Against the budget': !q ? 'Qualitative: no number' : fx && fx.meets ? (fx.meets.pass ? 'Within' : 'Above') + ' (' + l.sci(fx.rate) + ' against ' + l.sci(fx.budget) + ' per flight hour)' : 'Not worked out', Findings: o.length ? o.join(' ') : 'None' }); }); });
+        apx.forEach(function (k, i) { fnGroups(sy, k).forEach(function (gr) { var q = isQuant(gr), bt = q && built(gr), fx = bt ? facts(sy, gr) : null, o = openItems(sy, gr); rows.push({ Appendix: letter(i), 'Failure condition': fcName(gr), Assessment: routeWords(gr), 'Against the budget': !q ? 'Qualitative: no number' : !bt ? 'Fault tree not created yet' : fx && fx.meets ? (fx.meets.pass ? 'Within' : 'Above') + ' (' + l.sci(fx.rate) + ' against ' + l.sci(fx.budget) + ' per flight hour)' : 'Not worked out', Findings: o.length ? o.join(' ') : 'None' }); }); });
         if (!rows.length) b.push(P('No failure condition of this system is rated Minor or above.'));
         else b.push({ k: 'table', name: 'found', title: 'What each appendix found', rows: rows, lead: '{N} sums up each failure condition in each appendix.' });
         b.push({ k: 'rauth', asHeading: 1 });
@@ -292,12 +300,13 @@
         var fin = flowedIn(sy, gr);
         if (fin.length) b.push({ k: 'table', name: 'in-' + f, title: 'Requirements the PASA flowed down to the ' + l.T(sy.name || sy.id) + ' for ' + f, rows: fin.map(function (r) { return { ID: r.id ? S(r.id) : 'New', Requirement: l.T(r.text), 'From the aircraft failure condition': S(r.reqSource.context.fcId) }; }), lead: '{N} lists what the aircraft asks of this system, as the PASA wrote it into the system requirements.' });
         if (isQuant(gr) && !page) b.push(P(f + ' is assessed quantitatively, but no fault tree is generated for it yet. Its tree, numbers and item assurance levels appear here once it is.'));
+        else if (isQuant(gr) && !built(gr)) { b.push(H(3, 'The fault tree')); b.push(P('The fault tree for ' + f + ' has not been created yet. It has its top event' + (ap ? ' and its budget (' + l.sci(ap.rate) + ' per flight hour)' : '') + ' and nothing under it. Build it in the Fault trees tab; what the tree says, its numbers, the item assurance levels and the hidden failures appear here once it is.')); }
         else if (!isQuant(gr)) b = b.concat(qualBlocks(sy, gr, page));
         else {
         b.push(H(3, 'The fault tree'));
         var K = root.SLCmaClaims, figs = [];
-        if (page && K && K.figure) { var res = safe(function () { return K.figure(page.id + ':' + page.root.id, { page: page, noMarks: true, C: ctx.C, dark: ctx.dark, metrics: l.metricsOf(page), anchor: 'pssa-' + f, nodeG: function (id, inner, title) { return root.SLCcaReport.nodeG('pssa', id, inner, title); } }); }, null); if (res && res.parts) { var many = res.parts.length > 1; figs = res.parts.map(function (pt) { return { k: 'fig', name: 'tree-' + f + (many ? '-' + pt.letter : ''), title: fcName(gr) + ', fault tree as the tool generated it, down to items' + (many ? ', part ' + pt.letter : ''), svg: pt.svg, w: pt.w, h: pt.h }; }); } }
-        if (figs.length) { b.push(P((figs.length > 1 ? 'The figures below are' : 'The figure below is') + ' the fault tree for ' + f + ' as the tool generated it, down to items, with the probability per flight (P), the rate per flight hour (λ) and the assurance level the tool allocated to each.')); figs.forEach(function (x) { b.push(x); }); }
+        if (page && K && K.figure) { var res = safe(function () { return K.figure(page.id + ':' + page.root.id, { page: page, noMarks: true, C: ctx.C, dark: ctx.dark, metrics: l.metricsOf(page), anchor: 'pssa-' + f, nodeG: function (id, inner, title) { return root.SLCcaReport.nodeG('pssa', id, inner, title); } }); }, null); if (res && res.parts) { var many = res.parts.length > 1; figs = res.parts.map(function (pt) { return { k: 'fig', name: 'tree-' + f + (many ? '-' + pt.letter : ''), title: fcName(gr) + ', fault tree as it stands in the tool, down to items' + (many ? ', part ' + pt.letter : ''), svg: pt.svg, w: pt.w, h: pt.h }; }); } }
+        if (figs.length) { b.push(P((figs.length > 1 ? 'The figures below are' : 'The figure below is') + ' the fault tree for ' + f + ' as it stands in the tool, down to items, with the probability per flight (P), the rate per flight hour (λ) and the assurance level the tool allocated to each.')); figs.forEach(function (x) { b.push(x); }); }
         else b.push(P('The fault tree for ' + f + ' could not be drawn just now.'));
         b.push(H(3, 'What the tree says'));
         if (fx.singles) b.push(P(fx.singles.length ? 'A single failure can cause ' + f + ': ' + l.listJoin(fx.singles) + '.' : 'No single failure causes ' + f + '. It takes ' + fx.shortest + ' things together' + (fx.shortestEx.length ? ': ' + l.listJoin(fx.shortestEx) : '') + '.'));
@@ -397,6 +406,7 @@
         var oi = openItems(sy, gr); if (oi.length) h += '<div class="paq-open" data-paq-openitems="1"><b>Open items</b><br>' + oi.map(E).join('<br>') + '</div>';
         if (!q0) { h += card('fc.' + f + '.gen', '<div class="slap-q">The qualitative assessment</div><div class="paq-x">Generated from the system FHA and its 1309 chart. Nothing to answer here.</div>', true); return h; }
         if (!page) return h;
+        if (!built(gr)) { h += card('fc.' + f + '.gen', '<div class="slap-q">The fault tree</div><div class="paq-x">The fault tree for ' + E(f) + ' has not been created yet: it has its top event and nothing under it. Build it in the Fault trees tab; its questions appear here once it is.</div><button type="button" class="paq-b" onclick="SLPasaAuto.ui.openTree(' + J(page.id) + ')">Open the fault tree</button>', false); return h; }
         var fx = facts(sy, gr) || {};
         h += card('fc.' + f + '.gen', '<div class="slap-q">What the aircraft hands down, the tree, the numbers</div><div class="paq-x">Generated. Nothing to answer.</div><button type="button" class="paq-b" onclick="SLPasaAuto.ui.openTree(' + J(page.id) + ')">Open the fault tree</button>', true);
         if (andGates(page).length) {
@@ -522,7 +532,7 @@
     }
     (function boot(tries) { if (define()) return; if (tries > 0 && typeof setTimeout === 'function') setTimeout(function () { boot(tries - 1); }, 250); })(80);
 
-    var api = { VERSION: VERSION, sysNow: sysNow, candidates: candidates, picks: picks, appendices: appendices, fnGroups: fnGroups, fnInfo: fnInfo, fnKey: fnKey, fnSection: fnSection, fnLeft: fnLeft, routeOf: routeOf, isQuant: isQuant, flowedIn: flowedIn, groupOf: groupOf, handedDown: handedDown, applies: applies, facts: facts, items: items, hiddenOf: hiddenOf, reqsFor: reqsFor, frontLeft: frontLeft, fcLeft: fcLeft, openItems: openItems, section: section, outputs: outputs, store: store,
+    var api = { VERSION: VERSION, sysNow: sysNow, candidates: candidates, picks: picks, appendices: appendices, fnGroups: fnGroups, fnInfo: fnInfo, fnKey: fnKey, fnSection: fnSection, fnLeft: fnLeft, routeOf: routeOf, isQuant: isQuant, built: built, flowedIn: flowedIn, groupOf: groupOf, handedDown: handedDown, applies: applies, facts: facts, items: items, hiddenOf: hiddenOf, reqsFor: reqsFor, frontLeft: frontLeft, fcLeft: fcLeft, openItems: openItems, section: section, outputs: outputs, store: store,
         ui: { pick: pick, check: check, text: text, level: level, levelReset: levelReset, acceptReqs: acceptReqs } };
     try { root.SLPssaAuto = api; } catch (_) {}
     if (typeof module !== 'undefined' && module.exports) module.exports = api;

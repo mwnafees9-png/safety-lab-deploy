@@ -4701,7 +4701,7 @@ function ftaNodeWarnings(node, isRoot) {
     if (!node) return out;
     const leaf = node.type !== 'gate';
     const fmt = v => (v && isFinite(v)) ? Number(v).toExponential(2).toUpperCase() : '0';
-    if (leaf && node._sharedStrictest) {
+    if (leaf && node._sharedStrictest && !node._sharedStrictest.own) {
         out.push({ key: 'shared-strictest', sev: 'warn',
             title: 'Held at the strictest allocation shared with another tree',
             text: 'Held at the strictest allocation across ' + node._sharedStrictest.instances +

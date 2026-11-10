@@ -49,7 +49,7 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
 (async function main() {
     console.log('\n[S] pins, headers, the SSA tab');
     const HTML = src('index.html'), at = f => HTML.indexOf('src="' + f + '?v=');
-    check('S1 ssa_autopilot.js 1.0 after pssa_autopilot.js 2.0, asa_autopilot.js 1.0 after it; headers the same', /ssa_autopilot\.js\?v=1\.0"/.test(HTML) && /asa_autopilot\.js\?v=1\.0"/.test(HTML) && at('ssa_autopilot.js') > at('pssa_autopilot.js') && at('asa_autopilot.js') > at('ssa_autopilot.js') && /SLSsaAuto v1\.0/.test(src('ssa_autopilot.js').slice(0, 200)) && /SLAsaAuto v1\.0/.test(src('asa_autopilot.js').slice(0, 200)));
+    check('S1 ssa_autopilot.js 1.1 after pssa_autopilot.js, asa_autopilot.js 1.1 after it; headers the same', /ssa_autopilot\.js\?v=1\.1"/.test(HTML) && /asa_autopilot\.js\?v=1\.1"/.test(HTML) && at('ssa_autopilot.js') > at('pssa_autopilot.js') && at('asa_autopilot.js') > at('ssa_autopilot.js') && /SLSsaAuto v1\.1/.test(src('ssa_autopilot.js').slice(0, 200)) && /SLAsaAuto v1\.1/.test(src('asa_autopilot.js').slice(0, 200)));
     check('S2 the system pages have an SSA view; switchWorkspaceTab knows it; the left menu\'s SSA link opens it', /<div id="ws-view-ssa" style="display: none;"><\/div>/.test(HTML) && /const tabs = \['func', 'fcim', 'fha', 'req', 'asm', 'fmea', 'pssa', 'ssa'\];/.test(src('helpers_modules.js')) && /'sl-nav-ssa-report':\s+\['SSA', function \(\) \{ _openWs\('ssa'\); \}/.test(src('nav_areas.js')) && /ssa: 'sl-nav-ssa-report'/.test(src('nav_areas.js')));
     check('S3 no em dashes in the SSA and ASA files or this test', ['ssa_autopilot.js', 'asa_autopilot.js'].every(f => src(f).indexOf(EM) < 0) && fs.readFileSync(__filename, 'utf8').indexOf(EM) < 0);
 

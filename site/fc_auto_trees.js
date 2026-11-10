@@ -33,6 +33,26 @@
 //   exposure:  slGoverningPhases(page) = every phase of the linked rows that carry the worst classification
 //              (assurance_modules.js, helpers _fhaExposureContext and the exposure panel read it).
 //
+// v2.0, 11 Nov 2026 (Waqas, on a generated FC-01 tree whose three inputs added up to 1e-3 under a 1e-9 top: "this math is
+// incorrect"; "why are we doing the linking here, rather than linking them in the fault tree module, where the rule already
+// exists that each node keep its most conservative instances allocation?"; "why are building the fault trees rather than just
+// saying fault trees have not been created yet? the shared node mechanism already exists too"; "we should ask the user if that
+// failure condition's fault tree ready to be linked or not in the auto pilot"):
+//   THE TOOL NO LONGER BUILDS A TREE'S INPUTS. A tree made here is its top event, pre-fed, and nothing else (the placeholder
+//   "Decompose" event stays until something is built). No event is added for a traced SFHA failure condition, at making or later.
+//   A SYSTEM FAILURE CONDITION IS ONE SHARED NODE. link(page, key) puts it in an aircraft tree, under the top: a basic event with
+//   the SAME logical ID in every tree it is in (projectConfig.sysNodes keeps the ID per system and failure condition; a system
+//   function the interdependence table shows feeding it, with no SFHA failure condition matched yet, has one too, and keeps it
+//   when its failure condition is matched). Only the engineer links: the PASA Autopilot's "ready to be linked?" answer, or the
+//   fault tree module's reuse menu (event_reuse.js lists these nodes). Its number is the fault tree module's own rule: each tree's
+//   share, the strictest held everywhere (slSharedStrictestPass, which now covers transfers to a tree too). ceiling(node) keeps it
+//   no looser than its own class objective (a limit, never the answer: allocateTopDown).
+//   THE SYSTEM TREE'S TARGET IS THAT SAME NUMBER: shares(page) lists what every aircraft tree gives the node (and every transfer
+//   to the tree), each aircraft tree allocated on a copy; effectiveTarget takes the strictest, or the SFHA class if tighter.
+//   The private "stricter applies" path through FHA links is gone. EXISTING PROJECTS: an event this file added to a tree
+//   (an FHA link to an SFHA row) is taken out of a tree nobody built on, and turned into the shared node where somebody did
+//   (migrate(), once per load and after every merge; MF&MS seed trees are idp_seed_trees.js's own and are left alone).
+//
 // API (window.SLFcTrees): groups(scope), route(row), characterized(row), needsChart(row), sweep(opts),
 // effectiveTarget(page), governingPhases(page), treeFor(group). Kill switch: window.SL_FC_TREES_OFF = true.
 // Load: after helpers_modules.js, assurance_modules.js (AutoReq), fc_tree_flow.js, tree_homes.js and before
@@ -40,7 +60,7 @@
 // ============================================================================
 (function (root) {
     'use strict';
-    var VERSION = '1.9';   // 1.9 10 Nov 2026: an SFHA row feeding several aircraft failure conditions gets its branch on each; 1.8 8 Nov 2026: one tree per failure condition, in any state (see "ONE TREE" below).
+    var VERSION = '2.0';   // 2.0 11 Nov 2026: no inputs built here, a system failure condition is one shared node linked by the engineer;   // 1.9 10 Nov 2026: an SFHA row feeding several aircraft failure conditions gets its branch on each; 1.8 8 Nov 2026: one tree per failure condition, in any state (see "ONE TREE" below).
     // 1.5 30 Oct 2026: makeTree in the API (fc_link.js opens a picked condition's tree).
     // 1.4 26 Oct 2026: a tree whose failure condition was marked not applicable in the FCIM is asked about in those words
     var MAJOR = 3;
@@ -205,7 +225,7 @@
     }
 
     // ---- the trees ----------------------------------------------------------------------------------------
-    function shapeFp(n) { var o = []; (function w(x, d) { if (!x) return; o.push(d + ':' + x.type + ':' + (x.gateType || '') + ':' + (x.name || '') + ':' + JSON.stringify(x.externalSource || null)); _kids(x).forEach(function (c) { w(c, d + 1); }); })(n, 0); return o.join('|'); }
+    function shapeFp(n) { var o = []; (function w(x, d) { if (!x) return; o.push(d + ':' + x.type + ':' + (x.gateType || '') + ':' + (x.name || '') + ':' + JSON.stringify(x.externalSource || null) + (x.sysNode ? ':sn:' + x.sysNode.sysId + ':' + (x.sysNode.fcId || x.sysNode.col || '') : '')); _kids(x).forEach(function (c) { w(c, d + 1); }); })(n, 0); return o.join('|'); }
     function _node(type, name, extra) {
         var id = _nid(), n = { id: id, logicalId: id, type: type, name: name, probability: 0, children: [] };
         // 27 Oct 2026: no failure rate on an allocation leaf (probability only, Phase 61). A lambda of 0 here was deleted by
@@ -227,13 +247,155 @@
         });
         return out;
     }
-    function _hasEventFor(page, sg) {
-        var ids = sg.rows.map(function (r) { return 'SYS_' + r.internalId; }), hit = false;
-        (function w(n) { if (!n || hit) return; if (n.externalSource && ids.indexOf(String(n.externalSource.targetId)) >= 0) hit = true; _kids(n).forEach(w); })(page.root);
-        return hit;
+    // ---- a system failure condition is one shared node (v2.0) ---------------------------------------------------------
+    var PLACEHOLDER = /^Decompose: causes of /;
+    function _pc() { var p = _g('projectConfig'); return p && typeof p === 'object' ? p : null; }
+    function _reg() { var p = _pc(); if (!p) return []; if (!Array.isArray(p.sysNodes)) p.sysNodes = []; return p.sysNodes; }
+    function _sysById(id) { return _systems().find(function (x) { return x && String(x.id) === String(id); }) || null; }
+    function _sysGroup(sysId, fcId) { var sy = _sysById(sysId); return sy && fcId ? groups(sy).find(function (x) { return x.fcId === String(fcId); }) || null : null; }
+    // the registry entry for a system failure condition (key.fcId) or, with none matched yet, a system function column of the
+    // interdependence table (key.col). One entry, one logical ID, for good: a function's entry takes its failure condition
+    // when one is matched to it (no second node for the same thing)
+    function nodeKey(key, make0) {
+        var L = _reg(), sysId = String(key.sysId), fc = key.fcId ? String(key.fcId) : '', col = key.col ? String(key.col) : '';
+        var e = fc ? L.find(function (x) { return String(x.sysId) === sysId && String(x.fcId || '') === fc; }) : null;
+        if (!e && col) e = L.find(function (x) { return String(x.sysId) === sysId && !x.fcId && String(x.col || '') === col; });
+        if (e && fc && !e.fcId) e.fcId = fc;
+        if (!e && make0) { e = { lid: _nid(), sysId: sysId, fcId: fc || null, col: col || null }; L.push(e); }
+        return e || null;
     }
-    function _sysEvent(sg) {
-        return _node('basic', (sg.sys.name || sg.sys.id) + ': ' + (sg.gov.fcDesc || sg.fcId || 'failure condition'), { externalSource: { kind: 'fha', targetId: 'SYS_' + sg.gov.internalId } });
+    function entryOfLid(lid) { return _reg().find(function (x) { return String(x.lid) === String(lid); }) || null; }
+    function nodeName(e) {
+        var sy = _sysById(e.sysId), sn = sy ? (sy.name || sy.id) : e.sysId;
+        if (e.fcId) { var sg = _sysGroup(e.sysId, e.fcId); return sn + ': ' + (sg ? (sg.gov.fcDesc || e.fcId) : e.fcId); }
+        var c = (_call('idpColumns') || []).find(function (x) { return String(x.colId) === String(e.col); });
+        return sn + ': ' + (c && c.fnName ? c.fnName + ' fails' : 'fails');
+    }
+    function isSysNode(n) { return !!(n && n.sysNode && n.sysNode.sysId != null); }
+    function _stamp(n, e) {
+        n.logicalId = e.lid; n.sysNode = { sysId: String(e.sysId), fcId: e.fcId || null, col: e.col || null }; n.name = nodeName(e);
+        delete n.externalSource; delete n._externalAllocation; delete n._inheritedAt; delete n._externalSourceStale; delete n.lambda;
+        if (!n.inputMode) n.inputMode = 'probability';
+        return n;
+    }
+    function _find(page, lid) { var hit = null, par = null; (function w(n, p) { if (!n || hit) return; if (n.type !== 'gate' && _lid(n) === String(lid)) { hit = n; par = p; return; } _kids(n).forEach(function (c) { w(c, n); }); })(page && page.root, null); return hit ? { node: hit, parent: par } : null; }
+    function linked(page, key) { var e = nodeKey(key, false); return !!(e && page && page.root && _find(page, e.lid)); }
+    // true when something is built under the top (the placeholder alone is not)
+    function built(page) { return !!(page && page.root && _kids(page.root).some(function (c) { return !(c.type === 'undeveloped' && PLACEHOLDER.test(c.name || '')); })); }
+    function link(page, key) {
+        if (!page || !page.root || page.root.type !== 'gate') return { ok: false, why: 'This fault tree has no top gate to link under.' };
+        var e = nodeKey(key, true), have = _find(page, e.lid);
+        if (have) { _stamp(have.node, e); return { ok: true, node: have.node, was: true }; }
+        var pristine = !!(page.autoFcTree && shapeFp(page.root) === page.autoFcTree.fp);
+        page.root.children = _kids(page.root).filter(function (c) { return !(c.type === 'undeveloped' && PLACEHOLDER.test(c.name || '')); });
+        var n = _stamp(_node('basic', ''), e);
+        page.root.children.push(n);
+        if (pristine) page.autoFcTree.fp = shapeFp(page.root);   // still nothing but what the tool and the link put there
+        try { if (typeof root.jrnl === 'function') root.jrnl('tree-linked', n.name + ' linked into ' + (page.name || page.id)); } catch (_) {}
+        _touch();
+        return { ok: true, node: n };
+    }
+    function unlink(page, key) {
+        var e = nodeKey(key, false), f = e ? _find(page, e.lid) : null;
+        if (!f) return { ok: true, was: false };
+        if (f.parent !== page.root) return { ok: false, why: 'It has been moved inside the tree. Take it out in the Fault trees tab.' };
+        var pristine = !!(page.autoFcTree && shapeFp(page.root) === page.autoFcTree.fp);
+        page.root.children = _kids(page.root).filter(function (c) { return c !== f.node; });
+        if (!page.root.children.length) page.root.children.push(_node('undeveloped', 'Decompose: causes of ' + (page.root.name || 'the failure condition')));
+        if (pristine) page.autoFcTree.fp = shapeFp(page.root);
+        _touch();
+        return { ok: true, was: true };
+    }
+    function _touch() { try { _allocMemo.gen = -1; _allocMemo.map = {}; } catch (_) {} try { if (root.SLDataChange && root.SLDataChange.bump) root.SLDataChange.bump(); } catch (_) {} _call('scheduleAutosave'); }
+    // what may be linked into an aircraft tree: every SFHA failure condition traced to its failure condition, and, for a
+    // system the interdependence table shows feeding it with nothing traced, each of its feeding functions
+    function candidates(page) {
+        var out = [];
+        if (!page || page.treeLevel !== 'aircraft') return out;
+        var rows = _rowsOf(page).filter(function (r) { return _ac().indexOf(r) >= 0; }); if (!rows.length) return out;
+        var g = groups('ac').find(function (x) { return x.rows.indexOf(rows[0]) >= 0; }); if (!g) return out;
+        var tracedSys = {};
+        var tr = _traced(g), perSys = {}; tr.forEach(function (sg) { perSys[String(sg.sys.id)] = (perSys[String(sg.sys.id)] || 0) + 1; });
+        tr.forEach(function (sg) {
+            // a function's node, linked before any SFHA failure condition was matched to it, IS this failure condition's node
+            // when it is the only one on each side (one function node of that system, one traced failure condition)
+            var sid = String(sg.sys.id), open = _reg().filter(function (x) { return String(x.sysId) === sid && !x.fcId; });
+            if (sg.fcId && perSys[sid] === 1 && open.length === 1 && !nodeKey({ sysId: sid, fcId: sg.fcId }, false)) open[0].fcId = String(sg.fcId);
+        });
+        tr.forEach(function (sg) { tracedSys[String(sg.sys.id)] = 1; out.push({ sysId: String(sg.sys.id), fcId: sg.fcId, col: null, name: (sg.sys.name || sg.sys.id) + ': ' + (sg.gov.fcDesc || sg.fcId), matched: true }); });
+        (_call('idpColumns') || []).forEach(function (c) {
+            if (!c || tracedSys[String(c.sysId)]) return;
+            var cell = _call('_idpCellRaw', g.gov, c.colId);
+            if (!cell || cell.state !== 'contributes') return;
+            var e = nodeKey({ sysId: c.sysId, col: c.colId }, false);
+            if (e && e.fcId) return;   // its failure condition was matched since
+            out.push({ sysId: String(c.sysId), fcId: null, col: String(c.colId), name: (c.sysName || c.sysId) + ': ' + (c.fnName ? c.fnName + ' fails' : 'fails'), matched: false });
+        });
+        return out;
+    }
+    // no looser than its own class allows: the SFHA class objective of a system failure condition's node, or of the system
+    // tree a transfer points at, as a budget over the flight (the unit a node's probability is in). A limit only.
+    function ceiling(n) {
+        if (!n) return null;
+        var cls = null;
+        if (isSysNode(n) && n.sysNode.fcId) { var sg = _sysGroup(n.sysNode.sysId, n.sysNode.fcId); if (sg) cls = (_call('getSafetyTarget', sg.gov.severity) || {}).prob; }
+        else if (n.type === 'gate' && (n.transferOutTo || (n.gateType === 'TRANSFER' && n.linkedPageId))) {
+            var to = String(n.transferOutTo || n.linkedPageId), tp = _pages().find(function (p) { return p && String(p.id) === to; });
+            if (tp && tp.treeLevel === 'system') { var rows = _rowsOf(tp); if (rows.length) cls = (_call('getSafetyTarget', _governing(rows).severity) || {}).prob; }
+        }
+        if (!(typeof cls === 'number' && isFinite(cls) && cls > 0)) return null;
+        var TB = root.SLTopBasis, b = TB && TB.perFlightBudget ? TB.perFlightBudget(cls, null) : null;
+        return b && b.pFlight > 0 ? b.pFlight : cls;
+    }
+    try { root.slLinkCeiling = ceiling; } catch (_) {}
+    // ONE key for everything that stands for the same system failure condition in a tree: its shared node, a transfer to its
+    // own tree, and an FHA link to one of its rows (a seed tree's event). The strictest pass (event_reuse.js) groups on it, so
+    // all of them hold one number. null: not a system failure condition's stand-in.
+    var _keyMemo = { gen: -2, rows: null, pages: null };
+    function _keyMaps() {
+        var dc = root.SLDataChange, gen = dc ? dc.gen() : -1;
+        if (_keyMemo.gen === gen && gen !== -1 && _keyMemo.rows) return _keyMemo;
+        var rows = {}, pages = {};
+        _systems().forEach(function (sy) { (sy.fha || []).forEach(function (r) { if (r && r.fcId) rows[String(r.internalId)] = 'sysfc:' + sy.id + ':' + String(r.fcId).trim(); }); });
+        _pages().forEach(function (p) { if (!p || p.verifies || p.treeLevel !== 'system') return; var rs = _rowsOf(p); if (!rs.length) return; var gv = _governing(rs); if (gv && gv.fcId) pages[String(p.id)] = 'sysfc:' + p.systemId + ':' + String(gv.fcId).trim(); });
+        _keyMemo = { gen: gen, rows: rows, pages: pages }; return _keyMemo;
+    }
+    function keyOf(n) {
+        if (!n) return null;
+        if (isSysNode(n)) return n.sysNode.fcId ? 'sysfc:' + n.sysNode.sysId + ':' + n.sysNode.fcId : null;
+        var m = _keyMaps();
+        if (n.type === 'gate') { var to = n.transferOutTo || (n.gateType === 'TRANSFER' ? n.linkedPageId : null); return to ? (m.pages[String(to)] || null) : null; }
+        if (n.externalSource && (n.externalSource.kind || 'fha') === 'fha' && /^SYS_/.test(String(n.externalSource.targetId || ''))) return m.rows[String(n.externalSource.targetId).slice(4)] || null;
+        return null;
+    }
+    // the fault tree module's reuse menu adopting one of these nodes into an event the engineer placed (event_reuse.js)
+    function adoptInto(node, lid) { var e = entryOfLid(lid); if (!e || !node || node.type === 'gate') return false; _stamp(node, e); _touch(); return true; }
+    // existing projects: an event this file added (an FHA link to an SFHA row, on an aircraft failure condition's own tree).
+    // A tree nobody built on goes back to its top; where somebody built, the event becomes the shared node, in place.
+    function migrate() {
+        var n = 0;
+        _pages().forEach(function (p) {
+            if (!p || !p.root || p.verifies || p.duplicateOf || p.treeLevel !== 'aircraft' || (p.mode || 'top-down') !== 'top-down') return;
+            if (/^(idp-pg-|mac-pg-)/.test(String(p.id)) || /MF&MS/.test(p.name || '')) return;   // the seed trees are idp_seed_trees.js's own
+            var hits = [];
+            (function w(x, par) { if (!x) return; if (x.type !== 'gate' && x.externalSource && /^SYS_/.test(String(x.externalSource.targetId || '')) && (x.externalSource.kind || 'fha') === 'fha') hits.push({ node: x, parent: par }); _kids(x).forEach(function (c) { w(c, x); }); })(p.root, null);
+            if (!hits.length) return;
+            var pristine = !!(p.autoFcTree && shapeFp(p.root) === p.autoFcTree.fp);
+            hits.forEach(function (h) {
+                var iid = String(h.node.externalSource.targetId).slice(4), sy = _systems().find(function (s0) { return s0 && (s0.fha || []).some(function (r) { return String(r.internalId) === iid; }); });
+                var row = sy ? sy.fha.find(function (r) { return String(r.internalId) === iid; }) : null;
+                var drop = pristine || !sy || !row || !h.parent;
+                var e = drop ? null : nodeKey({ sysId: sy.id, fcId: row.fcId ? String(row.fcId).trim() : '', col: null }, !!row.fcId);
+                if (!drop && e && _find(p, e.lid) && _find(p, e.lid).node !== h.node) drop = true;   // already in this tree: never twice
+                if (drop || !e) { if (h.parent) h.parent.children = _kids(h.parent).filter(function (c) { return c !== h.node; }); }
+                else _stamp(h.node, e);
+                n++;
+            });
+            if (!_kids(p.root).length) p.root.children = [_node('undeveloped', 'Decompose: causes of ' + (p.root.name || 'the failure condition'))];
+            if (pristine) p.autoFcTree.fp = shapeFp(p.root);
+        });
+        if (n) { try { _allocMemo.gen = -1; _allocMemo.map = {}; } catch (_) {} }
+        return n;
     }
     function make(g) {
         // never a second tree for one failure condition (every caller: the sweep, fc_link.js, the API)
@@ -244,9 +406,8 @@
         var desc = g.gov.fcDesc || g.fcId || 'Failure condition';
         var rootN = _node('gate', desc, { displayId: g.fcId || undefined });
         if (!rootN.displayId) rootN.displayId = 'G-' + rootN.id;
-        var traced = g.scope === 'ac' ? _traced(g) : [];
-        if (traced.length) traced.forEach(function (sg) { rootN.children.push(_sysEvent(sg)); });
-        else rootN.children.push(_node('undeveloped', 'Decompose: causes of ' + desc));
+        // v2.0: the top event, pre-fed, and the placeholder. Its inputs are the engineer's to build or to link.
+        rootN.children.push(_node('undeveloped', 'Decompose: causes of ' + desc));
         var ids = _orderedIds(g);
         var page = {
             id: bid,
@@ -289,9 +450,7 @@
         return list.join(', ');
     }
     // an aircraft tree allocated on a copy (memoised while nothing changes): its transfers are not followed, so no
-    // other tree is written to. The events linked to THIS system failure condition are allocated as free events on
-    // the copy: the engine pins a linked event at the system's class target (allocateTopDown's fixed children), and
-    // what is asked here is the aircraft tree's own share for it, to be compared with that class target.
+    // other tree is written to.
     var _allocMemo = { gen: -1, map: {} };
     function _allocated(p, ids) {
         var dc = root.SLDataChange, gen = dc ? dc.gen() : null;
@@ -304,7 +463,9 @@
             if (fn && isFinite(t) && t > 0) {
                 var TB = root.SLTopBasis, top = TB ? TB.perFlightBudget(t, p).pFlight : t;
                 var copy = JSON.parse(JSON.stringify(p.root));
-                (function free(n) { if (!n) return; if (n.externalSource && (ids || []).indexOf(String(n.externalSource.targetId)) >= 0) { n._wasLinked = n.externalSource; delete n.externalSource; delete n._externalAllocation; } _kids(n).forEach(free); })(copy);
+                // v2.0: each tree answers with its OWN share (no cap from another tree on the copy); the strictest across trees
+                // is taken by the caller, the same way slSharedStrictestPass reads the uncapped allocations
+                (function free(n) { if (!n) return; delete n._sharedStrictest; delete n._sharedStrictestConflict; _kids(n).forEach(free); })(copy);
                 var all = new Set(_pages().map(function (x) { return x && x.id; }));
                 var ap = (function () { var c = _g('ftaConfig'); return (c && c.apportion) || 'equal'; })();
                 fn(copy, top, ap, all);
@@ -338,21 +499,27 @@
         var rows = _rowsOf(page), list = [];
         if (!rows.length || page.treeLevel !== 'system') return list;
         var ids = rows.map(function (r) { return 'SYS_' + r.internalId; });
+        var sysId = String(page.systemId), fcIds = rows.map(function (r) { return r.fcId ? String(r.fcId).trim() : ''; }).filter(Boolean);
+        // is this node this system failure condition? its shared node (v2.0), a transfer to this very tree, or an FHA link
+        // to one of its rows (a seed tree's event, idp_seed_trees.js)
+        var mine = function (n) {
+            if (!n) return false;
+            if (isSysNode(n)) return String(n.sysNode.sysId) === sysId && !!n.sysNode.fcId && fcIds.indexOf(String(n.sysNode.fcId)) >= 0;
+            if (n.type === 'gate') return String(n.transferOutTo || (n.gateType === 'TRANSFER' ? n.linkedPageId : '') || '') === String(page.id);
+            return !!(n.externalSource && ids.indexOf(String(n.externalSource.targetId)) >= 0);
+        };
         _pages().forEach(function (p) {
-            if (!p || !p.root || p.verifies || p.dupReview || p.treeLevel !== 'aircraft' || (p.mode || 'top-down') !== 'top-down') return;
-            // 10 Nov 2026 (v1.9): an aircraft tree may carry this system's branch as a TRANSFER to this very tree (a hand-built
-            // PASA tree does: FC-05's G-7151 transfers to the electrical tree); its share counts like a linked event's, so
-            // the stricter of the budgets handed down applies (it was missed: the system kept a looser budget)
-            var has = false; (function w(n) { if (!n || has) return; if ((n.externalSource && ids.indexOf(String(n.externalSource.targetId)) >= 0) || String(n.transferOutTo || n.linkedPageId || '') === String(page.id)) has = true; _kids(n).forEach(w); })(p.root);
+            if (!p || !p.root || p.verifies || p.dupReview || p.duplicateOf || p.treeLevel !== 'aircraft' || (p.mode || 'top-down') !== 'top-down') return;
+            var has = false; (function w(n) { if (!n || has) return; if (mine(n)) has = true; else _kids(n).forEach(w); })(p.root);
             if (!has) return;
             var alloc = _allocated(p, ids); if (!alloc) return;
             (function w(n) {
                 if (!n) return;
-                var share = n.probability;   // the aircraft tree's own share for it (freed on the copy)
-                var viaTransfer = String(n.transferOutTo || n.linkedPageId || '') === String(page.id);
-                if (((n._wasLinked && ids.indexOf(String(n._wasLinked.targetId)) >= 0) || viaTransfer) && typeof share === 'number' && isFinite(share) && share > 0) {
+                var share = n.probability;   // this aircraft tree's own share for it
+                if (mine(n) && typeof share === 'number' && isFinite(share) && share > 0) {
                     var TB = root.SLTopBasis, ph = TB ? TB.perFlightHour(share, p) : null, rate = ph ? ph.rate : share;
-                    list.push({ rate: rate, pFlight: share, pageId: p.id, pageName: p.name || p.id, nodeName: n.name || n.displayId || _lid(n), lid: _lid(n), displayId: n.displayId || '' });
+                    list.push({ rate: rate, pFlight: share, pageId: p.id, pageName: p.name || p.id, nodeName: n.name || n.displayId || _lid(n), lid: _lid(n), displayId: n.displayId || '', via: n.type === 'gate' ? 'transfer' : (isSysNode(n) ? 'node' : 'link') });
+                    return;
                 }
                 _kids(n).forEach(w);
             })(alloc);
@@ -406,17 +573,11 @@
             var t = treeFor(g);
             if (!t) { made.push(make(g)); return; }
             if (!t.root) { waiting++; return; }   // its nodes have not arrived yet: wait, never make another
-            // a PASA tree made here carries every SFHA failure condition that traces to it
-            if (g.scope === 'ac' && t.autoFcTree) {
-                var untouched = shapeFp(t.root) === t.autoFcTree.fp;
-                _traced(g).forEach(function (sg) {
-                    if (_hasEventFor(t, sg)) return;
-                    t.root.children = (t.root.children || []).filter(function (c) { return !(untouched && c.type === 'undeveloped' && /^Decompose: causes of /.test(c.name || '')); });
-                    t.root.children.push(_sysEvent(sg)); added++;
-                });
-                if (untouched) t.autoFcTree.fp = shapeFp(t.root);
-            }
+            // v2.0: nothing is added to a tree here. A traced SFHA failure condition is linked by the engineer (link()).
         });
+        added += migrate();
+        // a shared node keeps the name of what it stands for (its failure condition renamed, or matched to a function's node)
+        _pages().forEach(function (p) { if (!p || !p.root) return; (function w(n) { if (!n) return; if (isSysNode(n)) { var e = entryOfLid(_lid(n)); if (e) { var nm = nodeName(e); if (n.name !== nm || (e.fcId && n.sysNode.fcId !== e.fcId)) { n.name = nm; n.sysNode.fcId = e.fcId || null; } } } _kids(n).forEach(w); })(p.root); });
         // trees made here whose failure condition no longer needs one
         _pages().slice().forEach(function (p) {
             if (!p || !p.autoFcTree || p.autoFcTree.kept || !p.root || p.duplicateOf) return;   // nodes pending, or a copy under review
@@ -515,6 +676,8 @@
     var api = { VERSION: VERSION, groups: groups, route: route,
         governingRows: governingRows, governingOf: governingOf, isGoverning: isGoverning, groupOf: groupOf, byFcId: byFcId, copiesNote: copiesNote, ROUTE_WORDS: ROUTE_WORDS, characterized: characterized, needsChart: needsChart, treeFor: treeFor,
         sweep: sweep, tick: tick, baseId: baseId, syncFlags: syncFlags, flagsOutOfStep: flagsOutOfStep, effectiveTarget: effectiveTarget, shares: shares, governingPhases: governingPhases, shapeFp: shapeFp,
+        // v2.0: the shared node of a system failure condition
+        link: link, unlink: unlink, linked: linked, built: built, candidates: candidates, ceiling: ceiling, isSysNode: isSysNode, nodeKey: nodeKey, entryOfLid: entryOfLid, nodeName: nodeName, migrate: migrate, traced: _traced, adoptInto: adoptInto, keyOf: keyOf,
         // 30 Oct 2026 (fc_link.js): the tree for a condition picked by hand that has none yet
         makeTree: make };
     try { root.SLFcTrees = api; } catch (_) {}

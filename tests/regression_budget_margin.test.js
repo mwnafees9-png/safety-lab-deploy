@@ -10,6 +10,10 @@
  *   The decision register (SLBudgetDecisions, budget_ledger.js) is exercised
  *   REAL: attribution required, dismissed decisions change nothing but stay
  *   on the books, revert keeps the record and restores the honest state.
+ * 11 Nov 2026 (Waqas: rebalancing "needs to be automatic and flagged for the engineer to accept as rebalanced, or if they want
+ *   to keep the tighter budget and accept the spare allowance"): spare budget is taken up by the free children at once and the
+ *   gate is flagged 'rebalanced' until the engineer accepts it (absorb) or keeps the tighter budgets (a signed reserve: the
+ *   free children back at their own shares). Over-committed is unchanged: never fixed by arithmetic.
  * Run: node tests/regression_budget_margin.test.js
  */
 'use strict';
@@ -50,10 +54,10 @@ const presc = (id, p, w) => ({ id, type: 'gate', gateType: 'OR', prescribedRate:
   const alloc = buildAlloc(pages, 3);
   alloc(pages[0].root, 2e-6, 'weighted');
   const m = pages[0].root._budgetMargin;
-  check('free sibling keeps its NATURAL share', near(pages[0].root.children[1].probability, 1e-6, 1e-3),
+  check('free sibling takes up the spare at once (11 Nov 2026: automatic)', near(pages[0].root.children[1].probability, 2e-6 - 1e-9, 1e-3),
     pages[0].root.children[1].probability.toExponential(3));
-  check('gate carries under-allocated margin with target and achieved',
-    m && m.state === 'under-allocated' && near(m.target, 2e-6, 1e-9) && near(m.achieved, 1e-9 + 1e-6, 1e-3), JSON.stringify(m));
+  check('gate is flagged rebalanced, with its target and what the shares alone would have used',
+    m && m.state === 'rebalanced' && m.decisionId === null && near(m.target, 2e-6, 1e-9) && near(m.achieved, 2e-6, 1e-9) && near(m.natural, 1e-9 + 1e-6, 1e-3), JSON.stringify(m));
 }
 
 // ---- [2] over-committed: a prescribed value the gate cannot afford ----------
@@ -87,8 +91,8 @@ const presc = (id, p, w) => ({ id, type: 'gate', gateType: 'OR', prescribedRate:
   alloc(pages[0].root, 1e-6, 'weighted');
   const m = pages[0].root._budgetMargin;
   // natural per child = sqrt(1e-6) = 1e-3; cap 1e-4 tightens → product 1e-4·1e-3 = 1e-7 < 1e-6
-  check('AND gate: tighter cap → under-allocated margin, sibling natural',
-    m && m.state === 'under-allocated' && near(pages[0].root.children[1].probability, 1e-3, 1e-3), JSON.stringify(m));
+  check('AND gate: tighter cap → rebalanced, the sibling takes up the spare (1e-6 / 1e-4 = 1e-2)',
+    m && m.state === 'rebalanced' && near(pages[0].root.children[1].probability, 1e-2, 1e-3), JSON.stringify(m));
 }
 
 // ---- [5] the decision register, REAL (budget_ledger.js) ---------------------
@@ -121,7 +125,7 @@ check('a signed reserve becomes the standing decision', BD.decisionFor(9).id ===
     children: [presc(61, 1e-9, 50), ev(62, 612, 50)] } }];
   const alloc = buildAlloc(pages, 3);
   alloc(pages[0].root, 2e-6, 'weighted');
-  check('end-to-end: amber before any decision', pages[0].root._budgetMargin.state === 'under-allocated');
+  check('end-to-end: rebalanced and flagged before any decision', pages[0].root._budgetMargin.state === 'rebalanced');
   const d = BD.record({ gateId: 60, kind: 'absorb', by: 'W. Nafees', sentence: 'Absorb — slack is accidental.' });
   alloc(pages[0].root, 2e-6, 'weighted');
   check('end-to-end: the recorded absorb closes the gate through the register',
@@ -131,7 +135,7 @@ check('a signed reserve becomes the standing decision', BD.decisionFor(9).id ===
     JSON.stringify(pages[0].root._budgetMargin));
   BD.revert(d.id, 'W. Nafees');
   alloc(pages[0].root, 2e-6, 'weighted');
-  check('end-to-end: reverting restores the honest amber', pages[0].root._budgetMargin.state === 'under-allocated');
+  check('end-to-end: reverting the acceptance puts the flag back (still rebalanced, waiting for the engineer)', pages[0].root._budgetMargin.state === 'rebalanced');
 }
 
 // ---- [7] VOTING gates carry the margin too (live-found on K350) -------------

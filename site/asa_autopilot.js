@@ -1,4 +1,4 @@
-// asa_autopilot.js (SLAsaAuto v1.0, 10 Nov 2026): the ASA Autopilot. One Aircraft Safety Assessment, on the ASA page: the front of
+// asa_autopilot.js (SLAsaAuto v1.1, 11 Nov 2026): the ASA Autopilot. One Aircraft Safety Assessment, on the ASA page: the front of
 // the report (what it closes, the baselines it rests on, the method, how every aircraft failure condition is closed) and one
 // appendix per aircraft function, the same functions as the PASA's, each holding every failure condition of that function rated
 // Minor or above.
@@ -19,7 +19,7 @@
 // Written where it lives: each aircraft requirement's verifEvidence and verifStatus. window.SLAsaAuto.
 (function (root) {
     'use strict';
-    var VERSION = '1.0';
+    var VERSION = '1.1';   // 1.1 11 Nov 2026: a PASA tree with nothing built under its top is not worked out again (it has not been created yet)
     function g(n) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(n); if (v !== undefined) return v; } } catch (_) {} try { return root[n]; } catch (_) { return undefined; } }
     function L() { return root.SLPasaAuto && root.SLPasaAuto.lib; }
     function A() { return root.SLPasaAuto || null; }
@@ -93,7 +93,7 @@
         var G = memoGen(); if (_run.gen !== G || G === -1) _run = { gen: G, map: {} };
         if (_run.map[gr.fcId]) return _run.map[gr.fcId];
         var ids = [], t = triOf(gr), page = A().treeOf(gr);
-        if (page) ids.push(S(page.id));
+        if (page && (!A().built || A().built(gr))) ids.push(S(page.id));
         if (t) arr(t.mfms).forEach(function (m) { if (ids.indexOf(S(m.id)) < 0) ids.push(S(m.id)); });
         var obj = L().target(gr.gov.severity).prob;
         var out = ids.map(function (id) { var r = typeof root.asaMeasuredRun === 'function' ? safe(function () { return root.asaMeasuredRun(id); }, null) : null; return r ? Object.assign({ objective: obj, pass: r.measuredPerFH != null && obj != null ? r.measuredPerFH <= obj * (1 + ((root.SLTopBasis && root.SLTopBasis.TOL) || 1e-6)) : null }, r) : null; }).filter(function (x) { return x && x.totalLeaves > 0; });   // a tree with no events of its own (transfers only) has nothing to put a measured number in
@@ -190,7 +190,7 @@
         if (isQuant(gr)) {
             b.push(H(3, 'The trees with the measured numbers'));
             var rs = runs(gr);
-            b.push(rs.length ? { k: 'table', name: 'run-' + f, title: f + ' worked out again with the systems\' measured numbers', rows: rs.map(function (x) { return { Tree: l.T(x.pageName), Budget: x.budgetPerFH ? l.sci(x.budgetPerFH) + ' per flight hour' : 'Not worked out (no rates on its own events)', Measured: x.measuredPerFH != null ? l.sci(x.measuredPerFH) + ' per flight hour' : 'Not worked out', Objective: x.objective != null ? l.sci(x.objective) + ' per flight hour' : 'Not set', 'Measured numbers used': x.substituted >= x.totalLeaves ? 'Every event' : x.substituted ? 'Some events (the rest keep their budget)' : 'None yet', Result: x.pass == null ? 'Not shown yet' : x.pass ? 'Within the objective' : 'Above the objective' }; }), lead: '{N} puts each system\'s measured number from its SSA in place of its budget and works the tree out again.' } : P('No tree for ' + f + ' can be worked out again yet.'));
+            b.push(A().built && !A().built(gr) && !rs.length ? P('The fault tree for ' + f + ' has not been created yet in the PASA, so there is nothing to work out again.') : rs.length ? { k: 'table', name: 'run-' + f, title: f + ' worked out again with the systems\' measured numbers', rows: rs.map(function (x) { return { Tree: l.T(x.pageName), Budget: x.budgetPerFH ? l.sci(x.budgetPerFH) + ' per flight hour' : 'Not worked out (no rates on its own events)', Measured: x.measuredPerFH != null ? l.sci(x.measuredPerFH) + ' per flight hour' : 'Not worked out', Objective: x.objective != null ? l.sci(x.objective) + ' per flight hour' : 'Not set', 'Measured numbers used': x.substituted >= x.totalLeaves ? 'Every event' : x.substituted ? 'Some events (the rest keep their budget)' : 'None yet', Result: x.pass == null ? 'Not shown yet' : x.pass ? 'Within the objective' : 'Above the objective' }; }), lead: '{N} puts each system\'s measured number from its SSA in place of its budget and works the tree out again.' } : P('No tree for ' + f + ' can be worked out again yet.'));
         }
         b.push(H(3, 'Common causes'));
         var cg = A().critGates(gr);

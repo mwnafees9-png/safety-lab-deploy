@@ -97,7 +97,7 @@
                     fp: now.toExponential(6),
                     msg: (r.traceId || r.id || ('REQ-' + r.internalId)) + ' (' + st.scope + ') quotes ' + quoted.toExponential(2) +
                          ' but the allocation now demands ' + now.toExponential(2) + ' on ' + (node.displayId || node.logicalId) +
-                         (node._sharedStrictest ? ' (held at the strictest across trees)' : '') + ' — regenerate or re-issue.' });
+                         (node._sharedStrictest && !node._sharedStrictest.own ? ' (held at the strictest across trees)' : '') + ' — regenerate or re-issue.' });
             }
         }); });
         return flags;

@@ -4226,9 +4226,9 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- 2 Nov 2026 (items 50, 29): fmes_merge.js (SLFmesMerge): FMES effects that say the same thing, merged on Accept within one detection; type_codes.js (SLTypeCodes): your own part types, events share their rate and model -->
     <script src="fmes_merge.js?v=1.0" defer></script>
     <script src="type_codes.js?v=1.0" defer></script>
-    <script src="fta_quant_modules.js?v=66.37" defer></script>
+    <script src="fta_quant_modules.js?v=66.38" defer></script>
     <!-- P2 batch 2 — FTA/golden-thread view layer + data operations layer, moved verbatim from safety_lab.js. Pure runtime declarations; load anywhere before the monolith. -->
-    <script src="event_reuse.js?v=1.4" defer></script>
+    <script src="event_reuse.js?v=1.5" defer></script>
     <!-- Phase 66.29 — MAC as minimum acceptable CAPABILITY, and the three lanes one
          declaration implies (total loss / partial loss / malfunction). Pure derivation;
          loaded before its consumers. -->
@@ -4260,7 +4260,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
     <script src="support_modules.js?v=66.64" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
-    <script src="helpers_modules.js?v=3.70" defer></script>
+    <script src="helpers_modules.js?v=3.71" defer></script>
     <script src="cloud_writer.js?v=1.3" defer></script>
     <script src="severity_axes.js?v=1.36" defer></script>
     <!-- 5 Sep 2026 — levers 2 + 3: escapes per phase; aircraft / crew levels derived from the MAC and the Task Analysis. -->
@@ -4391,7 +4391,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- RAM cockpit — seventh dashboard card (continuous track; feeds the gates). -->
     <script src="ram_cockpit.js?v=1.1" defer></script>
     <!-- Phase D gap 3 (§3.6) — Budget Ledger: allocated vs achieved as a first-class object (born modular; self-registering page). -->
-    <script src="budget_ledger.js?v=1.47" defer></script>
+    <script src="budget_ledger.js?v=1.48" defer></script>
     <!-- UX-1 — importance heatmap overlay: FV heat on basic events, display lane only (born modular; toolbar toggle injection). -->
     <script src="importance_heat.js?v=2.3" defer></script>
     <!-- UX-4 — leading-indicators strip on the dashboard: early warnings, display + routing only (born modular; counts from invRun / etaCouplingFindings / the engine's feasibility lane). -->
@@ -4407,7 +4407,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- Backlog #4 — qualitative development errors (ARP 4761A 4.1.1.1): FFS lane surface (born modular; self-registering page + {{ffs_table}} token source). -->
     <script src="ffs_module.js?v=1.32" defer></script>
     <!-- Phase D gap 1 (§3.5) — ASA working surface: deterministic triage + measured MF&MS re-run (born modular; upgrades the ASA F.4 gate). -->
-    <script src="asa_triage.js?v=1.14" defer></script>
+    <script src="asa_triage.js?v=1.15" defer></script>
     <script src="idp_seed_trees.js?v=1.6" defer></script>
     <!-- Golden Thread integrity sweep + link bindings (born modular). -->
     <script src="gt_integrity.js?v=1.8" defer></script>
@@ -4606,7 +4606,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="mac_flows.js?v=1.2" defer></script>
     <script src="mac_fcim.js?v=1.2" defer></script>
     <script src="lane_trees.js?v=1.6" defer></script>
-    <script src="stale_watch.js?v=1.3" defer></script>
+    <script src="stale_watch.js?v=1.4" defer></script>
     <script src="mirror_modes.js?v=1.1" defer></script>
     <script src="phys_hazards.js?v=1.5" defer></script>
     <!-- M2 — modes & reconfiguration: fallback chains, named switch failures, MC-corroborated standby. -->
@@ -4682,7 +4682,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="fha_phase_cover.js?v=1.0" defer></script>
     <script src="fc_tree_flow.js?v=1.05" defer></script>
     <!-- 24 Oct 2026: fc_auto_trees.js (SLFcTrees): every Major-or-worse failure condition the 1309 chart sends to a quantitative analysis (or whose chart is not answered) gets its PASA or PSSA tree, its top event filled in; a system tree takes the stricter of the aircraft allocation and its class target. After fc_tree_flow.js. -->
-    <script src="fc_auto_trees.js?v=1.9" defer></script>
+    <script src="fc_auto_trees.js?v=2.0" defer></script>
     <!-- 30 Oct 2026: fc_link.js (SLFcLink): a PASA or PSSA tree's link always comes from the failure condition it was made for; picking another condition opens that condition's own tree (no question); hand-built trees live in Standalone; old wrong links are fixed quietly with a change-log note; ANEM gets each condition's FCIM mode and fills the empty tree. After fc_auto_trees.js. -->
     <script src="fc_link.js?v=2.0" defer></script>
     <!-- 8 Nov 2026 (live student data): fta_dedupe.js (SLFtaDedupe) cleans up duplicate auto trees once per project load, before the first sweep (copies with nothing extra are kept aside in projectConfig.retiredDuplicateTrees, extra events merged into the original, real work left flagged for review). stale_revive.js (SLStaleRevive) relinks rows marked stale when their function or failure condition comes back (asks when the name changed) and clears aircraft trees a system change wrongly flagged obsolete. After fc_auto_trees.js, rename_guard.js and safety_lab.js; fta_dedupe.js before stale_revive.js. -->
@@ -4702,11 +4702,11 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- 10 Nov 2026: pasa_autopilot.js (SLPasaAuto): the PASA Autopilot, one report for the aircraft with an appendix per function (cca_report.js 2.1 frame). After cma_claims.js (the tree pictures), req_trace.js and assurance_modules.js (AutoReq). -->
     <!-- 10 Nov 2026: req_trace.js (SLReqTrace): requirement IDs, the level of each requirement type, where each requirement is driven from. After assurance_modules.js (AutoReq) and req_basis.js; the Autopilots below use it. -->
     <script src="req_trace.js?v=1.1" defer></script>
-    <script src="pasa_autopilot.js?v=2.0" defer></script>
-    <script src="pssa_autopilot.js?v=2.0" defer></script>
+    <script src="pasa_autopilot.js?v=2.1" defer></script>
+    <script src="pssa_autopilot.js?v=2.1" defer></script>
     <!-- 10 Nov 2026: ssa_autopilot.js (SLSsaAuto): the SSA Autopilot, per system, locked until its PSSA is baselined. asa_autopilot.js (SLAsaAuto): the ASA Autopilot, locked until the PASA and every SSA are baselined. After pssa_autopilot.js. -->
-    <script src="ssa_autopilot.js?v=1.0" defer></script>
-    <script src="asa_autopilot.js?v=1.0" defer></script>
+    <script src="ssa_autopilot.js?v=1.1" defer></script>
+    <script src="asa_autopilot.js?v=1.1" defer></script>
     <script src="cca_models.js?v=1.05" defer></script>
     <!-- Skills V1 — versioned drafting-instruction registry. Loads EAGERLY (tiny,
          static) and BEFORE ai_loader so the engine finds window.SLABSkills on its

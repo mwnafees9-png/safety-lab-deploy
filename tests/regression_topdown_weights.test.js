@@ -216,10 +216,12 @@ console.log('\n[6c] Conservatism travels with a copied node — A9: the slack is
   F.allocateTopDown(t1, 1e-6, 'weighted');
   check('the copied node KEEPS its conservative value', near(X.probability, 1e-9, 1e-9),
     X.probability.toExponential(3));
-  check('A9: the sibling keeps its NATURAL share — no silent loosen',
-    Math.abs(Y.probability - 5e-7) < 5e-9, 'sibling=' + Y.probability.toExponential(3));
-  check('A9: the slack is recorded on the gate as under-allocated margin',
-    t1._budgetMargin && t1._budgetMargin.state === 'under-allocated' &&
+  // 11 Nov 2026 (Waqas: rebalancing "needs to be automatic and flagged for the engineer to accept as rebalanced, or if they
+  // want to keep the tighter budget and accept the spare allowance"): the sibling takes up the spare, the gate is flagged.
+  check('11 Nov 2026: the sibling takes up the spare at once (1e-6 less the held 1e-9)',
+    Math.abs(Y.probability - (1e-6 - 1e-9)) < 5e-9, 'sibling=' + Y.probability.toExponential(3));
+  check('11 Nov 2026: the gate is flagged rebalanced and closes on its target',
+    t1._budgetMargin && t1._budgetMargin.state === 'rebalanced' &&
     Math.abs(t1._budgetMargin.achieved - (X.probability + Y.probability)) < 1e-12,
     JSON.stringify(t1._budgetMargin));
 

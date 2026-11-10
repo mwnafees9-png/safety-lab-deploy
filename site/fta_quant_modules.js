@@ -35,6 +35,24 @@ function _apportionWeight(child, siblingCount, strategy) {
 // across the basic and undeveloped events around them (a gate's set-event children are held like any fixed child).
 function slIsSetEvent(n) { return !!n && (n.type === 'house' || n.type === 'conditioning'); }
 try { if (typeof window !== 'undefined') window.slIsSetEvent = slIsSetEvent; } catch (_) {}
+// 11 Nov 2026: an FHA link's value is the linked failure condition's class objective: a ceiling (see the child constraints)
+function _slExtIsFhaCeiling(n) {
+    const s = n && n.externalSource; if (!s) return false;
+    const kind = s.kind || (s.targetId && !s.targetNodeId ? 'fha' : (s.targetNodeId ? 'fta' : ''));
+    return kind === 'fha';
+}
+// the share a gate gives one child with nothing held: the same formula the unconstrained path uses
+function _slNaturalShare(gate, kids, child, target, strategy) {
+    try {
+        const isAnd = (gate.gateType === 'AND' || gate.gateType === 'INHIBIT' || gate.gateType === 'PAND' || gate.gateType === 'SPARE' || gate.gateType === 'SEQ');
+        if (!isAnd && gate.gateType !== 'OR') return null;
+        let wAll = 0; kids.forEach(function (k) { wAll += _apportionWeight(k, kids.length, strategy); });
+        const w = _apportionWeight(child, kids.length, strategy), ratio = wAll > 0 ? w / wAll : 0;
+        if (!(ratio > 0)) return null;
+        const t = isAnd ? Math.pow(Math.max(0, Math.min(1, target)), ratio) : 1 - Math.pow(Math.max(0, Math.min(1, 1 - target)), ratio);
+        return (isFinite(t) && t >= 0 && t <= 1) ? t : null;
+    } catch (_) { return null; }
+}
 function allocateTopDown(node, target, strategy, visited) {
     if (slIsSetEvent(node)) return;   // its value is the engineer's, never a budget
     // Phase 56.18c/d — external-source handling. When a node carries an
@@ -96,9 +114,13 @@ function allocateTopDown(node, target, strategy, visited) {
         // No new redistribution code, and the rebalancer is untouched.
         let shared = null;
         if (typeof slSharedStrictestTarget === 'function' && node._sharedStrictest) {
-            shared = slSharedStrictestTarget(node);
+            shared = slSharedStrictestTarget(node, true);   // the strictest instance itself is held by its gate, not capped here
         }
-        const _caps = [extSrc, paste, shared].filter(function (v) { return v !== null && isFinite(v); });
+        // 11 Nov 2026: a system failure condition's node (and a transfer to a system tree) is never looser than that
+        // failure condition's own class allows (fc_auto_trees.js ceiling): a limit, on the same channel
+        let linkCeil = null;
+        if (typeof slLinkCeiling === 'function') linkCeil = slLinkCeiling(node);
+        const _caps = [extSrc, paste, shared, linkCeil].filter(function (v) { return v !== null && isFinite(v); });
         if (_caps.length) extTarget = Math.min.apply(null, _caps);
     } catch (e) { extTarget = null; }
     if (extTarget !== null && isFinite(extTarget)) {
@@ -184,8 +206,22 @@ function allocateTopDown(node, target, strategy, visited) {
                 if (sp !== null && isFinite(sp)) shared = sp;
             }
             if (prescr !== null) return prescr;  // verbatim — overrides min
+            // 11 Nov 2026 (Waqas: "this math is incorrect"): a CEILING is a limit, not the answer. The class objective of
+            // the failure condition an event is linked to (an FHA link, a system failure condition's node, a transfer to a
+            // system tree) only says "never looser than this". It was applied as the child's value even when the gate's
+            // share for that child was tighter, so an OR gate's inputs added up to far more than the gate's budget
+            // (1e-9 at the top over inputs of 1e-9, 1e-3 and 1e-5). A child whose ceiling is looser than its share is a
+            // free child: it takes its share. Only a ceiling tighter than the share holds the child.
+            let ceil = null;
+            if (extSrc !== null && _slExtIsFhaCeiling(c)) { ceil = extSrc; extSrc = null; }
+            if (typeof slLinkCeiling === 'function') { const lc = slLinkCeiling(c); if (lc !== null && isFinite(lc)) ceil = (ceil === null) ? lc : Math.min(ceil, lc); }
             const caps = [extSrc, paste, shared].filter(function (v) { return v !== null && isFinite(v); });
-            if (caps.length) return Math.min.apply(null, caps);
+            const hard = caps.length ? Math.min.apply(null, caps) : null;
+            if (ceil !== null) {
+                const nat = _slNaturalShare(node, actualChildren, c, target, strategy);
+                if (nat !== null && ceil < nat * 0.9999) return hard === null ? ceil : Math.min(hard, ceil);
+            }
+            if (hard !== null) return hard;
         } catch (e) { /* fall through */ }
         return null;
     });
@@ -229,8 +265,38 @@ function allocateTopDown(node, target, strategy, visited) {
             if (_BD && typeof _BD.decisionFor === 'function') _a9Decision = _BD.decisionFor(node.id) || null;
         } catch (e) { _a9Decision = null; }
 
-        if (_a9Decision && _a9Decision.kind === 'absorb') {
-            // The accepted rebalance — the pre-A9 redistribute, now opt-in.
+        // 11 Nov 2026 (Waqas: "if it is not automatically rebalancing needs to be automatic and flagged for the engineer to
+        // accept as rebalanced, or if they want to keep the tighter budget and accept the spare allowance"). When the held
+        // children leave SPARE budget on the gate (they are tighter than their shares), the free children take it up at once:
+        // the gate closes on its target. That is flagged on the gate ('rebalanced') until the engineer decides: accept it
+        // (an 'absorb' decision: 'absorbed-by-decision'), or keep the tighter budgets and hold the spare as a signed
+        // allowance (a 'reserve' decision: the free children go back to their own shares). A gate whose held children take
+        // MORE than its budget is never "fixed" by arithmetic: it stays over-committed, as before.
+        let wSumAll = 0;
+        actualChildren.forEach(c => wSumAll += _apportionWeight(c, actualChildren.length, strategy));
+        const _naturalFor = (child) => {
+            const w = _apportionWeight(child, actualChildren.length, strategy);
+            const ratio = wSumAll > 0 ? w / wSumAll : 0;
+            let t = 0;
+            if (ratio > 0) t = isAndFamily ? Math.pow(Math.max(0, Math.min(1, target)), ratio)
+                                           : 1 - Math.pow(Math.max(0, Math.min(1, 1 - target)), ratio);
+            if (!isFinite(t) || t < 0) t = 0;
+            if (t > 1) t = 1;
+            return t;
+        };
+        let achievedFactor = 1;
+        const _a9Assigned = actualChildren.map((child, i) => {
+            const t = childExt[i] !== null ? childExt[i] : _naturalFor(child);
+            achievedFactor *= isAndFamily ? Math.max(1e-18, t) : Math.max(1e-18, 1 - t);
+            return t;
+        });
+        const _a9Achieved = isAndFamily ? achievedFactor : 1 - achievedFactor;
+        const _A9_TOL = 1e-4;
+        const _a9Spare = _a9Achieved < target * (1 - _A9_TOL);
+        const _a9Reserve = !!(_a9Decision && _a9Decision.kind === 'reserve');
+
+        if (_a9Spare && !_a9Reserve && freeChildren.length > 0) {
+            // The rebalance: the free children share what the held ones leave.
             let wSumFree = 0;
             freeChildren.forEach(c => wSumFree += _apportionWeight(c, freeChildren.length, strategy));
             let remaining;
@@ -262,41 +328,21 @@ function allocateTopDown(node, target, strategy, visited) {
                 if (childTarget > 1) childTarget = 1;
                 allocateTopDown(child, childTarget, strategy, visited);
             });
-            // Flag the gate so the canvas + AutoReq know this gate's children
-            // were rebalanced — by an accepted decision, with its id.
+            // Flag the gate so the canvas + AutoReq know this gate's children were rebalanced.
             node._externalRebalance = {
                 constrainedCount: actualChildren.length - freeChildren.length,
                 freeCount: freeChildren.length,
                 mode: isAndFamily ? 'AND' : 'OR'
             };
-            node._budgetMargin = { state: 'absorbed-by-decision', decisionId: _a9Decision.id,
-                target: target, mode: isAndFamily ? 'AND' : 'OR',
+            const _a9Accepted = !!(_a9Decision && _a9Decision.kind === 'absorb');
+            node._budgetMargin = { state: _a9Accepted ? 'absorbed-by-decision' : 'rebalanced', decisionId: _a9Accepted ? _a9Decision.id : null,
+                target: target, achieved: target, natural: _a9Achieved, mode: isAndFamily ? 'AND' : 'OR',
                 constrainedCount: actualChildren.length - freeChildren.length, freeCount: freeChildren.length };
             return;
         }
 
-        // Default — no accepted absorb: caps verbatim, free children NATURAL.
-        let wSumAll = 0;
-        actualChildren.forEach(c => wSumAll += _apportionWeight(c, actualChildren.length, strategy));
-        const _naturalFor = (child) => {
-            const w = _apportionWeight(child, actualChildren.length, strategy);
-            const ratio = wSumAll > 0 ? w / wSumAll : 0;
-            let t = 0;
-            if (ratio > 0) t = isAndFamily ? Math.pow(Math.max(0, Math.min(1, target)), ratio)
-                                           : 1 - Math.pow(Math.max(0, Math.min(1, 1 - target)), ratio);
-            if (!isFinite(t) || t < 0) t = 0;
-            if (t > 1) t = 1;
-            return t;
-        };
-        let achievedFactor = 1;
-        const _a9Assigned = actualChildren.map((child, i) => {
-            const t = childExt[i] !== null ? childExt[i] : _naturalFor(child);
-            achievedFactor *= isAndFamily ? Math.max(1e-18, t) : Math.max(1e-18, 1 - t);
-            return t;
-        });
-        const _a9Achieved = isAndFamily ? achievedFactor : 1 - achievedFactor;
+        // Held children at their caps, free children at their own shares (a signed reserve, an exact gate, or over-committed).
         actualChildren.forEach((child, i) => allocateTopDown(child, _a9Assigned[i], strategy, visited));
-        const _A9_TOL = 1e-4;
         const _a9State = _a9Achieved > target * (1 + _A9_TOL) ? 'over-committed'
                        : _a9Achieved < target * (1 - _A9_TOL) ? ((_a9Decision && _a9Decision.kind === 'reserve') ? 'reserve' : 'under-allocated')
                        : 'exact';
@@ -783,7 +829,14 @@ function _slRootAllocationPages() {
 }
 function _slAllocateRootPages(pages) {
     pages.forEach(function (p) {
-        try { allocateTopDown(p.root, parseFloat(p.targetP), ftaConfig.apportion, new Set()); } catch (_) {}
+        // 11 Nov 2026: a tree's target is per flight hour; what is split down the tree is its budget over the flight
+        // (SLTopBasis.perFlightBudget, the same call the open tree makes). The raw target was handed out here, so a tree
+        // nobody had open held numbers smaller by the flight length than the same tree once opened.
+        try {
+            const _t = parseFloat(p.targetP);
+            const _b = (typeof SLTopBasis !== 'undefined' && SLTopBasis && SLTopBasis.perFlightBudget) ? SLTopBasis.perFlightBudget(_t, p) : null;
+            allocateTopDown(p.root, (_b && _b.pFlight > 0) ? _b.pFlight : _t, ftaConfig.apportion, new Set());
+        } catch (_) {}
     });
 }
 function _slSharedStrictestRound() {
@@ -796,7 +849,7 @@ function _slSharedStrictestRound() {
         slClearSharedStrictest();
         _slAllocateRootPages(pages);                          // natural apportionment
         const res = slSharedStrictestPass();
-        if (res && res.capped) _slAllocateRootPages(pages);   // re-allocate under the caps
+        if (res && (res.capped || res.shared)) _slAllocateRootPages(pages);   // re-allocate under the caps (11 Nov 2026: and with every shared node held at its strictest, so a rebalance cannot move one instance alone)
         return res;
     } catch (_) { return null; }
     finally { _slStrictestBusy = false; }

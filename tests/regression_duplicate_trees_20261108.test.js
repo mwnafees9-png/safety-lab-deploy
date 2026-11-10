@@ -239,7 +239,7 @@ function fixture() {
         ctx3.SLFtaDedupe.keepSeparate(k8.id);
         check('[D] Keep as its own tree: the flag goes, it is no longer an auto tree, the original stays the condition\'s tree', !k8.duplicateOf && !k8.dupReview && !k8.autoFcTree && k8.dupKept && ctx3.SLFcTrees.treeFor(ctx3.SLFcTrees.groups('ac').find(g => g.fcId === 'FC-08')) === o8);
         const html = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8'), at = f => html.indexOf('src="' + f);
-        check('load order: fta_dedupe.js after fc_auto_trees.js, pinned', at('fta_dedupe.js?v=1.0') > at('fc_auto_trees.js?v=') && /fc_auto_trees\.js\?v=1\.(8|9)"/.test(html));   // 1.9 (10 Nov): transfers and comma traces
+        check('load order: fta_dedupe.js after fc_auto_trees.js, pinned', at('fta_dedupe.js?v=1.0') > at('fc_auto_trees.js?v=') && /fc_auto_trees\.js\?v=(1\.(8|9)|2\.\d+)"/.test(html));   // 1.9 (10 Nov): transfers and comma traces; 2.0 (11 Nov): no inputs built, shared nodes
     }
 
     console.log('\n' + pass + ' passed, ' + fail + ' failed' + (MUT ? ' (mutation ' + MUT + ')' : ''));

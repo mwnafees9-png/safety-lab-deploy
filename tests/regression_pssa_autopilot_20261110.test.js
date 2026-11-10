@@ -47,7 +47,7 @@ const SITE = path.join(__dirname, '..', 'site');
 const MUT = process.env.SL_PSSA_MUTATE || '';
 const MUTS = {
     loose:      ['pssa_autopilot.js', "function applies(gr) { var h = handedDown(gr); return h.length ? h.reduce(function (m, x) { return x.rate < m.rate ? x : m; }, h[0]) : null; }", "function applies(gr) { var h = handedDown(gr); return h.length ? h.reduce(function (m, x) { return x.rate > m.rate ? x : m; }, h[0]) : null; }"],
-    notransfer: ['fc_auto_trees.js', "                var viaTransfer = String(n.transferOutTo || n.linkedPageId || '') === String(page.id);", "                var viaTransfer = false;"],
+    notransfer: ['fc_auto_trees.js', "            if (n.type === 'gate') return String(n.transferOutTo || (n.gateType === 'TRANSFER' ? n.linkedPageId : '') || '') === String(page.id);", "            if (n.type === 'gate') return false;"],
     interdep:   ['pssa_autopilot.js', "        b.push(H(3, 'The fault tree'));", "        b.push(H(3, 'How the systems feed ' + f)); b.push(P('From the interdependence table.'));\n        b.push(H(3, 'The fault tree'));"],
     noindep:    ['pssa_autopilot.js', "        reallocate(page, L().target(gr.gov.severity).dal);", "        void 0;"],
     nocheck:    ['pssa_autopilot.js', "        leaves(page).forEach(function (n) { if (lidOf(n) === lid) { n.repairModel = 'periodic'; n.tau = tau; } });", "        void 0;"],
@@ -74,7 +74,7 @@ const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y
 (async function main() {
     console.log('\n[S] pins and headers');
     const HTML = src('index.html'), at = f => HTML.indexOf('src="' + f + '?v=');
-    check('S1 pssa_autopilot.js 2.0 pinned after pasa_autopilot.js; header the same; fc_auto_trees.js 1.9 exports shares()', /pssa_autopilot\.js\?v=2\.0"/.test(HTML) && at('pssa_autopilot.js') > at('pasa_autopilot.js') && /SLPssaAuto v2\.0/.test(src('pssa_autopilot.js').slice(0, 200)) && /shares: shares/.test(src('fc_auto_trees.js')));
+    check('S1 pssa_autopilot.js 2.1 pinned after pasa_autopilot.js; header the same; fc_auto_trees.js 2.0 exports shares()', /pssa_autopilot\.js\?v=2\.1"/.test(HTML) && at('pssa_autopilot.js') > at('pasa_autopilot.js') && /SLPssaAuto v2\.1/.test(src('pssa_autopilot.js').slice(0, 200)) && /shares: shares/.test(src('fc_auto_trees.js')));
     check('S2 the system PSSA tab is named PSSA and holds the Autopilot (the old tiles hidden); no em dashes', /id="ws-pssa-tab-overview"[^>]*>PSSA</.test(HTML) && /<div id="ws-pssa-host" style="display:none">/.test(HTML) && ['pssa_autopilot.js', 'ssa_autopilot.js', 'asa_autopilot.js'].every(f => src(f).indexOf(EM) < 0) && fs.readFileSync(__filename, 'utf8').indexOf(EM) < 0);
 
     let pw = null; try { pw = require('playwright'); } catch (_) {}
@@ -132,7 +132,7 @@ const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y
             t0 = performance.now(); R.render(); out.msFn = performance.now() - t0;
             out.fcQs = qTitles();
             out.hand = A.handedDown(gr).map(x => ({ from: x.from, rate: x.rate }));
-            out.applies = A.applies(gr);
+            out.applies = A.applies(gr); out.treeTarget = SLFcTrees.treeFor(gr).targetP;
             const ctx = { C: SLCcaReport.palette(), dark: false, forExport: false, key: 'pssa' };
             const sec = A.section(sy, gr, ctx);
             out.heads = sec.filter(b => b.k === 'h' && b.level === 3).map(b => b.text); out.h2 = sec.filter(b => b.k === 'h' && b.level === 2).map(b => b.text);
@@ -161,6 +161,7 @@ const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y
             await wait(200);
             out.left = A.fcLeft(sy, gr); out.aiPart = R.spec.aiReady('fn:' + out.fn);
             const g3 = A.groupOf(sy, 'FC-EPS03'), p3 = SLFcTrees.treeFor(g3);
+            out.eps03 = { built: A.built(g3), left: A.fcLeft(sy, g3).length, open: A.openItems(sy, g3), text: A.section(sy, g3, ctx).filter(b => b.k === 'p').map(b => b.text).join(' ') };
             if (p3) { U.pick('fc.FC-EPS03.dal', 'yes'); (function walk(n) { if (!n) return; if (n.type !== 'gate') U.pick('fc.FC-EPS03.hid.' + String(n.logicalId != null ? n.logicalId : n.id), 'evident'); (n.children || []).forEach(walk); })(p3.root); }
             out.ai = R.spec.aiReady('fn:' + out.fn);
             // the picture, requirements, path
@@ -185,10 +186,12 @@ const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y
         }), 150000, 'the PSSA run');
 
         console.log('\n[H] what the aircraft hands down');
-        const rates = r.hand.map(x => x.rate), want = 5.000000041370186e-10 / 3;
+        const rates = r.hand.map(x => x.rate);
         check('H1 FC-26 sets a budget, and FC-05 through G-7151 (a transfer to the electrical tree) sets another', r.hand.some(x => /FC-26/.test(x.from)) && r.hand.some(x => /G-7151/.test(x.from)), JSON.stringify(r.hand));
-        check('H2 the stricter applies, worked out: 1.7 x 10^-10 per flight hour (FC-05\'s share of 5 x 10^-10 per flight over the 3 hour flight)', r.applies && Math.abs(r.applies.rate - Math.min.apply(null, rates)) < 1e-24 && Math.abs(r.applies.rate - want) / want < 0.01 && /G-7151/.test(r.applies.from), JSON.stringify(r.applies));
-        check('H3 the report table lists each budget and the one that applies', r.handRows.length >= 3 && r.handRows[r.handRows.length - 1].From === 'Applies (the stricter)' && /1\.7 × 10/.test(r.handRows[r.handRows.length - 1].Budget), JSON.stringify(r.handRows));
+        // 11 Nov 2026 (fc_auto_trees.js v2.0): each aircraft tree's OWN share is listed (never a stored value), and the one that
+        // applies is the strictest of them: the very number the tree's target is set to
+        check('H2 the stricter applies, worked out: the smallest of the budgets listed, and it is the tree\'s own target (2.5 x 10^-10 per flight hour here)', r.applies && Math.abs(r.applies.rate - Math.min.apply(null, rates)) < 1e-24 && Math.abs(r.applies.rate - r.treeTarget) / r.treeTarget < 1e-6 && Math.abs(r.applies.rate - 2.5e-10) / 2.5e-10 < 0.01, JSON.stringify(r.applies) + ' target ' + r.treeTarget);
+        check('H3 the report table lists each budget and the one that applies', r.handRows.length >= 3 && r.handRows[r.handRows.length - 1].From === 'Applies (the stricter)' && /2\.5 × 10/.test(r.handRows[r.handRows.length - 1].Budget), JSON.stringify(r.handRows));
 
         console.log('\n[A] the appendices');
         check('A1 one appendix per function with a failure condition rated Minor or above; FC-EPS01, 02 and 03 all in SF-20; no picking', JSON.stringify(r.apps) === '["SF-20"]' && r.fn === 'SF-20' && ['FC-EPS01:Catastrophic', 'FC-EPS02:Minor:qual', 'FC-EPS03:Hazardous'].every(x => r.fnFcs.some(y => y.indexOf(x) === 0)) && r.addFc === 0 && r.frontQs.indexOf('Which failure conditions get an appendix?') < 0, JSON.stringify(r.apps) + JSON.stringify(r.fnFcs));
@@ -215,7 +218,7 @@ const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y
         console.log('\n[Q] the questions');
         check('Q1 the front asks scope, the system, the method and where each type of requirement is written', ['What does this PSSA cover?', 'Is this the system the PSSA assesses?', 'Which method and numbers does the PSSA use?', 'Where is each type of requirement written in this system?'].every(q => r.frontQs.indexOf(q) >= 0), JSON.stringify(r.frontQs));
         check('Q2 an appendix asks independence for the item levels and, for each input, whether it shows itself; nothing about architecture or budget splits', r.fcQs.indexOf('Use independence to set the item assurance levels?') >= 0 && r.fcQs.some(q => /^Would BE-7100 .* show itself when it fails\?$/.test(q)) && !r.fcQs.some(q => /budget|split|architecture|protection/i.test(q)), JSON.stringify(r.fcQs));
-        check('Q3 FC-EPS01 answered: nothing left for it, but the AI waits for FC-EPS03 in the same appendix; ready once it is answered too', r.left.length === 0 && r.aiPart.ready === false && r.ai.ready, JSON.stringify(r.left) + JSON.stringify(r.ai.left));
+        check('Q3 FC-EPS01 answered: nothing left for it; FC-EPS03\'s tree has not been created yet (its top only), so it asks nothing and says so', r.left.length === 0 && r.ai.ready && r.eps03.built === false && r.eps03.left === 0 && r.eps03.open.some(x => /has not been created yet/.test(x)) && /has not been created yet/.test(r.eps03.text), JSON.stringify(r.eps03));
 
         console.log('\n[D] item assurance levels');
         check('D1 the tool\'s levels to start with (G-7098 FDAL B, generators 2 to 4 IDAL C)', r.dalBefore['G-7098'] === 'B' && r.dalBefore['BE-7095'] === 'C', JSON.stringify(r.dalBefore));

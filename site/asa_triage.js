@@ -139,8 +139,16 @@
             if (n.type !== 'gate') {
                 total++;
                 const es = n.externalSource;
-                if (es && es.kind === 'fha' && es.targetId != null && /^SYS_/.test(String(es.targetId))) {
-                    const hit = _achievedForSysFha(String(es.targetId).slice(4));
+                // 11 Nov 2026 (fc_auto_trees.js v2.0): a system failure condition's shared node stands for its SFHA rows the same
+                // way an FHA link does: the measured value of that system's verification tree goes in its place
+                let sysRow = (es && es.kind === 'fha' && es.targetId != null && /^SYS_/.test(String(es.targetId))) ? String(es.targetId).slice(4) : null;
+                if (sysRow == null && n.sysNode && n.sysNode.fcId) {
+                    const sy0 = (systemsData || []).find(x => x && String(x.id) === String(n.sysNode.sysId));
+                    const rows0 = sy0 ? (sy0.fha || []).filter(x => x && String(x.fcId || '').trim() === String(n.sysNode.fcId)) : [];
+                    for (const r0 of rows0) { if (_achievedForSysFha(String(r0.internalId))) { sysRow = String(r0.internalId); break; } }
+                }
+                if (sysRow != null) {
+                    const hit = _achievedForSysFha(sysRow);
                     if (hit) {
                         n.probability = hit.prob;
                         n.lambda = 0;                       // measured probability is authoritative for this run

@@ -174,7 +174,7 @@
 
     // ---- A9: margin info from the allocation tree ---------------------------
     // Worst-first: over-committed > under-allocated > reserve > absorbed > exact.
-    const _MARGIN_RANK = { 'over-committed': 4, 'under-allocated': 3, 'reserve': 2, 'absorbed-by-decision': 1, 'exact': 0 };
+    const _MARGIN_RANK = { 'over-committed': 4, 'rebalanced': 3, 'under-allocated': 3, 'reserve': 2, 'absorbed-by-decision': 1, 'exact': 0 };   // 11 Nov 2026: 'rebalanced' = done by the tool, waiting for the engineer
     function _marginFor(allocPage) {
         const gates = [];
         if (allocPage && allocPage.root) (function walk(n) {
@@ -219,6 +219,7 @@
             // A9 — the budget tri-state, counted over rows (worst gate per row).
             overCommitted: r.filter(x => x.marginInfo && x.marginInfo.state === 'over-committed').length,
             underAllocated: r.filter(x => x.marginInfo && x.marginInfo.state === 'under-allocated').length,
+            rebalanced: r.filter(x => x.marginInfo && x.marginInfo.state === 'rebalanced').length,
             reserves: r.filter(x => x.marginInfo && x.marginInfo.state === 'reserve').length,
         };
     }
@@ -272,6 +273,32 @@
             bdRecord({ gateId: gate.id, pageId: page.id, kind: 'dismissed', by, sentence });
             if (typeof showToast === 'function') showToast('Review logged \u2014 the gate stays RED until the constraint or target moves.', 'info', 3500);
             renderBudgetLedgerPage();
+            return;
+        }
+        // 11 Nov 2026 (Waqas: rebalancing "needs to be automatic and flagged for the engineer to accept as rebalanced, or if they
+        // want to keep the tighter budget and accept the spare allowance"): the tool has already rebalanced this gate. The
+        // engineer accepts it, or keeps the tighter budgets and holds the spare as a signed allowance.
+        if (m.state === 'rebalanced') {
+            const lines = free.slice(0, 6).map(c => '  ' + (c.displayId || c.id) + ' ' + (c.name || '') + ': ' + Number(c.probability || 0).toExponential(2)).join('\n');
+            const text = 'Gate ' + (gate.displayId || gate.id) + ' on ' + page.name + ' was rebalanced by the tool. An input under it is held tighter than its share (another tree needs it tighter, or its own class does), so the other inputs took up the spare and the gate uses its full budget (' + Number(m.target).toExponential(2) + ' per flight).\n\nThe inputs that were loosened:\n' + lines + '\n\n' + (impact.length ? impact.length + ' requirement(s) already written name these inputs (' + evid.length + ' with evidence).' : 'No requirement already written names these inputs.');
+            let kindR = null;
+            if (typeof window.slChoose === 'function') {
+                const v = await window.slChoose(text, [
+                    { value: 'absorb', label: 'Accept the rebalance', hint: 'The loosened budgets stand. Recorded with your name; it can be reverted.' },
+                    { value: 'reserve', label: 'Keep the tighter budgets', hint: 'The other inputs go back to their own shares; the spare is held as a signed allowance on this gate.' }], { title: 'A gate the tool rebalanced', cancelText: 'Decide later' });
+                kindR = v || null;
+            } else {
+                const pk = String((await slPrompt(text + '\n\n1) Accept the rebalance\n2) Keep the tighter budgets and hold the spare as an allowance\n\nChoose 1 / 2:', '1')) || '').trim();
+                kindR = pk === '1' ? 'absorb' : pk === '2' ? 'reserve' : null;
+            }
+            if (!kindR) return;
+            const byR = (await slPrompt('Sign with your name:', (typeof _signoffReviewerName === 'function' && _signoffReviewerName()) || '')) || '';
+            if (!String(byR).trim()) return;
+            bdRecord({ gateId: gate.id, pageId: page.id, kind: kindR, by: byR, sentence: kindR === 'absorb' ? 'Rebalance accepted.' : 'Tighter budgets kept; the spare is held as an allowance.', candidates: ['absorb-proportional', 'hold-reserve'], chosen: kindR });
+            try { if (typeof window._slSharedStrictestRound === 'function') window._slSharedStrictestRound(); } catch (_) {}
+            if (typeof showToast === 'function') showToast(kindR === 'absorb' ? 'Rebalance accepted.' : 'Tighter budgets kept. The spare is held as an allowance on the gate.', 'success', 4000);
+            renderBudgetLedgerPage();
+            try { if (typeof calculateAllProbabilities === 'function') calculateAllProbabilities(); if (typeof updateD3 === 'function') updateD3(); } catch (_) {}
             return;
         }
         const previewLines = free.slice(0, 4).map(c => {
@@ -423,6 +450,8 @@
         const btn = (kind) => ' <button class="ckpt-m-btn" style="font-size:10px; padding:1px 7px;" onclick="slBudgetOffer(\'' + _esc(r.allocPage.id) + '\',\'' + _esc(String(g.gateId)) + '\')">' + kind + '</button>';
         if (mi.state === 'over-committed')
             return '<span style="color:#8E2A2A; font-family:var(--font-mono); font-size:11px; font-weight:700;">OVER-COMMITTED</span>' + btn('log review \u2192') + nums;
+        if (mi.state === 'rebalanced')
+            return '<span style="color:#9A6200; font-family:var(--font-mono); font-size:11px; font-weight:600;">rebalanced by the tool</span>' + btn('accept or keep tighter \u2192') + nums;
         if (mi.state === 'under-allocated')
             return '<span style="color:#9A6200; font-family:var(--font-mono); font-size:11px; font-weight:600;">margin held</span>' + btn('decide \u2192') + nums;
         if (mi.state === 'reserve')

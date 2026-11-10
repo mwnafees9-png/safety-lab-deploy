@@ -1,4 +1,4 @@
-// ssa_autopilot.js (SLSsaAuto v1.0, 10 Nov 2026): the SSA Autopilot. One System Safety Assessment per system, in the system's
+// ssa_autopilot.js (SLSsaAuto v1.1, 11 Nov 2026): the SSA Autopilot. One System Safety Assessment per system, in the system's
 // SSA tab: the front of the report (what it verifies, the PSSA baseline it rests on, the method, the budgets against the design,
 // the requirements the aircraft placed on the system) and one appendix per function, the same functions as the PSSA's, each
 // holding every failure condition of that function rated Minor or above.
@@ -21,7 +21,7 @@
 // Written where it lives: the requirement's own verifEvidence and verifStatus (the register). window.SLSsaAuto.
 (function (root) {
     'use strict';
-    var VERSION = '1.0';
+    var VERSION = '1.1';   // 1.1 11 Nov 2026: a PSSA tree with nothing built under its top reads "not created yet"; Open the tree opens that tree
     function g(n) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(n); if (v !== undefined) return v; } } catch (_) {} try { return root[n]; } catch (_) { return undefined; } }
     function L() { return root.SLPasaAuto && root.SLPasaAuto.lib; }
     function P2() { return root.SLPssaAuto || null; }
@@ -159,6 +159,7 @@
         if (!isQuant(gr)) return out;
         var v = verified(sy, gr);
         if (!v.page) out.push('No fault tree is generated for ' + gr.fcId + ' in the PSSA, so there is nothing to verify yet.');
+        else if (P2().built && !P2().built(gr)) out.push('The PSSA fault tree for ' + gr.fcId + ' has not been created yet, so there is nothing to verify yet.');
         else if (!v.mirror) out.push('No verification tree for ' + gr.fcId + ' yet: build it in Verification trees from the PSSA tree.');
         else if (!v.filled) out.push('The verification tree for ' + gr.fcId + ' does not have a failure rate on every event yet.');
         else if (v.withinBudget === false) out.push('Worked out with the real rates, ' + gr.fcId + ' is above its budget: ' + l.sci(v.row.achieved) + ' per flight hour against ' + l.sci(v.row.allocated) + '.');
@@ -209,6 +210,7 @@
             var v = verified(sy, gr);
             b.push(H(3, 'The tree worked out again'));
             if (!v.page) b.push(P('No fault tree is generated for ' + f + ' in the PSSA yet, so there is no tree to work out again.'));
+            else if (P2().built && !P2().built(gr)) b.push(P('The PSSA fault tree for ' + f + ' has not been created yet (it has its top event and nothing under it), so there is no tree to work out again.'));
             else if (!v.mirror) b.push(P('No verification tree is built from the PSSA tree ' + l.T(v.page.name || v.page.id) + ' yet. Once it is, with the failure rates from the system FMEA and the equipment data, it appears here.'));
             else {
                 var K = root.SLCmaClaims, figs = [];
@@ -313,7 +315,7 @@
         }
         save(); done(qid);
     }
-    function openTree(pid) { try { if (typeof root.switchFTAPage === 'function') root.switchFTAPage(pid); } catch (_) {} }
+    function openTree(pid) { try { if (root.SLPasaAuto && root.SLPasaAuto.ui.openTree) root.SLPasaAuto.ui.openTree(pid); } catch (_) {} }
     function toPssa() { try { if (typeof root.switchWorkspaceTab === 'function') root.switchWorkspaceTab('pssa'); } catch (_) {} }
 
     // ---- outputs and acceptance ---------------------------------------------------------------------------------------------------
