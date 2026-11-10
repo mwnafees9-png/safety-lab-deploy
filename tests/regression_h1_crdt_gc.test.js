@@ -119,7 +119,7 @@ console.log('[h1] 4 — the ledger is actually written by crdt_sync');
   check('local updates mark `t`', /SafetyLabCRDTGC\.note\(_projId, 't'\)/.test(SYNC));
   check('a confirmed server upsert marks `s`', /SafetyLabCRDTGC\.note\(pid, 's'\)/.test(SYNC));
   check('an upsert that RESOLVED WITH AN ERROR does not mark `s` — supabase-js resolves on REST errors',
-        /if \(res && res\.error\) return;/.test(SYNC));
+        /if \(res && res\.error\) finish\(false,[^\n]*\n\s*else finish\(true\);/.test(SYNC) && /if \(ok\) _saveOk\(pid\); else _saveFailed\(pid, why\);/.test(SYNC) && /function _saveOk\(pid\) \{\s*try \{ if \(window\.SafetyLabCRDTGC\) window\.SafetyLabCRDTGC\.note\(pid, 's'\)/.test(SYNC));   // 11 Nov 2026: an error is now said, retried and logged (never silent), and still never marks `s`
   check('crdt_gc loads BEFORE crdt_sync, or the first update has no hook',
         HTML.indexOf('crdt_gc.js?v=') > 0 && HTML.indexOf('crdt_gc.js?v=') < HTML.indexOf('crdt_sync.js?v='));
 }

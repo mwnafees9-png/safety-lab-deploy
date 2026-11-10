@@ -132,6 +132,7 @@
     var _state = 'idle';          // idle (nothing saved this session yet) | saving | saved | error | offline
     var _savedAt = 0, _where = '', _reason = '', _reasonCode = '';
     var _localFail = null;        // why the last write on this device failed, or null
+    var _teamFail = null;         // 11 Nov 2026: why the live shared copy could not be saved (crdt_sync.js), or null
     var _cloudPending = false;    // accepted work the cloud copy does not have yet
     var _saving = null, _again = false, _retryTimer = null, _retryN = 0, _allowUnload = false;
     var _acceptedId = null;       // the id of the accepted-state slot the autosave meta points to
@@ -139,7 +140,7 @@
 
     function holdsSync() { var A = _ack(); return !!(A && A.pending()); }
     function waiting() { var A = _ack(); return !!(A && (A.pendingUser ? A.pendingUser() : A.pending())); }
-    function unsaved() { return !!_saving || !!_localFail || _cloudPending || !!_fileFail; }
+    function unsaved() { return !!_saving || !!_localFail || _cloudPending || !!_fileFail || !!_teamFail; }
 
     // ---- the project file on this computer (desktop, 26 Oct 2026, customer report) ----------------------------
     // The owner's ruling: "the file should always auto save back to where it was opened". In the desktop app the
@@ -254,6 +255,11 @@
             cls = 'error';
             text = 'Not saved: ' + (_state === 'offline' ? 'offline' : _short(_reasonCode)) + '. Retry';
             title = 'Not saved: ' + _reason + '. ' + (_localFail ? 'Your changes are still on screen; do not close this tab.' : 'Your changes are kept on this device and will be uploaded ' + (_state === 'offline' ? 'when you are back online' : 'automatically') + '. Click to retry now.');
+        } else if (_teamFail) {
+            // 11 Nov 2026: the copy the team works from was not saved (crdt_sync.js tries again on its own)
+            cls = 'error';
+            text = 'Not saved for your team. Retry';
+            title = 'Not saved for your team: the shared copy of this project could not be saved (' + _teamFail + '). Your changes are kept on this device and are tried again automatically. Do not close this tab until this says saved. Click to retry now.';
         } else if (_unlinked()) {
             cls = 'error';
             text = 'On this computer only. Save to a file';
@@ -282,6 +288,14 @@
         // (a 'saved' hint is NOT taken as proof: the label is also refreshed on a timer and by writes
         // that store nothing; a failure clears only when a save of the accepted project succeeds)
         if (hint === 'error' && !_saving) { _localFail = 'local'; _setError('local', REASON_TEXT.local); _scheduleRetry(); }
+        _paint();
+    }
+    // 11 Nov 2026 (live team data): crdt_sync.js reports every save of the live shared copy here. A failure is shown
+    // until a save succeeds; it never changes what this module itself has saved.
+    function teamSync(ok, why) {
+        var next = ok ? null : String(why || 'the cloud could not be reached');
+        if (next === _teamFail) return;
+        _teamFail = next;
         _paint();
     }
     function _setError(code, text) { _reasonCode = code; _reason = text || REASON_TEXT[code] || code; _state = (code === 'offline') ? 'offline' : 'error'; }
@@ -475,6 +489,7 @@
     // to overwrite or to load.
     async function save() {
         var A = _ack();
+        if (_teamFail) { try { var C0 = _crdt(); if (C0 && C0.retrySave) C0.retrySave(); } catch (_) {} }   // Retry: the shared copy too
         if (A && A.pending()) {
             var r0 = A.ask ? await A.ask({ reason: 'save' }) : ((await A.flush()) ? 'confirmed' : 'keep');
             if (r0 === 'keep') { _paint(); return false; }
@@ -769,7 +784,7 @@
     W.SLSaveState = {
         isDirty: isDirty, waiting: waiting, unsaved: unsaved, holdsSync: holdsSync, save: save, guard: guard,
         remoteArrived: remoteArrived, replaced: replaced, recovered: recovered, afterLocalRestore: afterLocalRestore,
-        renderIndicator: renderIndicator, autosaveMeta: autosaveMeta, pendingCount: _collectedCount, EXPORTS: EXPORTS,
+        renderIndicator: renderIndicator, autosaveMeta: autosaveMeta, teamSync: teamSync, teamFail: function () { return _teamFail; }, pendingCount: _collectedCount, EXPORTS: EXPORTS,
         whenSaved: function () { return _saving || Promise.resolve(!(_cloudPending || _localFail || _fileFail)); },
         status: function () { return { state: _state, savedAt: _savedAt, where: _where, reason: _reason, reasonCode: _reasonCode, cloudPending: _cloudPending, localFail: _localFail, waiting: waiting(), saving: !!_saving, collected: _collectedCount(), acceptedId: _acceptedId, file: { name: _fileName, epoch: _fileEpoch, fail: _fileFail ? JSON.parse(JSON.stringify(_fileFail)) : null }, stats: JSON.parse(JSON.stringify(_stats)) }; },
         openProjectFile: openProjectFileText, _fileState: _fileState, saveToFile: _saveToFile,

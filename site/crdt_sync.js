@@ -948,6 +948,14 @@
     _applying = true;
     try { if (window.__crdtApply) window.__crdtApply(partial); } finally { _applying = false; }
     _baseLive = true;
+    // 11 Nov 2026 (live team data): this pull has just replaced every tree page with the live shared copy's, so the
+    // load clean-ups (duplicate trees, false obsolete flags: load_repair.js) run again here. Without this they ran on
+    // the saved copy only and the pull put the copies and flags straight back. What they change is this tab's own
+    // edit: the three-way push that follows writes it into the live shared copy, so it stays cleaned for everyone.
+    try {
+      var LR = window.SLLoadRepair;
+      if (LR) { if (opts && opts.load) LR.run('live-copy'); else if (typeof LR.soon === 'function') LR.soon('live-update'); }
+    } catch (_) {}
   }
 
   // ---- transport (Supabase Realtime broadcast) -------------------------------
@@ -1097,30 +1105,88 @@
         .catch(function () { cb(false); });
     } catch (_) { cb(false); }
   }
-  function _scheduleSave() {
+  // 11 Nov 2026 (live team data, 9 Nov): A SAVE OF THE LIVE SHARED COPY NEVER FAILS SILENTLY. This write used to
+  // return on res.error and swallow a thrown error, with no retry until the next edit: one user's browser stopped
+  // saving for about half an hour and nothing said so. Now every outcome is acted on:
+  //   ok      -> the failure state (if any) is cleared;
+  //   failed  -> (a REST error, a thrown error, or no answer within SAVE_TIMEOUT_MS) the person sees "Not saved for
+  //              your team" in the save indicator (save_state.js teamSync), it is tried again on a growing wait
+  //              (SAVE_RETRY_MS, and at once when the network comes back or the person clicks Retry), and it is
+  //              written to the project's change log (jrnl 'save-failed', then 'save-recovered') and the console.
+  var SAVE_WAIT_MS = 5000, SAVE_TIMEOUT_MS = 45000, SAVE_RETRY_MS = [5000, 10000, 20000, 40000, 60000];
+  var _saveFails = 0, _saveBusy = false, _saveAgain = false, _saveFailSince = 0, _saveLastErr = '', _saveOffline = false;
+  function _ms(name, d) { try { var v = window[name]; return (typeof v === 'number') ? v : d; } catch (_) { return d; } }
+  function _saveTell(ok, why) {
+    try { if (window.SLSaveState && typeof window.SLSaveState.teamSync === 'function') window.SLSaveState.teamSync(ok, why); } catch (_) {}
+  }
+  function _saveJournal(kind, msg) { try { if (typeof window.jrnl === 'function') window.jrnl(kind, msg); } catch (_) {} }
+  function _saveFailed(pid, why) {
+    if (pid !== _projId) return;                       // the project was switched while the request ran
+    _saveFails++; _saveLastErr = why;
+    if (_saveFails === 1) _saveFailSince = Date.now();
+    try { console.warn('[CRDT] the live shared copy was NOT saved (attempt ' + _saveFails + '): ' + why); } catch (_) {}
+    _saveTell(false, why);
+    // logged on the first failure and then every fifth, so a long outage does not flood the change log
+    if (_saveFails === 1 || _saveFails % 5 === 0) _saveJournal('save-failed', 'The live shared copy could not be saved (attempt ' + _saveFails + '): ' + why + '. The changes are kept on this device and tried again automatically.');
+    if (!_online()) { _saveOffline = true; return; }   // the network went away mid-request: the 'online' event retries
+    var wait = SAVE_RETRY_MS[Math.min(_saveFails - 1, SAVE_RETRY_MS.length - 1)];
+    _scheduleSave(_ms('SL_CRDT_SAVE_RETRY_MS', wait));
+  }
+  function _saveOk(pid) {
+    try { if (window.SafetyLabCRDTGC) window.SafetyLabCRDTGC.note(pid, 's'); } catch (_) {}
+    if (pid !== _projId) return;
+    if (_saveFails) {
+      var mins = Math.max(1, Math.round((Date.now() - _saveFailSince) / 60000));
+      _saveJournal('save-recovered', 'The live shared copy is saved again after ' + _saveFails + ' failed attempt' + (_saveFails === 1 ? '' : 's') + ' over about ' + mins + ' minute' + (mins === 1 ? '' : 's') + '.');
+      _saveFails = 0; _saveFailSince = 0; _saveLastErr = '';
+    }
+    _saveTell(true);
+  }
+  function _saveNow() {
+    if (!_client || !ydoc || !_projId) return;
+    // Offline is its own, already visible state (the offline badge, "Not saved: offline"): no request is made and no
+    // timer burns retries; the 'online' event saves what waited.
+    if (!_online()) { _saveOffline = true; return; }
+    _saveOffline = false;
+    if (_saveBusy) { _saveAgain = true; return; }      // one request at a time; what changed meanwhile goes next
+    var pid = _projId, done = false, timer = null;
+    var finish = function (ok, why) {
+      if (done) return; done = true;
+      if (timer) { clearTimeout(timer); timer = null; }
+      _saveBusy = false;
+      if (ok) _saveOk(pid); else _saveFailed(pid, why);
+      if (_saveAgain) { _saveAgain = false; if (ok) _scheduleSave(); }
+    };
+    _saveBusy = true;
+    try {
+      var state = b64enc(Y.encodeStateAsUpdate(ydoc));
+      var limit = _ms('SL_CRDT_SAVE_TIMEOUT_MS', SAVE_TIMEOUT_MS);
+      timer = setTimeout(function () { finish(false, 'the cloud did not answer within ' + Math.round(limit / 1000) + ' seconds'); }, limit);
+      Promise.resolve(_client.from('project_crdt')
+        .upsert({ project_id: pid, state: state, updated_at: new Date().toISOString() }, { onConflict: 'project_id' }))
+        .then(function (res) {
+          // supabase-js resolves on a REST error too, so `res.error` is the check.
+          if (res && res.error) finish(false, String(res.error.message || res.error.code || 'the cloud refused the write'));
+          else finish(true);
+        }, function (e) { finish(false, String((e && e.message) || e || 'no connection to the cloud')); });
+    } catch (e) { finish(false, String((e && e.message) || e)); }
+  }
+  function _scheduleSave(ms) {
     if (_saveTimer) return;   // coalesce — at most one upsert per window
-    _saveTimer = setTimeout(function () {
-      _saveTimer = null;
-      try {
-        if (!_client || !ydoc || !_projId) return;
-        var state = b64enc(Y.encodeStateAsUpdate(ydoc));
-        _client.from('project_crdt')
-          .upsert({ project_id: _projId, state: state, updated_at: new Date().toISOString() }, { onConflict: 'project_id' })
-          .then(function (res) {
-            // Only a resolved upsert with no error marks the server as caught up.
-            // supabase-js resolves on a REST error too, so `res.error` is the check.
-            if (res && res.error) return;
-            var pid = _projId;
-            try { if (window.SafetyLabCRDTGC) window.SafetyLabCRDTGC.note(pid, 's'); } catch (_) {}
-          })
-          .catch(function () {});
-      } catch (_) {}
-    }, 5000);
+    _saveTimer = setTimeout(function () { _saveTimer = null; _saveNow(); }, (typeof ms === 'number') ? ms : _ms('SL_CRDT_SAVE_WAIT_MS', SAVE_WAIT_MS));
+  }
+  // Retry now (the save indicator's Retry, and the network coming back).
+  function retrySave() {
+    if (!_started || !ydoc) return false;
+    if (_saveTimer) { try { clearTimeout(_saveTimer); } catch (_) {} _saveTimer = null; }
+    _saveNow();
+    return true;
   }
 
   function stop() {
     try { clearTimeout(_pushTimer); } catch (_) {} _pushTimer = null;
     try { clearTimeout(_saveTimer); } catch (_) {} _saveTimer = null;
+    if (_saveFails) { _saveFails = 0; _saveFailSince = 0; _saveLastErr = ''; _saveTell(true); }   // the failure belonged to the project being left
     try { if (chan) chan.unsubscribe(); } catch (_) {}
     chan = null;
     try { if (_idb && _idb.destroy) _idb.destroy(); } catch (_) {} _idb = null;
@@ -1207,6 +1273,7 @@
     keys: function () { var o = {}; COLLECTIONS.forEach(function (c) { o[c.name] = c.key; }); return o; },
     undo: undo, redo: redo, canUndo: canUndo, canRedo: canRedo, liveUndo: liveUndo, _undoMgr: function () { return _undoMgr; },
     _base: function () { return _base; },
+    retrySave: retrySave, saveState: function () { return { fails: _saveFails, since: _saveFailSince, error: _saveLastErr, busy: _saveBusy, waiting: !!_saveTimer, offline: _saveOffline }; },
     release: release, pushAccepted: pushAccepted, baseLive: function () { return _baseLive; }, docHasContent: function () { return !!ydoc && _docHasContent(); },
     pull: function (opts) { return pullToModel(opts); }, held: function () { return { push: _heldPush, remote: _heldRemote }; },
     controlFloor: function (c) { try { return _ctlFloor(String(c)); } catch (_) { return 0; } },   // bindings_modules stamps a deliberate change after this
@@ -1216,7 +1283,7 @@
   // Boot: if enabled, start once the app + session settle, and poll cheaply for ws/project changes.
   try {
     // Phase 2 — react to connectivity changes: merge + re-handshake on reconnect; badge on drop.
-    window.addEventListener('online',  function () { try { if (_started) _goOnline(); else refresh(); } catch (_) {} });
+    window.addEventListener('online',  function () { try { if (_started) { _goOnline(); if (_saveFails || _saveOffline) retrySave(); } else refresh(); } catch (_) {} });
     window.addEventListener('offline', function () { try { _renderOfflineBadge(); } catch (_) {} });
     window.addEventListener('load', function () {
       if (!flagOn()) return;

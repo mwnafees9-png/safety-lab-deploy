@@ -1,6 +1,9 @@
 // ============================================================================
-// stale_revive.js, v1.0, 8 Nov 2026: a row marked stale because its parent was removed is relinked when that parent
+// stale_revive.js, v1.1, 8 Nov 2026: a row marked stale because its parent was removed is relinked when that parent
 // comes back, and an aircraft tree a system change wrongly flagged obsolete is cleared.
+// v1.1, 11 Nov 2026 (live team data): the repair never took effect on a shared cloud project. It now runs after
+// every way a project arrives (load_repair.js): a file, open from the cloud, the live shared copy pulled in, and a
+// teammate's change (the tree repair only).
 //
 // Live student data, 8 to 9 Nov 2026. Two markers set stale flags and nothing ever cleared them: the function
 // cascade (safety_lab.js, "Parent function <name> removed") and rename_guard.js rgMarkStale ("STALE - <label> <key>
@@ -37,7 +40,7 @@
 // ============================================================================
 (function (root) {
     'use strict';
-    var VERSION = '1.0';
+    var VERSION = '1.1';
     var SIMILAR = 0.6;
     var EMDASH = '\u2014';
 
@@ -345,7 +348,15 @@
         root.scheduleAutosave = wrapped;
     }
     if (typeof document !== 'undefined') {
-        if (!_wrapLoad() && typeof root.addEventListener === 'function') root.addEventListener('DOMContentLoaded', _wrapLoad);
+        // 11 Nov 2026: every way a project arrives (load_repair.js); the wrap above only where that module is absent
+        if (root.SLLoadRepair && typeof root.SLLoadRepair.on === 'function') {
+            root.SLLoadRepair.on('aircraft tree flags', function (via) {
+                var r = { cleared: [], nodes: 0 };
+                try { r = repairAircraftTrees(); } catch (e) { try { console.warn('[stale_revive] repair', e); } catch (_) {} }
+                if (via !== 'live-update') { try { revive({ quiet: true }); } catch (e) { try { console.warn('[stale_revive]', e); } catch (_) {} } }
+                return !!(r && r.cleared && r.cleared.length);
+            });
+        } else if (!_wrapLoad() && typeof root.addEventListener === 'function') root.addEventListener('DOMContentLoaded', _wrapLoad);
         _wrapSave();
         if (typeof root.addEventListener === 'function') root.addEventListener('load', function () { _wrapSave(); });
     }

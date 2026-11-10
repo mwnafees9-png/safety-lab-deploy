@@ -133,7 +133,10 @@ function tab(name, fha, srcs, opts) {
   ctx.SLChangeAck._setTestAnswer('keep');
   env.ctx = ctx; env.api = ctx.SafetyLabCRDT; env.ack = ctx.SLChangeAck; env.save = ctx.SLSaveState;
   // timers of 2.5 s and longer (retries, recovery, the local-write timeout) run only when asked for
-  env.flush = (long) => { let n = 0; for (let pass = 0; pass < 6; pass++) { const list = env.timers.filter(t => t.f && (long || t.ms == null || t.ms < 2500)); list.forEach(t => { if (t.f) { const f = t.f; t.f = null; f(); n++; } }); if (!env.timers.some(t => t.f && (long || t.ms == null || t.ms < 2500))) break; } return n; };
+  // 11 Nov 2026: the 45 s time limit on the live shared copy's save (crdt_sync.js) is not a wait to run out here: the
+  // fake cloud answers at once, so firing that limit before the answer is read would invent a failure
+  const due = (t, long) => t.f && t.ms !== 45000 && (long || t.ms == null || t.ms < 2500);
+  env.flush = (long) => { let n = 0; for (let pass = 0; pass < 6; pass++) { const list = env.timers.filter(t => due(t, long)); list.forEach(t => { if (t.f) { const f = t.f; t.f = null; f(); n++; } }); if (!env.timers.some(t => due(t, long))) break; } return n; };
   env.longTimers = () => env.timers.filter(t => t.f && [3000, 10000, 30000, 60000, 120000].indexOf(t.ms) >= 0).map(t => t.ms);   // save_state's retry timers (the live sync's 5 s server write is its own)
   env.fire = (type) => (env.listeners[type] || []).forEach(f => f({ type }));
   env.rows = () => env.model.acFhaData.map(r => r.internalId + ':' + r.severity).join(',');

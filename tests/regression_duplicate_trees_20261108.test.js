@@ -190,7 +190,7 @@ function fixture() {
         check('[C] the 24-event PSSA original is exactly as it was', JSON.stringify(ps) === psBefore && ctx.ftaPages.indexOf(ps) >= 0);
         const o5 = ctx.ftaPages.find(p => p.id === 'fc-auto-ac-FC-05');
         const merged = o5.root.children.filter(n => n.mergedFrom === c5.id);
-        check('[C] the FC-05 copy\'s extra event is under the original\'s top gate, tagged mergedFrom, with a fresh id', merged.length === 1 && merged[0].name === 'Extra test cause' && merged[0].id !== 9601 && merged[0].mergedFromNode === 9601);
+        check('[C] the FC-05 copy\'s extra event is under the original\'s top gate, tagged mergedFrom, keeping the id it had in the copy (11 Nov 2026: two screens merging the same copy write one node)', merged.length === 1 && merged[0].name === 'Extra test cause' && merged[0].id === 9601 && merged[0].mergedFromNode === 9601);
         check('[C] the copy with a branch of its own stays, flagged duplicateOf + dupReview with the reason', c6.duplicateOf === 'fc-auto-ac-FC-06' && c6.dupReview && /branch of its own/.test(c6.dupReview.reason) && ctx.ftaPages.indexOf(c6) >= 0, JSON.stringify(c6.dupReview));
         check('[C] the picker label says it in plain words', ctx.SLFtaDedupe.label(c6) === ' (Duplicate of ' + ctx.ftaPages.find(p => p.id === 'fc-auto-ac-FC-06').name + ': holds work the original lacks, review and merge)', ctx.SLFtaDedupe.label(c6));
         check('[C] every action journaled', ctx.journal.filter(j => j.k === 'tree-duplicate-retired').length === 11 && ctx.journal.filter(j => j.k === 'tree-duplicate-review').length === 1);
@@ -239,7 +239,7 @@ function fixture() {
         ctx3.SLFtaDedupe.keepSeparate(k8.id);
         check('[D] Keep as its own tree: the flag goes, it is no longer an auto tree, the original stays the condition\'s tree', !k8.duplicateOf && !k8.dupReview && !k8.autoFcTree && k8.dupKept && ctx3.SLFcTrees.treeFor(ctx3.SLFcTrees.groups('ac').find(g => g.fcId === 'FC-08')) === o8);
         const html = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8'), at = f => html.indexOf('src="' + f);
-        check('load order: fta_dedupe.js after fc_auto_trees.js, pinned', at('fta_dedupe.js?v=1.0') > at('fc_auto_trees.js?v=') && /fc_auto_trees\.js\?v=(1\.(8|9)|2\.\d+)"/.test(html));   // 1.9 (10 Nov): transfers and comma traces; 2.0 (11 Nov): no inputs built, shared nodes
+        check('load order: fta_dedupe.js after fc_auto_trees.js, pinned', at('fta_dedupe.js?v=1.1') > at('fc_auto_trees.js?v=') && /fc_auto_trees\.js\?v=(1\.(8|9)|2\.\d+)"/.test(html));   // 1.9 (10 Nov): transfers and comma traces; 2.0 (11 Nov): no inputs built, shared nodes
     }
 
     console.log('\n' + pass + ' passed, ' + fail + ' failed' + (MUT ? ' (mutation ' + MUT + ')' : ''));

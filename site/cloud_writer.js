@@ -123,6 +123,20 @@
     // ---- the queued run ----------------------------------------------------
     // ctx from prepare(): { client, projectId, userId, snapshot } — anything
     // falsy = the caller decided not to write (guards, ITAR, shrink, no content).
+    // 11 Nov 2026 (live team data, 9 Nov): one user's browser read the version and then never wrote for about half an
+    // hour. A request that never answers used to hold the ONE queue for ever: every later save waited behind it and
+    // nothing said so. Every request now has a time limit; past it the save fails as 'error' (said, retried, logged by
+    // the callers) and the queue moves on. A write that timed out may still land: the next save reads the version
+    // first and reconciles, as for any copy that moved.
+    var REQ_TIMEOUT_MS = 45000;
+    function _within(p, what) {
+        var ms = (typeof G.SL_CLOUD_REQ_TIMEOUT_MS === 'number') ? G.SL_CLOUD_REQ_TIMEOUT_MS : REQ_TIMEOUT_MS;
+        var t = null;
+        return Promise.race([
+            Promise.resolve(p).then(function (x) { if (t) clearTimeout(t); return x; }, function (e) { if (t) clearTimeout(t); throw e; }),
+            new Promise(function (_, rej) { t = setTimeout(function () { var e = new Error('the cloud did not answer within ' + Math.round(ms / 1000) + ' seconds (' + what + ')'); e.code = 'timeout'; rej(e); }, ms); })
+        ]);
+    }
     async function _run(mode, prepare) {
         var ctx = null;
         try { ctx = await prepare(); } catch (e) { return { ok: false, reason: 'error', error: e }; }
@@ -135,7 +149,8 @@
         }
 
         var readVersion = async function () {
-            var r = await client.from('project_documents').select('version').eq('project_id', projectId).maybeSingle();
+            var r = await _within(client.from('project_documents').select('version').eq('project_id', projectId).maybeSingle(), 'reading the saved version');
+            if (r && r.error) throw r.error;      // 11 Nov 2026: a failed read is a failure, never "no document yet"
             var cur = r && r.data;
             return (cur && cur.version != null) ? cur.version : null;
         };
@@ -183,16 +198,16 @@
             var attempts = (mode === 'silent') ? 1 : 2;
             for (var attempt = 0; attempt < attempts; attempt++) {
                 if (_token() == null) {
-                    var ins = await client.from('project_documents').insert(Object.assign({ project_id: projectId, version: 1 }, stamp()));
+                    var ins = await _within(client.from('project_documents').insert(Object.assign({ project_id: projectId, version: 1 }, stamp())), 'writing the saved copy');
                     var iErr = ins && ins.error;
                     if (!iErr) { nextVersion = 1; break; }
                     if (String(iErr.code || '') !== '23505' && !/duplicate|unique/i.test(String(iErr.message || ''))) throw iErr;
                 } else {
                     var expected = _token(), candidate = expected + 1;
-                    var up = await client.from('project_documents')
+                    var up = await _within(client.from('project_documents')
                         .update(Object.assign({ version: candidate }, stamp()))
                         .eq('project_id', projectId).eq('version', expected)
-                        .select('version');
+                        .select('version'), 'writing the saved copy');
                     if (up && up.error) throw up.error;
                     if (up && Array.isArray(up.data) && up.data.length > 0) { nextVersion = candidate; break; }
                 }
@@ -259,5 +274,5 @@
         }
     } catch (_) {}
 
-    G.SLCloudWriter = { _v: '1.1', write: write, flush: flush, status: status, heldLocks: _heldLocks, lastWritten: lastWritten, QUIET_MS: QUIET_MS };
+    G.SLCloudWriter = { _v: '1.2', REQ_TIMEOUT_MS: REQ_TIMEOUT_MS, write: write, flush: flush, status: status, heldLocks: _heldLocks, lastWritten: lastWritten, QUIET_MS: QUIET_MS };
 })();

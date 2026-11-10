@@ -1,5 +1,10 @@
 // ============================================================================
-// fta_dedupe.js, v1.0, 8 Nov 2026: one fault tree per failure condition, cleaned up when a project opens.
+// fta_dedupe.js, v1.1, 8 Nov 2026: one fault tree per failure condition, cleaned up when a project opens.
+// v1.1, 11 Nov 2026 (live team data): it never took effect on a shared cloud project. It now runs after every way a
+// project arrives (load_repair.js: a file, open from the cloud, the live shared copy pulled in, a teammate's change),
+// and is safe to run twice and on two screens at once: a copy already in the retired list is not listed again, and an
+// event merged into the original keeps the id it had in the copy, so two screens that merge the same copy write the
+// same node and the live shared copy holds it once.
 //
 // Live student data, 8 to 9 Nov 2026: a collaborator's screen built the auto tree pages from their shells before
 // their nodes arrived (crdt_sync.js _ftaRecompose, root null), the sweep (fc_auto_trees.js before v1.8) did not see
@@ -37,7 +42,7 @@
 // ============================================================================
 (function (root) {
     'use strict';
-    var VERSION = '1.0';
+    var VERSION = '1.1';
 
     function _g(n) {
         try { var E = root.SLEnv; if (E && typeof E.get === 'function') { var v = E.get(n); if (v !== undefined) return v; } } catch (_) {}
@@ -132,23 +137,39 @@
     }
 
     // ---- acting on a copy --------------------------------------------------------------------------------------
-    function _fresh(n, from) {
+    // An event merged into the original keeps the id it had in the copy (the copy is retired, so nothing else holds
+    // it): two screens merging the same copy then write the same node, and the live shared copy holds it once. Only
+    // an id the original already uses is replaced with a new one.
+    function _fresh(n, from, taken) {
         var c = _clone(n);
-        (function w(x) { var id = _nid(); x.mergedFromNode = x.logicalId != null ? x.logicalId : x.id; x.id = id; x.logicalId = id; if (x.displayId) x.displayId = String(x.displayId).replace(/\d+$/, String(id)); _kids(x).forEach(w); })(c);
+        (function w(x) {
+            x.mergedFromNode = x.logicalId != null ? x.logicalId : x.id;
+            if (x.id == null || taken[String(x.id)]) { var id = _nid(); x.id = id; x.logicalId = id; if (x.displayId) x.displayId = String(x.displayId).replace(/\d+$/, String(id)); }
+            taken[String(x.id)] = 1;
+            _kids(x).forEach(w);
+        })(c);
         c.mergedFrom = from;
         return c;
     }
     function _graft(orig, nodes, copyId) {
         orig.root.children = orig.root.children || [];
-        nodes.forEach(function (n) { orig.root.children.push(_fresh(n, copyId)); });
+        var taken = {};
+        (function w(x) { if (!x) return; if (x.id != null) taken[String(x.id)] = 1; _kids(x).forEach(w); })(orig.root);
+        nodes.forEach(function (n) {
+            // already merged from this copy (another screen did it, or this ran before): nothing to add
+            if (orig.root.children.some(function (c) { return c && c.mergedFrom === copyId && String(c.mergedFromNode) === String(n.logicalId != null ? n.logicalId : n.id); })) return;
+            orig.root.children.push(_fresh(n, copyId, taken));
+        });
     }
     function _remove(page) { var pages = _pages(), i = pages.indexOf(page); if (i >= 0) pages.splice(i, 1); }
     function _retire(copy, orig, reason) {
         var pc = _pc(); if (!pc) return false;
         pc.retiredDuplicateTrees = pc.retiredDuplicateTrees || [];
-        pc.retiredDuplicateTrees.push({ page: _clone(copy), duplicateOf: orig.id, reason: reason, at: _now() });
+        // a copy that came back (the live shared copy still held it) is listed once
+        var listed = pc.retiredDuplicateTrees.some(function (r) { return r && r.page && String(r.page.id) === String(copy.id); });
+        if (!listed) pc.retiredDuplicateTrees.push({ page: _clone(copy), duplicateOf: orig.id, reason: reason, at: _now() });
         _remove(copy);
-        _jr('tree-duplicate-retired', (copy.name || copy.id) + ' (' + copy.id + ') was a copy of ' + (orig.name || orig.id) + ': ' + reason + '. Kept in the project\'s retired copies, nothing deleted.');
+        if (!listed) _jr('tree-duplicate-retired', (copy.name || copy.id) + ' (' + copy.id + ') was a copy of ' + (orig.name || orig.id) + ': ' + reason + '. Kept in the project\'s retired copies, nothing deleted.');
         _repoint(copy.id, orig.id);
         return true;
     }
@@ -312,7 +333,10 @@
         root._applyProjectData = wrapped;
         return true;
     }
-    if (!_wrapLoad() && typeof root.addEventListener === 'function') root.addEventListener('DOMContentLoaded', _wrapLoad);
+    // 11 Nov 2026: every way a project arrives (load_repair.js); the wrap above only where that module is absent
+    function _onArrive() { var r = run(); return !!(r.retired.length || r.review.length || r.merged.length); }
+    if (root.SLLoadRepair && typeof root.SLLoadRepair.on === 'function') root.SLLoadRepair.on('duplicate trees', _onArrive);
+    else if (!_wrapLoad() && typeof root.addEventListener === 'function') root.addEventListener('DOMContentLoaded', _wrapLoad);
 
     var api = { VERSION: VERSION, run: run, pending: pending, classify: classify, identity: identity, restore: restore,
         mergeIntoOriginal: mergeIntoOriginal, keepSeparate: keepSeparate, label: label, decorate: decorate, _repoint: _repoint };
