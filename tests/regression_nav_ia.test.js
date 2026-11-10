@@ -139,8 +139,9 @@ check('PASA/ASA headers use the standard vocabulary — no "planned", no "close-
 // drop down option for either of the two analyses"): the PASA workspace — Interdependence &
 // Common Resources, MAC Model, MF&MS, CoFFE — gets ONE entry at the top of the PASA group. It is
 // the workspace door, not an overview echo; the overview row itself stays gone.
-check('the PASA group opens with the PASA workspace entry (interdependence · MAC · MF&MS · CoFFE) and no overview row',
-  at('id="snav-pasa"') > 0 && /PASA — interdependence · MAC · MF&amp;MS · CoFFE/.test(idx) && !/PASA overview/.test(idx));
+// 10 Nov 2026: the PASA page is the PASA Autopilot (interdependence, common resources and CoFFE answered in it)
+check('the PASA group opens with the PASA Autopilot entry and no overview row',
+  at('id="snav-pasa"') > 0 && /<span class="asb-lbl">PASA Autopilot<\/span>/.test(idx) && !/PASA overview/.test(idx));
 // 23 Aug 2026 (3) — SUPERSEDED: Markov + Event Trees left the rail entirely
 // (Waqas: tree options are TABS under Fault Trees, "instead of left nav menu
 // options"). Their catalogue lanes stay under R&M; the tabs are lane-gated.
