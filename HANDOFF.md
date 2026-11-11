@@ -1,4 +1,14 @@
-## 11 Nov 2026 (latest): THE AUTOPILOT PAGES OPEN FAST WITH THE SAME RESULTS (ZSA 10 S TO UNDER HALF A SECOND); THREE "DUPLICATE" PAIRS KEPT OVER A FALSE WEIGHT DIFFERENCE ARE TIDIED AWAY, AND A REAL PAIR IS SAID ON BOTH PAGES. Web build only, not shipped (Waqas runs every deploy).
+## 11 Nov 2026 (latest): A REPORT COMMENT OPENS IN LINE WITH THE WORDS IT IS ON. Web build only, not shipped (Waqas runs every deploy).
+
+**Why (Waqas, 11 Nov 2026).** "comments do not show in line with the selected phrase"; then, after asking for a show/hide comments switch and a label on the quoted words: "there is a show questions and hide questions interface no changes needed there" and "that is just the selected text, we just need it to show in line where you are commenting". So ONLY the placement changed; a Hide comments switch, a label and whole-word selection were built and taken back out.
+
+**Cause (reproduced with a real mouse in the CMA report, scrolled down).** report_comments.js placed the new comment's box using a scroll position read once, then gave the box the focus while it still sat at the top of the report; the browser scrolled the report to its top to show it, and the box ended about 1,400 px below the words.
+
+**What.** report_comments.js 1.1: the draft's words are marked before anything is placed; every box is placed from where its words are, measured against the margin itself (which scrolls with the report); boxes are laid out in the order of their words; the focus never scrolls the report; the chosen words are brought back into view when the layout moved (the questions fold away).
+
+**Tests.** regression_report_comments_20261110: new check 10 (real mouse, report scrolled down, box within 6 px of the words, before and after posting); mutations nodraftmark and oldscroll red. Related suites rerun (comments_everywhere, cca_reports, project_durability); the full wall was NOT rerun for this one-file change.
+
+## 11 Nov 2026: THE AUTOPILOT PAGES OPEN FAST WITH THE SAME RESULTS (ZSA 10 S TO UNDER HALF A SECOND); THREE "DUPLICATE" PAIRS KEPT OVER A FALSE WEIGHT DIFFERENCE ARE TIDIED AWAY, AND A REAL PAIR IS SAID ON BOTH PAGES. Web build only, not shipped (Waqas runs every deploy).
 
 **Why (Waqas, 11 Nov 2026).** "I need the performance to improve on all the autopilots". And, on the three duplicate pairs still in the live team project after the clean-up shipped (FC-01, FC-02, FC-03 beside their -mw88sosh copies): "go ahead with 1 and 2" (fix the false difference; show a real pair on both pages), after "if its already good is there anything to build?" (the compare and per-branch merge screen is NOT built: no real case exists yet).
 

@@ -19,10 +19,13 @@
  *   7  Word: every open comment is a margin comment on its paragraph, with its replies
  *   8  live: a comment arriving from someone else (into the shared store) appears without a reload
  *   9  Waqas: "make sure images and captions in all reports are centered": in the report frame, the plans, Word and the PDF
+ *   10 (11 Nov 2026) Waqas: "comments do not show in line with the selected phrase": with a real mouse, in a report
+ *      scrolled well down, the box opens beside the words and stays there
  * MUTATION PROOFS (SL_RC_MUTATE): noanchor (the store drops where the words are), rewritegen (the AI's rewrite of words the
  *   tool works out is offered anyway), noresolve (Accept leaves the thread open), wide (the margin takes 600px), nofold
  *   (the questions stay open beside the comments), noword (no margin comments in Word), nolive (no redraw when a comment
- *   arrives), leftcap (captions back on the left). Each one must turn this suite red.
+ *   arrives), leftcap (captions back on the left), nodraftmark (the new box is placed before its words are marked),
+ *   oldscroll (boxes placed against the report's frame, ignoring how far it is scrolled). Each one must turn this suite red.
  * Run: node tests/regression_report_comments_20261110.test.js
  */
 'use strict';
@@ -42,6 +45,8 @@ function mutate(file, body) {
     if (MUT === 'noword' && file === 'cca_report.js') rep("if (root.SLReportComments) { try { root.SLReportComments.annotate(m, key); } catch (_) {} }", "");
     if (MUT === 'leftcap' && file === 'cca_report.js') rep(".ccr-cap{font-weight:700;font-size:11.5px;margin:10px 0 4px;text-align:center}", ".ccr-cap{font-weight:700;font-size:11.5px;margin:10px 0 4px}");
     if (MUT === 'nolive' && file === 'report_comments.js') rep("if (!first && !ui.draft) redrawAll();", "");
+    if (MUT === 'nodraftmark' && file === 'report_comments.js') rep("if (drafting) { var r0 = locate(pv, ui.draft.anchor, ui.draft.sec); if (r0) {", "if (false) { var r0 = locate(pv, ui.draft.anchor, ui.draft.sec); if (r0) {");
+    if (MUT === 'oldscroll' && file === 'report_comments.js') rep("railTop = rail.getBoundingClientRect().top;", "railTop = pv.getBoundingClientRect().top;");
     return body;
 }
 const tick = ms => new Promise(r => setTimeout(r, ms));
@@ -122,6 +127,29 @@ const tick = ms => new Promise(r => setTimeout(r, ms));
         const C9 = await pg.evaluate(() => { const pv = document.querySelector('#ccr-host-zsa [data-ccdoc]'); const fig = pv.querySelector('.ccr-fig'), cap = pv.querySelector('.ccr-cap'), img = fig && fig.querySelector('svg,img'); const fr = fig && fig.getBoundingClientRect(), ir = img && img.getBoundingClientRect(); return { fig: fig && getComputedStyle(fig).textAlign, cap: cap && getComputedStyle(cap).textAlign, mid: fr && ir ? Math.abs((ir.left + ir.right) / 2 - (fr.left + fr.right) / 2) : null, wide: fr && ir ? ir.width < fr.width - 4 : false }; });
         const RW = fs.readFileSync(path.join(SITE, 'report_writer.js'), 'utf8'), PL = fs.readFileSync(path.join(SITE, 'plan_autopilot.js'), 'utf8');
         check('9  images and captions centered: the report frame (picture and caption), the plans, Word and the PDF', C9.fig === 'center' && C9.cap === 'center' && (C9.mid === null || C9.mid < 3) && /\.pla-cap\{[^}]*text-align:center/.test(PL) && /\.pla-fig\{[^}]*text-align:center/.test(PL) && /var caption = function \(anchor, text\) \{ return new D\.Paragraph\(\{ alignment: D\.AlignmentType\.CENTER/.test(RW) && /alignment: D\.AlignmentType\.CENTER, keepNext: true, children: \[new D\.ImageRun/.test(RW) && (RW.match(/doc\.text\(ln, W \/ 2, y, \{ align: 'center' \}\)/g) || []).length === 2, JSON.stringify(C9));
+        // 10 (11 Nov 2026, Waqas: "comments do not show in line with the selected phrase"): a report scrolled well down,
+        // words chosen with the real mouse, Comment pressed: the box is beside the words, and stays there once posted
+        await pg.evaluate(async () => { switchTab('cma'); await new Promise(r => setTimeout(r, 2500)); });
+        const bx = await pg.evaluate(() => {
+            const pv = document.querySelector('#view-cma [data-rc-doc]'); if (!pv) return null;
+            const tn = (function f(n) { if (n.nodeType === 3 && /assessment \(PASA\)/.test(n.textContent)) return n; for (const c of n.childNodes) { const x = f(c); if (x) return x; } return null; })(pv);
+            if (!tn) return null;
+            const i = tn.textContent.indexOf('assessment (PASA)'); tn.parentElement.scrollIntoView({ block: 'center' });
+            const r = document.createRange(); r.setStart(tn, i); r.setEnd(tn, i + 17); const b = r.getBoundingClientRect();
+            return { x1: b.left + 1, x2: b.right - 1, y: b.top + b.height / 2, scrolled: pv.scrollTop + window.scrollY };
+        });
+        let P10 = null;
+        if (bx) {
+            await pg.mouse.move(bx.x1, bx.y); await pg.mouse.down(); await pg.mouse.move(bx.x2, bx.y, { steps: 6 }); await pg.mouse.up(); await tick(400);
+            const pop = await pg.evaluate(() => { const b = document.querySelector('.rc-pop button'); if (!b) return null; const r = b.getBoundingClientRect(); return { x: r.left + 5, y: r.top + 5 }; });
+            if (pop) { await pg.mouse.move(pop.x, pop.y); await pg.mouse.down(); await pg.mouse.up(); await tick(600); }
+            const where = () => pg.evaluate(() => { const c = document.querySelector('#view-cma [data-rc-new], #view-cma .rc-card[data-rc-card]'), m = document.querySelector('#view-cma mark.rc-mark'); const vh = innerHeight; return (c && m) ? { card: Math.round(c.getBoundingClientRect().top), mark: Math.round(m.getBoundingClientRect().top), inView: m.getBoundingClientRect().top > 0 && m.getBoundingClientRect().bottom < vh, focus: document.activeElement && document.activeElement.tagName } : null; });
+            const d1 = await where();
+            await pg.keyboard.type('Say which revision.'); await pg.evaluate(() => SLReportComments.post()); await tick(600);
+            const d2 = await where();
+            P10 = { pop: !!pop, scrolled: bx.scrolled, draft: d1, posted: d2 };
+        }
+        check('10 a report scrolled down, words chosen with the mouse: the comment box opens in line with the words (within 6 px), the words stay in view with the box ready to type in, and it stays in line once posted', !!P10 && P10.pop && P10.scrolled > 300 && !!P10.draft && Math.abs(P10.draft.card - P10.draft.mark) <= 6 && P10.draft.inView && P10.draft.focus === 'TEXTAREA' && !!P10.posted && Math.abs(P10.posted.card - P10.posted.mark) <= 6, JSON.stringify(P10));
         check('8  no page errors', errs.length === 0, errs.slice(0, 3).join(' | '));
     } catch (e) { check('the browser part ran to the end', false, e && e.stack); }
     await browser.close(); srv.close();

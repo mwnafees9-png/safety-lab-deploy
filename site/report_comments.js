@@ -1,4 +1,12 @@
-/* report_comments.js (SLReportComments v1.0, 10 Nov 2026): Microsoft Office style live comments on every report.
+/* report_comments.js (SLReportComments v1.1, 11 Nov 2026; v1.0, 10 Nov 2026): Microsoft Office style live comments on every report.
+ *
+ * v1.1, Waqas, 11 Nov 2026: "comments do not show in line with the selected phrase"; "we just need it to show in line
+ * where you are commenting". Reproduced with a real mouse: the new comment's box was placed with a scroll position read
+ * before the box took the focus, and taking the focus scrolled the report to its top, so the box sat about 1,400 px
+ * below the words. Now every box is placed from where its words ARE (measured against the margin itself, which scrolls
+ * with the report), the draft's words are marked before anything is placed, the focus never scrolls the report, and the
+ * words chosen are brought back into view beside the box. Nothing else changed: the quoted words at the top of a box
+ * and Show the questions / Hide the questions are as they were.
  *
  * Waqas, 10 Nov 2026: "I want microsoft office style live commenting on every single report which the AI can ingest and
  * address"; "fix with AI option on the comments". The reports: the PRA, ZSA and CMA (the shared report frame,
@@ -25,7 +33,7 @@
  */
 (function (root) {
   'use strict';
-  var VERSION = '1.0';
+  var VERSION = '1.1';
   var KIND = 'report', SEP = '§';
   function S(v) { return String(v == null ? '' : v); }
   function E(s) { return S(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -165,10 +173,11 @@
     var pop0 = pv.querySelector('.rc-pop'); if (pop0) pop0.remove();
     var oldH = pv.querySelector(':scope > .rc-head'); if (oldH) oldH.remove();
     var showRes = !!ui.resolved[doc], ts = threads(doc, { resolved: showRes }), nres = threads(doc, { resolved: true }).filter(function (t) { return t.root.status === 'resolved'; }).length;
+    var drafting = !!(ui.draft && ui.draft.doc === doc);
     var head = d.createElement('div'); head.className = 'rc-head';
     head.innerHTML = '<span class="rc-t">Select words in the report to comment on them.</span>' + (nres ? '<button type="button" class="rc-b" onclick="SLReportComments.toggleResolved(' + J(doc) + ')">' + (showRes ? 'Hide resolved' : 'Show resolved (' + nres + ')') + '</button>' : '');
     pv.insertBefore(head, pv.firstChild);
-    var any = ts.length > 0 || !!(ui.draft && ui.draft.doc === doc);
+    var any = ts.length > 0 || drafting;
     pv.classList.toggle('rc-wide', any);
     // the questions beside the report fold away while comments show, until the person brings them back
     var cols = pv.closest ? pv.closest('.ccr-cols, .pla-cols') : null, fold = any && !ui.showQs[doc];
@@ -188,13 +197,26 @@
     placed.forEach(function (p) { html += cardHtml(doc, p.t, !p.m); });
     if (ui.draft && ui.draft.doc === doc) html += '<div class="rc-card rc-open rc-new" data-rc-new="1"><div class="rc-q">"' + E(ui.draft.anchor.quote.slice(0, 140)) + '"</div><textarea rows="3" data-rc-newtext="1" placeholder="Your comment"></textarea><div class="rc-bar"><button type="button" class="rc-b" data-rc-act="post" onclick="SLReportComments.post()">Comment</button><button type="button" class="rc-b" onclick="SLReportComments.cancel()">Cancel</button></div></div>';
     rail.innerHTML = html;
-    // line each card up with its words, never overlapping the one above
-    var top0 = 40, y = 0, pvTop = pv.getBoundingClientRect().top - pv.scrollTop;
-    var at = function (el) { return el ? el.getBoundingClientRect().top - pvTop : top0; };
+    // v1.1: the draft's words are marked BEFORE anything is placed, and every box is placed from where its words are
+    // now, measured against the margin itself (the margin scrolls with the report, so no scroll position is involved).
+    // The first version read the scroll position once, then gave the box the focus, which scrolled the report to its
+    // top: the box ended about as far below its words as the report had been scrolled.
+    var draftMark = null;
+    if (drafting) { var r0 = locate(pv, ui.draft.anchor, ui.draft.sec); if (r0) { mark(r0, 'draft', 'rc-draft rc-sel'); draftMark = pv.querySelector('mark.rc-mark.rc-draft'); } }
+    var top0 = 40, y = 0, railTop = rail.getBoundingClientRect().top;
+    var at = function (el) { return el ? Math.max(0, el.getBoundingClientRect().top - railTop) : top0; };
     var cards = rail.querySelectorAll('.rc-card');
-    placed.forEach(function (p, i) { var c = cards[i]; var want = p.m ? at(p.m) : top0; var top = Math.max(want, y); c.style.top = top + 'px'; y = top + c.offsetHeight + 8; });
-    if (ui.draft && ui.draft.doc === doc) { var nc = rail.querySelector('[data-rc-new]'); var dm = pv.querySelector('mark.rc-mark.rc-draft'); nc.style.top = Math.max(dm ? at(dm) : top0, y) + 'px'; var ta = nc.querySelector('textarea'); try { ta.focus(); } catch (_) {} }
-    if (ui.draft && ui.draft.doc === doc && !pv.querySelector('mark.rc-draft')) { var r0 = locate(pv, ui.draft.anchor, ui.draft.sec); if (r0) { mark(r0, 'draft', 'rc-draft rc-sel'); var nc2 = rail.querySelector('[data-rc-new]'), dm2 = pv.querySelector('mark.rc-draft'); if (nc2 && dm2) nc2.style.top = Math.max(at(dm2), y) + 'px'; } }
+    // boxes in the order of their words down the page, so one never pushes another past its own line more than needed
+    var order = placed.map(function (p, i) { return { c: cards[i], want: p.m ? at(p.m) : top0 }; });
+    if (drafting) { var nc = rail.querySelector('[data-rc-new]'); if (nc) order.push({ c: nc, want: draftMark ? at(draftMark) : top0, draft: true }); }
+    order.sort(function (a, b) { return a.want - b.want; });
+    order.forEach(function (o) { var top = Math.max(o.want, y); o.c.style.top = top + 'px'; y = top + o.c.offsetHeight + 8; });
+    if (drafting) {
+      var ta = rail.querySelector('[data-rc-new] textarea');
+      try { ta.focus({ preventScroll: true }); } catch (_) { try { ta.focus(); } catch (_2) {} }
+      // the layout may have moved (the questions fold away, the report gets a margin): bring the chosen words back into view
+      try { var tgt = draftMark || rail.querySelector('[data-rc-new]'); var vb = tgt.getBoundingClientRect(), vh = (d.defaultView || root).innerHeight || 800; if (vb.top < 80 || vb.bottom > vh - 120) tgt.scrollIntoView({ block: 'center' }); } catch (_) {}
+    }
     rail.style.height = y + 'px';
     if (!any) rail.remove();   // nothing to show: no margin at all
     pv.querySelectorAll('mark.rc-mark').forEach(function (m) { m.onclick = function (ev) { ev.stopPropagation(); var id = m.getAttribute('data-rc'); if (id && id !== 'draft') focus(id); }; });
