@@ -1,4 +1,4 @@
-// pra_autopilot.js (SLPraAuto v2.8, 10 Nov 2026: the AI drafts only once the questions are answered; v2.7 9 Nov 2026; v2.6 v2.5 v2.4 v2.3 9 Nov 2026; v2.2 9 Nov 2026; v2.1 8 Nov 2026): the PRA page.
+// pra_autopilot.js (SLPraAuto v2.9, 11 Nov 2026: a risk's section is written when it is first read; v2.8, 10 Nov 2026: the AI drafts only once the questions are answered; v2.7 9 Nov 2026; v2.6 v2.5 v2.4 v2.3 9 Nov 2026; v2.2 9 Nov 2026; v2.1 8 Nov 2026): the PRA page.
 // v2.3, Waqas, 9 Nov 2026: "I want the PRA reports to explain their methods their basis, the math, where we have multiple
 // impact zones, we should have 1 image per cone like in the rotor burst PRA 1 per engine and the cones be different distinct
 // colors, show the calculations, tell the whole story please"; "yeah needs to look clean and legible". Each risk the CAD model
@@ -51,7 +51,7 @@
 // Answers: projectConfig.praAuto = { v:1, answers: { qid: { pick, by, at } }, signed: { riskKey: { by, at } } }.
 (function (root) {
     'use strict';
-    var VERSION = '2.8';   // 2.8 10 Nov 2026: the AI drafts a risk's parts only once its questions are answered (aiReady);   // 2.7 9 Nov 2026: the loss figure drawn with squared connectors in their own lanes (SLCcaReport.flow);   // 2.6 9 Nov 2026: proposed mitigations, path to compliance and conclusion are the engineer's (written or AI drafted and accepted); the tool's part is the summary of results;   // 2.5 9 Nov 2026: the burst bands table names each kind of piece's color in the pictures;   // 2.4 9 Nov 2026: every particular risk its own report, picked from a dropdown, with a register;   // 2.3 9 Nov 2026: each section tells the whole story (method, basis, calculations per danger source, one 3D picture per source); 2.2: 3D model pictures per risk
+    var VERSION = '2.9';   // 2.9 11 Nov 2026: a risk's section is written when it is first read. 2.8 10 Nov 2026: the AI drafts a risk's parts only once its questions are answered (aiReady);   // 2.7 9 Nov 2026: the loss figure drawn with squared connectors in their own lanes (SLCcaReport.flow);   // 2.6 9 Nov 2026: proposed mitigations, path to compliance and conclusion are the engineer's (written or AI drafted and accepted); the tool's part is the summary of results;   // 2.5 9 Nov 2026: the burst bands table names each kind of piece's color in the pictures;   // 2.4 9 Nov 2026: every particular risk its own report, picked from a dropdown, with a register;   // 2.3 9 Nov 2026: each section tells the whole story (method, basis, calculations per danger source, one 3D picture per source); 2.2: 3D model pictures per risk
     var D2R = Math.PI / 180;
     function U() { return root.SLAutopilotUI; }
     function C() { return root.SLCadZonal; }
@@ -982,7 +982,15 @@
     function lcFirstW(s) { s = String(s || ''); return /^[A-Z]{2}|^[A-Z]-/.test(s) ? s : s.charAt(0).toLowerCase() + s.slice(1); }
     function _cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
     function _stop(s) { s = String(s || '').trim(); return /[.!?]$/.test(s) ? s : s + '.'; }
+    // 11 Nov 2026 (speed, same content): opening the page wrote out every risk's whole story although one is shown at
+    // a time. A section's blocks are now written when they are first read (the report frame reads only the part on
+    // screen; the whole report and Word read them all, as before) and kept for that section object.
     function section(row, ctx) {
+        var made = null;
+        return { id: row.praId, title: row.praId + ' ' + (row.threat || ''), tabLabel: { id: row.praId, name: row.threat || '' },
+            get blocks() { if (!made) made = _sectionFull(row, ctx).blocks; return made; } };
+    }
+    function _sectionFull(row, ctx) {
         var rs = _risksOf(row.praId), zones = zonesOf(row, rs), dm = _dyn(row.praId), b = [];
         var P = function (t, q) { var x = { k: 'p', text: t }; if (q) x.q = q; return x; };
         // 1. the risk and the question

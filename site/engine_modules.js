@@ -82,10 +82,16 @@ const BDD = (function () {
         e.nodeCount = nextId;
         return e;
     }
+    // 11 Nov 2026 (speed, same results): reset() used to allocate all eight tables again (2 MB) on every call, and a
+    // page that builds many small trees calls it thousands of times: on the demo that allocation was 6 of the 9 seconds
+    // the ZSA page took to open. A slot is empty when its uVal / cVal entry is 0, and the key arrays are read only
+    // behind a non-zero entry, so clearing those two arrays empties the tables exactly as new ones would. Tables that
+    // grew past the starting size are still given back and replaced, as before.
+    const _CAP0 = 1 << 16;
     function reset() {
         nextId = 2; nodes = [T0, T1];
-        uCap = 1 << 16; uMask = uCap - 1; uCount = 0; _allocU();
-        cCap = 1 << 16; cMask = cCap - 1; cCount = 0; _allocC();
+        if (uCap === _CAP0 && uVal) { uVal.fill(0); uCount = 0; } else { uCap = _CAP0; uMask = uCap - 1; uCount = 0; _allocU(); }
+        if (cCap === _CAP0 && cVal) { cVal.fill(0); cCount = 0; } else { cCap = _CAP0; cMask = cCap - 1; cCount = 0; _allocC(); }
     }
     function makeNode(varIdx, low, high) {
         if (low === high) return low;

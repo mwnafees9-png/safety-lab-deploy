@@ -26,8 +26,11 @@
  *   [N] live sync off: open from the cloud alone cleans up.
  *   [E] two screens clean up the same dirty project at once and both results meet: the merged event is there once.
  *   [P] pins and load order (these run first, and on their own where Playwright is not installed).
+ *   [T] (fta_dedupe.js 1.2) three copies left for review over weights alone are tidied away; a pair that really holds
+ *       work on both sides is said on both pages and in the tree list, opening the second version warns, and Merge
+ *       leaves one page under the original ID with the merge in the change log; all through the live shared copy.
  * MUTATION PROOFS (SL_CLEAN_MUTATE): nolive, nocloudopen, noliveupdate, twice, freshids, noflagrepair, notold,
- *   noretry, nolog, notimeout, nowritertimeout. Each turns this red.
+ *   noretry, nolog, notimeout, nowritertimeout, rawweight, norelook, copyonly, nowarn, nolistmark. Each turns this red.
  * Run: node --no-maglev --no-concurrent-sparkplug tests/regression_cloud_open_cleanup_20261111.test.js
  */
 'use strict';
@@ -55,6 +58,11 @@ function mutate(file, body) {
     }
     if (file === 'load_repair.js') { if (MUT === 'nocloudopen') rep("b = _wrap('_restoreProjectSnapshot', 'cloud-open')", 'b = true'); }
     if (file === 'fta_dedupe.js') {
+        if (MUT === 'rawweight') rep("if (n.weightLocked && _num(n.weight)) v.lockedWeight = 1;", "if (_num(n.weight)) v.weight = n.weight;");
+        if (MUT === 'norelook') rep("if (!copy || !copy.duplicateOf || !copy.dupReview || !copy.autoFcTree || copy.verifies) return;", "return;");
+        if (MUT === 'copyonly') rep("var copies = (p && !p.dupReview) ? _copiesOf(p) : [];", "var copies = [];");
+        if (MUT === 'nowarn') rep("if (_warned !== p.id) {", "if (false) {");
+        if (MUT === 'nolistmark') rep("var n = _copiesOf(p).length;", "var n = 0;");
         if (MUT === 'twice') rep("var listed = pc.retiredDuplicateTrees.some(function (r) { return r && r.page && String(r.page.id) === String(copy.id); });", 'var listed = false;');
         if (MUT === 'freshids') { rep('if (x.id == null || taken[String(x.id)]) {', 'if (true) {'); rep("if (orig.root.children.some(function (c) { return c && c.mergedFrom === copyId", "if (false && orig.root.children.some(function (c) { return c && c.mergedFrom === copyId"); }
     }
@@ -136,7 +144,7 @@ const NOSYNC = () => { try { localStorage.setItem('SLA_CRDT', '0'); } catch (_) 
 (async function main() {
     // ===== [P] pins and load order ========================================================================================
     const html = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8'), at = s => html.indexOf(s);
-    check('[P] pins: load_repair.js 1.0 before fta_dedupe.js 1.1 and stale_revive.js 1.1, after data_ops_modules.js and helpers_modules.js', at('load_repair.js?v=1.0') > 0 && at('load_repair.js?v=1.0') < at('fta_dedupe.js?v=1.1') && at('fta_dedupe.js?v=1.1') < at('stale_revive.js?v=1.1') && at('load_repair.js?v=1.0') > at('data_ops_modules.js?v=') && at('load_repair.js?v=1.0') > at('helpers_modules.js?v='));
+    check('[P] pins: load_repair.js 1.0 before fta_dedupe.js 1.2 and stale_revive.js 1.1, after data_ops_modules.js and helpers_modules.js', at('load_repair.js?v=1.0') > 0 && at('load_repair.js?v=1.0') < at('fta_dedupe.js?v=1.2') && at('fta_dedupe.js?v=1.2') < at('stale_revive.js?v=1.1') && at('load_repair.js?v=1.0') > at('data_ops_modules.js?v=') && at('load_repair.js?v=1.0') > at('helpers_modules.js?v='));
     check('[P] pins: crdt_sync.js 2.9, cloud_writer.js 1.4, save_state.js 3.7', at('crdt_sync.js?v=2.9') > 0 && at('cloud_writer.js?v=1.4') > 0 && at('save_state.js?v=3.7') > 0);
     const crdt = fs.readFileSync(path.join(SITE, 'crdt_sync.js'), 'utf8');
     check('[P] the live shared copy\'s save has no silent way out left', crdt.indexOf('if (res && res.error) return;') < 0 && crdt.indexOf('.catch(function () {});\n      } catch (_) {}\n    }, 5000);') < 0);
@@ -207,9 +215,9 @@ const NOSYNC = () => { try { localStorage.setItem('SLA_CRDT', '0'); } catch (_) 
             return { clean: clean, dirty: JSON.parse(JSON.stringify(_snapshotProject())), mergeInto: pick[5].id, topGate: pick[5].root.type + ':' + (pick[5].root.gateType || '') };
         });
         const cleanPages = made.clean.ftaPages.length;
-        const resetCloud = (state) => {
+        const resetCloud = (state, data) => {
             cloud.projects.length = 0; cloud.projects.push({ id: PID, workspace_id: 'ws-test-1', name: 'Cleanup test' });
-            cloud.project_documents.length = 0; cloud.project_documents.push({ project_id: PID, data: JSON.parse(JSON.stringify(made.dirty)), version: 167, updated_at: new Date().toISOString() });
+            cloud.project_documents.length = 0; cloud.project_documents.push({ project_id: PID, data: JSON.parse(JSON.stringify(data || made.dirty)), version: 167, updated_at: new Date().toISOString() });
             cloud.project_crdt.length = 0; if (state) cloud.project_crdt.push({ project_id: PID, state: state, updated_at: new Date().toISOString() });
         };
         resetCloud(null);
@@ -388,6 +396,71 @@ const NOSYNC = () => { try { localStorage.setItem('SLA_CRDT', '0'); } catch (_) 
         const e = await look(pg);
         check('[E] when the two results meet: still 32 pages, and the merged event is in the original once, not twice', e.pages === 32 && e.copies === 0 && e.extra === 1, { pages: e.pages, copies: e.copies, extra: e.extra });
         check('[E] the retired list holds each copy once', e.retired.length === 11 && new Set(e.retired).size === 11, e.retired.length);
+        await pg.ctx.close();
+
+        // ===== [T] three pairs left "for review" over weights alone, and one pair that really holds work on both sides ===
+        // (the live project on 10 Nov: each copy's events are all in its original; only the percent shares differ,
+        // because the original's gate has more inputs)
+        const pairs = JSON.parse(JSON.stringify(made.clean));
+        (function () {
+            let id = 880000;
+            const ev = (name, w) => { id++; return { id: id, logicalId: id, type: 'basic', name: name, displayId: 'BE-' + id, weight: w, probability: 1e-7, children: [] }; };
+            const page = pid => pairs.ftaPages.find(x => x.id === pid);
+            [['fc-auto-ac-FC-01', 4, 1], ['fc-auto-ac-FC-02', 12, 3], ['fc-auto-ac-FC-03', 6, 2]].forEach(([pid, nOrig, nCopy]) => {
+                const o = page(pid); o.root.children = [];
+                for (let i = 0; i < nOrig; i++) o.root.children.push(ev('Test cause ' + pid.slice(-5) + ' ' + (i + 1), 100 / nOrig));
+                const c = JSON.parse(JSON.stringify(o)); c.id = pid + '-mw88sosh'; c.autoFcTree.at = '2026-11-08T19:45:49.697Z';
+                c.root.id = ++id; c.root.logicalId = id;
+                c.root.children = c.root.children.slice(0, nCopy).map(n => { const x = ev(n.name, 100 / nCopy); return x; });
+                c.duplicateOf = pid; c.dupReview = { reason: '"' + c.root.children[0].name + '" has a different weight from the original', at: '2026-11-10T20:00:00.000Z' };
+                pairs.ftaPages.push(c);
+            });
+            // FC-04: the copy holds a branch of its own (a gate with two events): a real second version
+            const o4 = page('fc-auto-ac-FC-04'); o4.root.children = [ev('Shared cause one', 50), ev('Shared cause two', 50)];
+            const c4 = JSON.parse(JSON.stringify(o4)); c4.id = 'fc-auto-ac-FC-04-mw88sosi'; c4.autoFcTree.at = '2026-11-08T19:45:49.698Z'; c4.root.id = ++id; c4.root.logicalId = id;
+            c4.root.children = [ev('Shared cause one', 50), { id: ++id, logicalId: id, type: 'gate', gateType: 'AND', name: 'Branch only the second version holds', displayId: 'G-' + id, weight: 50, children: [ev('Branch event one', 50), ev('Branch event two', 50)] }];
+            pairs.ftaPages.push(c4);
+        })();
+        resetCloud(null, pairs);
+        pg = await openApp([OLD]);
+        await openProject(pg);
+        await until(() => cloud.project_crdt.length > 0 && String(cloud.project_crdt[0].state || '').length > 20000, 30000);
+        await tick(1500);
+        const t0 = await look(pg);
+        const stateT = cloud.project_crdt[0].state;
+        await pg.ctx.close();
+        resetCloud(stateT, pairs);
+        pg = await openApp([QUIET]);
+        await pg.evaluate(() => { window.__toasts = []; const st = window.showToast; window.showToast = function (m) { window.__toasts.push(String(m)); return typeof st === 'function' ? st.apply(this, arguments) : undefined; }; });
+        await openProject(pg);
+        await until(async () => (await look(pg)).pages === 33, 8000);
+        const t1 = await look(pg);
+        const flagged4 = await pg.evaluate(() => { const c = ftaPages.find(p => p.id === 'fc-auto-ac-FC-04-mw88sosi'); return c ? { of: c.duplicateOf, why: c.dupReview && c.dupReview.reason } : null; });
+        check('[T] the project as saved: three copies left for review over weights alone, plus a real pair not looked at yet (36 pages)', t0.pages === 36 && t0.review === 3, { pages: t0.pages, review: t0.review });
+        check('[T] opened on this build: the three weight-only copies are tidied away (their events are all in the original), 33 pages left', t1.pages === 33 && ['01', '02', '03'].every(x => t1.retired.indexOf('fc-auto-ac-FC-' + x + '-mw88sosh') >= 0) && t1.ids.indexOf('fc-auto-ac-FC-01-mw88sosh') < 0, { pages: t1.pages, retired: t1.retired });
+        const origT = ['fc-auto-ac-FC-01', 'fc-auto-ac-FC-02', 'fc-auto-ac-FC-03'].every(pid => t1.roots[pid] === JSON.stringify(pairs.ftaPages.find(x => x.id === pid).root));
+        check('[T] their originals are exactly as they were (4, 12 and 6 events, weights untouched)', origT);
+        check('[T] the pair that holds work on both sides stays, flagged with the reason (a branch of its own)', t1.review === 1 && flagged4 && flagged4.of === 'fc-auto-ac-FC-04' && /branch of its own/.test(String(flagged4.why)), flagged4);
+        const ui = async (pid) => { await pg.evaluate(id => { switchTab('fta'); openFTAPageById(id); if (window.SL_FTA_PICKER) window.SL_FTA_PICKER.render(true); }, pid); await tick(700); return pg.evaluate(() => { const b = document.getElementById('fta-dup-review'); const opts = Array.from(document.querySelectorAll('option')).map(o => o.textContent).filter(tx => /FC-04/.test(tx)); return { side: b ? b.getAttribute('data-side') : null, text: b ? b.textContent : '', buttons: b ? Array.from(b.querySelectorAll('button')).map(x => x.textContent) : [], opts: opts, toasts: window.__toasts.slice() }; }); };
+        const uo = await ui('fc-auto-ac-FC-04');
+        check('[T] the ORIGINAL says it has a second version, names it and why, and offers to open it, merge it or keep both', uo.side === 'original' && /has a second version/.test(uo.text) && /branch of its own/.test(uo.text) && uo.buttons.length === 3, uo);
+        check('[T] the tree list marks both: the original "Has a second version", the copy "Second version of"', uo.opts.some(x => /Has a second version to review and merge/.test(x)) && uo.opts.some(x => /Second version of/.test(x)), uo.opts);
+        const uc = await ui('fc-auto-ac-FC-04-mw88sosi');
+        check('[T] opening the second version warns: a notice on the page and a warning to work in the original', uc.side === 'copy' && /second version of/.test(uc.text) && /Work in the original/.test(uc.text) && uc.toasts.some(x => /second version of/.test(x) && /Work in the original/.test(x)), { side: uc.side, toasts: uc.toasts.slice(-2) });
+        await ui('fc-auto-ac-FC-04');
+        await pg.evaluate(() => document.querySelector('#fta-dup-review [data-act="merge"]').click());
+        await tick(1200);
+        const t2 = await look(pg);
+        const merged4 = await pg.evaluate(() => { const o = ftaPages.find(p => p.id === 'fc-auto-ac-FC-04'); const names = []; (function w(n) { if (!n) return; names.push(n.name); (n.children || []).forEach(w); })(o.root); return { names: names, jr: window.__jr.filter(x => x.k === 'tree-duplicate-retired' && /merged into the original by hand/.test(x.m)).length, bar: !!document.getElementById('fta-dup-review') }; });
+        check('[T] Merge it into this tree: one page under the original ID holding the branch, the second version in the retired list, the merge in the change log, the notice gone', t2.pages === 32 && t2.review === 0 && merged4.names.indexOf('Branch only the second version holds') >= 0 && merged4.names.indexOf('Branch event two') >= 0 && t2.retired.indexOf('fc-auto-ac-FC-04-mw88sosi') >= 0 && merged4.jr === 1 && !merged4.bar, { pages: t2.pages, merged: merged4, retired: t2.retired.length });
+        await until(() => cloud.project_documents[0].data.ftaPages.length === 32, 45000);
+        await tick(1500);
+        await pg.ctx.close();
+        pg = await openApp([OLD]);
+        await openProject(pg);
+        await tick(4000);
+        const t3 = await look(pg);
+        check('[T] the live shared copy holds the result (opened with the clean-ups off): 32 pages, nothing left for review', t3.pages === 32 && t3.review === 0 && t3.copies === 0, { pages: t3.pages, review: t3.review });
         await pg.ctx.close();
 
         check('no page errors in any opening', errs.length === 0, errs.slice(0, 4));

@@ -30,7 +30,7 @@ function mutate(file, body) {
 }
 const read = f => mutate(f, fs.readFileSync(path.join(SITE, f), 'utf8'));
 const HTML = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8');
-check('index.html loads fta_loops.js before fta_quant_modules.js, and the bumped engine pair', HTML.indexOf('fta_loops.js?v=1.0') > 0 && HTML.indexOf('fta_loops.js?v=') < HTML.indexOf('fta_quant_modules.js?v=') && /fta_engine\.js\?v=1\.13/.test(HTML) && /importScripts\('fta_engine\.js\?v=1\.13'\)/.test(fs.readFileSync(path.join(SITE, 'fta_worker.js'), 'utf8')));
+check('index.html loads fta_loops.js before fta_quant_modules.js, and the bumped engine pair', HTML.indexOf('fta_loops.js?v=1.0') > 0 && HTML.indexOf('fta_loops.js?v=') < HTML.indexOf('fta_quant_modules.js?v=') && /fta_engine\.js\?v=1\.1[3-9]/.test(HTML) && /importScripts\('fta_engine\.js\?v=1\.1[3-9]'\)/.test(fs.readFileSync(path.join(SITE, 'fta_worker.js'), 'utf8')));
 
 // ---------------------------------------------------------------------------- [A] the engine
 console.log('\n[A] the engine refuses a circle');

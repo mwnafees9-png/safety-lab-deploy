@@ -1,4 +1,4 @@
-// cma_autopilot.js (SLCmaAuto v1.5, 10 Nov 2026: the AI drafts only once the questions are answered; v1.4 10 Nov 2026; v1.3 9 Nov 2026; v1.2 v1.1 8 Nov 2026): the CMA Autopilot. The Common Mode Analysis written by answering plain
+// cma_autopilot.js (SLCmaAuto v1.6, 11 Nov 2026: a claim's questions are kept for the turn; v1.5, 10 Nov 2026: the AI drafts only once the questions are answered; v1.4 10 Nov 2026; v1.3 9 Nov 2026; v1.2 v1.1 8 Nov 2026): the CMA Autopilot. The Common Mode Analysis written by answering plain
 // questions, one independence claim at a time, with the CMA report built from the answers.
 //
 // Waqas, 8 Nov 2026: "PRA build and ZSA similar to the planing autopilot, ability to see the reports etc. can we do
@@ -53,7 +53,7 @@
 //     becomes a concern of the CMA, closed the way any concern is (a requirement, evidence or a written reason).
 (function (root) {
     'use strict';
-    var VERSION = '1.5';   // 1.5 10 Nov 2026: the AI drafts a report's parts only once every claim's questions are answered (aiReady);   // 1.3 9 Nov 2026: proposed mitigations, path to compliance and conclusion once per report, written or AI drafted and accepted;   // 1.2 9 Nov 2026: one report per system and one at the aircraft level, picked from a dropdown
+    var VERSION = '1.6';   // 1.6 11 Nov 2026: a claim's questions are kept for the turn. 1.5 10 Nov 2026: the AI drafts a report's parts only once every claim's questions are answered (aiReady);   // 1.3 9 Nov 2026: proposed mitigations, path to compliance and conclusion once per report, written or AI drafted and accepted;   // 1.2 9 Nov 2026: one report per system and one at the aircraft level, picked from a dropdown
 
     // ==== THE SWITCH ================================================================================================
     // Flip to true in phase 2, once the CMA report (cca_report.js) is on the page: the CMA table, its hidden entry form
@@ -257,7 +257,14 @@
             picked: [], fields: {}, complete: !free.length, parent: null, depth: 0, cma: null, cmaId: '' };
     }
     function uniqS(a) { return a.filter(function (x, i) { return a.indexOf(x) === i; }); }
+    // 11 Nov 2026 (speed, same results): a claim's questions were worked out again for every single question looked up
+    // (question(id) asks for the whole list to find one), so the page worked them out once per question per claim. They
+    // are now kept for the rest of the turn, like the full list ('qs'): the same memo, cleared by the same forget().
     function questionsFor(r) {
+        if (!r || r.internalId == null) return _questionsFor(r);
+        return memo('qf:' + S(r.internalId), function () { return _questionsFor(r); });
+    }
+    function _questionsFor(r) {
         var f = r.flow || null, out = [], gi = cgates(r), cm = critMap(), cats = catList();
         var head = T((r.cmaId ? r.cmaId + ' ' : '') + (r.subject || 'Common mode analysis'));
         // the AND gates relying on it

@@ -1,10 +1,16 @@
 // ============================================================================
-// fta_dedupe.js, v1.1, 8 Nov 2026: one fault tree per failure condition, cleaned up when a project opens.
+// fta_dedupe.js, v1.2, 8 Nov 2026: one fault tree per failure condition, cleaned up when a project opens.
 // v1.1, 11 Nov 2026 (live team data): it never took effect on a shared cloud project. It now runs after every way a
 // project arrives (load_repair.js: a file, open from the cloud, the live shared copy pulled in, a teammate's change),
 // and is safe to run twice and on two screens at once: a copy already in the retired list is not listed again, and an
 // event merged into the original keeps the id it had in the copy, so two screens that merge the same copy write the
 // same node and the live shared copy holds it once.
+// v1.2, 11 Nov 2026 (live team data): three copies stayed "for review" over a difference that was not one. A weight is
+// a percent share among the inputs of ONE gate, and the tool keeps the shares adding up to 100, so the same event
+// under a gate with 3 inputs and under one with 12 always has a different number. Weights are now compared as a
+// SPLIT among the events both trees hold (and a weight a person locked still counts); a copy already left for review
+// is looked at again on every run, so those three are tidied away on the next open. A pair that really does hold
+// work on both sides is now said on BOTH pages and in the tree list, with a warning when the second version is opened.
 //
 // Live student data, 8 to 9 Nov 2026: a collaborator's screen built the auto tree pages from their shells before
 // their nodes arrived (crdt_sync.js _ftaRecompose, root null), the sweep (fc_auto_trees.js before v1.8) did not see
@@ -42,7 +48,7 @@
 // ============================================================================
 (function (root) {
     'use strict';
-    var VERSION = '1.1';
+    var VERSION = '1.2';
 
     function _g(n) {
         try { var E = root.SLEnv; if (E && typeof E.get === 'function') { var v = E.get(n); if (v !== undefined) return v; } } catch (_) {}
@@ -87,7 +93,7 @@
     function _work(n, page) {
         var v = {};
         if (n.prescribedRate && _num(n.prescribedProb)) v.prescribedProb = n.prescribedProb;
-        if (_num(n.weight)) v.weight = n.weight;
+        if (n.weightLocked && _num(n.weight)) v.lockedWeight = 1;   // the number itself is a share: see _splitDiffers
         if (_num(n.lambda)) v.lambda = n.lambda;
         if ((page.mode || 'top-down') !== 'top-down' && _num(n.probability)) v.probability = n.probability;
         return v;
@@ -96,6 +102,21 @@
         return n.type === 'undeveloped' && !_kids(n).length && /^Decompose: causes of /.test(n.name || '') && !Object.keys(_work(n, page)).length;
     }
     function _same(a, b) { return Math.abs(a - b) <= 1e-9 * Math.max(Math.abs(a), Math.abs(b)); }
+    // Weights as a split. pairs: [{ c: copy node, o: its match in the original }] for the inputs of one gate of the copy.
+    // Each side's weights are scaled to add up to 1 over these same events (no weights at all on a side = an even
+    // split, which is what the tool hands out). Returns the name of the first event whose share differs, or null.
+    function _splitDiffers(pairs) {
+        if (pairs.length < 2) return null;
+        var side = function (k) {
+            var w = pairs.map(function (x) { return _num(x[k].weight) ? x[k].weight : 0; });
+            var sum = w.reduce(function (a, b) { return a + b; }, 0);
+            if (!(sum > 0)) return pairs.map(function () { return 1 / pairs.length; });
+            return w.map(function (x) { return x / sum; });
+        };
+        var cs = side('c'), os = side('o');
+        for (var i = 0; i < pairs.length; i++) if (Math.abs(cs[i] - os[i]) > 1e-4) return pairs[i].c.name || pairs[i].c.displayId || pairs[i].c.id;
+        return null;
+    }
     // { kind: 'nothing' | 'merge' | 'review', extras: [nodes to add], reason }
     function classify(copy, orig) {
         var om = {};
@@ -123,6 +144,13 @@
                     else extras.push(n);
                     if (!plain || parent !== cr) return;
                 }
+            }
+            // how this gate splits its budget among the inputs the original holds too
+            if (!why) {
+                var pairs = [];
+                _kids(n).forEach(function (c) { if (_isStub(c, copy)) return; var m = (om[_key(c)] || [])[0]; if (m) pairs.push({ c: c, o: m }); });
+                var diff = _splitDiffers(pairs);
+                if (diff) why = 'it splits the budget among its inputs differently from the original (at "' + diff + '")';
             }
             _kids(n).forEach(function (c) { w(c, n); });
         })(cr, null);
@@ -239,6 +267,17 @@
             var orig = _original(list);
             list.forEach(function (copy) { if (copy !== orig) _settle(copy, orig, out); });
         });
+        // a copy left for review earlier is looked at again: a rule that has since been corrected, or work that has
+        // since been brought into the original, lets it go; one a person chose to keep (dupKept) is never touched
+        _pages().slice().forEach(function (copy) {
+            if (!copy || !copy.duplicateOf || !copy.dupReview || !copy.autoFcTree || copy.verifies) return;
+            var orig = _byId(copy.duplicateOf);
+            if (!orig || !orig.root || !copy.root) return;
+            var c = classify(copy, orig);
+            if (c.kind === 'review') { if (copy.dupReview.reason !== c.reason) copy.dupReview.reason = c.reason; return; }
+            delete copy.duplicateOf; delete copy.dupReview;
+            _settle(copy, orig, out);
+        });
         _pendingN = out.pending;
         if (out.retired.length || out.review.length || out.merged.length) {
             _call('scheduleAutosave');
@@ -298,25 +337,50 @@
         return { ok: true, page: page };
     }
 
+    var _warned = null;   // the second version last warned about (one warning per opening)
     // ---- what the tree picker shows ------------------------------------------------------------------------------
     function _esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    function _copiesOf(p) { return _pages().filter(function (c) { return c && c.dupReview && String(c.duplicateOf) === String(p.id); }); }
     function label(p) {
-        if (!p || !p.dupReview) return '';
-        var o = _byId(p.duplicateOf);
-        return ' (Duplicate of ' + ((o && o.name) || p.duplicateOf) + ': holds work the original lacks, review and merge)';
+        if (!p) return '';
+        if (p.dupReview) {
+            var o = _byId(p.duplicateOf);
+            return ' (Second version of ' + ((o && o.name) || p.duplicateOf) + ': holds work the original lacks, review and merge)';
+        }
+        // 11 Nov 2026: the original says so too
+        var n = _copiesOf(p).length;
+        return n ? ' (Has ' + (n === 1 ? 'a second version' : n + ' other versions') + ' to review and merge)' : '';
     }
     function decorate(host, activeId) {
         if (typeof document === 'undefined' || !host) return;
         var bar = document.getElementById('fta-dup-review');
         var p = _byId(activeId);
-        if (!p || !p.dupReview) { if (bar) bar.remove(); return; }
+        var copies = (p && !p.dupReview) ? _copiesOf(p) : [];
+        if (!p || (!p.dupReview && !copies.length)) { if (bar) bar.remove(); _warned = null; return; }
         if (!bar) { bar = document.createElement('div'); bar.id = 'fta-dup-review'; bar.setAttribute('role', 'status'); host.appendChild(bar); }
-        bar.style.cssText = 'flex-basis:100%; margin-top:6px; padding:8px 12px; border:1px solid var(--color-warning, #b45309); background:var(--color-surface-2); font-size:12px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;';
-        bar.innerHTML = '<span><b>' + _esc(label(p).replace(/^ \(|\)$/g, '')) + '.</b> ' + _esc(p.dupReview.reason) + '.</span>' +
-            '<button type="button" class="ckpt-m-btn" data-act="merge">Merge into original</button>' +
-            '<button type="button" class="ckpt-m-btn" data-act="keep">Keep as its own tree</button>';
-        bar.querySelector('[data-act="merge"]').onclick = function () { var r = mergeIntoOriginal(p.id); if (r.ok) { _call('openFTAPageById', p.duplicateOf); _call('showToast', 'Merged into the original tree.', 'success', 4000); } };
-        bar.querySelector('[data-act="keep"]').onclick = function () { keepSeparate(p.id); _call('showToast', 'Kept as its own tree.', 'success', 4000); decorate(host, activeId); };
+        bar.style.cssText = 'flex-basis:100%; margin-top:6px; padding:8px 12px; border:1px solid var(--color-warning, #b45309); background:var(--color-surface-2); color:var(--color-text-primary); font-size:12px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;';
+        var copy = p.dupReview ? p : copies[0], orig = p.dupReview ? _byId(p.duplicateOf) : p;
+        var oName = (orig && orig.name) || copy.duplicateOf, cName = copy.name || copy.id;
+        if (p.dupReview) {
+            // the second version: say where the work belongs, every time it is opened
+            bar.setAttribute('data-side', 'copy');
+            bar.innerHTML = '<span><b>This is a second version of "' + _esc(oName) + '".</b> Two trees exist for the same failure condition, and this one holds work the original lacks (' + _esc(p.dupReview.reason) + '). Work in the original so the two do not drift further apart.</span>' +
+                '<button type="button" class="ckpt-m-btn" data-act="open">Open the original</button>' +
+                '<button type="button" class="ckpt-m-btn" data-act="merge">Merge into original</button>' +
+                '<button type="button" class="ckpt-m-btn" data-act="keep">Keep as its own tree</button>';
+            if (_warned !== p.id) { _warned = p.id; _call('showToast', 'This is a second version of "' + oName + '". Work in the original, or merge this one into it.', 'warning', 8000); }
+        } else {
+            // 11 Nov 2026: the original says so too (it showed nothing, so nobody working here knew)
+            bar.setAttribute('data-side', 'original');
+            _warned = null;
+            bar.innerHTML = '<span><b>This tree has a second version' + (copies.length > 1 ? ' (' + copies.length + ' of them)' : '') + '.</b> "' + _esc(cName) + '" was made for the same failure condition and holds work this one lacks (' + _esc(copy.dupReview.reason) + '). This is the one to work in.</span>' +
+                '<button type="button" class="ckpt-m-btn" data-act="open">Open the second version</button>' +
+                '<button type="button" class="ckpt-m-btn" data-act="merge">Merge it into this tree</button>' +
+                '<button type="button" class="ckpt-m-btn" data-act="keep">Keep both as separate trees</button>';
+        }
+        bar.querySelector('[data-act="open"]').onclick = function () { _call('openFTAPageById', p.dupReview ? copy.duplicateOf : copy.id); };
+        bar.querySelector('[data-act="merge"]').onclick = function () { var r = mergeIntoOriginal(copy.id); if (r.ok) { _call('openFTAPageById', orig ? orig.id : copy.duplicateOf); _call('showToast', 'Merged into the original tree. The second version is kept in the project\'s retired copies.', 'success', 5000); } };
+        bar.querySelector('[data-act="keep"]').onclick = function () { keepSeparate(copy.id); _call('showToast', 'Kept as its own tree.', 'success', 4000); decorate(host, activeId); };
     }
 
     // ---- once per project load, after the data is applied ---------------------------------------------------------
@@ -339,7 +403,7 @@
     else if (!_wrapLoad() && typeof root.addEventListener === 'function') root.addEventListener('DOMContentLoaded', _wrapLoad);
 
     var api = { VERSION: VERSION, run: run, pending: pending, classify: classify, identity: identity, restore: restore,
-        mergeIntoOriginal: mergeIntoOriginal, keepSeparate: keepSeparate, label: label, decorate: decorate, _repoint: _repoint };
+        mergeIntoOriginal: mergeIntoOriginal, keepSeparate: keepSeparate, label: label, decorate: decorate, copiesOf: _copiesOf, _repoint: _repoint };
     try { root.SLFtaDedupe = api; } catch (_) {}
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

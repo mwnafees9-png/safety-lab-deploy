@@ -1,5 +1,6 @@
 /* ============================================================================
  * Safety Lab Aero — cut-set enumeration Web Worker (#19)
+ * 11 Nov 2026 (v1.12): engine pin moved to fta_engine.js?v=1.14 (reset() clears its tables in place of allocating them again: same results, faster); the page spawns fta_worker.js?v=1.12.
  * 1 Nov 2026 (v1.11, item 45): engine pin moved to fta_engine.js?v=1.13 (no result through a circular transfer); the page spawns fta_worker.js?v=1.11.
  * 14 Oct 2026 (v1.10, F1): engine pin moved to fta_engine.js?v=1.12 (visits keyed by node, not id: ids repeat across transferred pages); the page spawns fta_worker.js?v=1.10.
  * 13 Oct 2026 (v1.9, fix G): engine pin moved to fta_engine.js?v=1.11 (SEQ gate, NOT gate with prime implicants); the page spawns fta_worker.js?v=1.9.
@@ -21,7 +22,7 @@
  * 13 Oct 2026 (v1.7, fix 3 merged): imports fta_engine.js v1.9 (Multiple Greek Letter common
  * cause events, NUREG/CR-5485, plus F4/F5); the page spawns this worker as fta_worker.js?v=1.8 (fix 6 merge).
  * ========================================================================== */
-importScripts('fta_engine.js?v=1.13');   // #7b: versioned, matching the page's tag: one engine, one version, both threads. FOUND STALE at 1.4 against a page on 1.5 (7 Aug): pinned by regression_bdd_budget so the pair cannot separate again.
+importScripts('fta_engine.js?v=1.14');   // #7b: versioned, matching the page's tag: one engine, one version, both threads. FOUND STALE at 1.4 against a page on 1.5 (7 Aug): pinned by regression_bdd_budget so the pair cannot separate again.
 self.onmessage = function (e) {
     var msg = e.data || {};
     try {

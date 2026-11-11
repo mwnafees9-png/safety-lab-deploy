@@ -4191,7 +4191,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="unc_bands.js?v=1.1" defer></script>
     <script src="table_find.js?v=1.0" defer></script>
     <script src="paginate.js?v=1.4" defer></script>
-    <script src="fta_engine.js?v=1.13" defer></script>
+    <script src="fta_engine.js?v=1.14" defer></script>
     <!-- 13 Oct 2026 (math audit F1/F8): SLTopBasis: one exact top-event number and one per-flight-hour time basis for every pass/fail screen. -->
     <script src="top_basis.js?v=1.0" defer></script>
     <!-- Phase 76 modularization — extracted modules (classic scripts, shared global scope). reliability_data first (pure data), then the leaf modules, all BEFORE safety_lab.js. -->
@@ -4270,7 +4270,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- P2 batch 6 — residual function layer (182 validated segments, 310 functions). NOTE: CutsetExplosionError intentionally overrides fta_engine.js's page-side copy, exactly as the monolith did. -->
     <!-- 16 Oct 2026: the shared AI inputs file ("safetylab-ai-inputs" v1, the same in Safety Lab, Sys Lab and Cert Lab); the source document store hashes with it. -->
     <script src="ai_inputs_exchange.js?v=1.0" defer></script>
-    <script src="misc_fn_modules.js?v=66.98" defer></script>
+    <script src="misc_fn_modules.js?v=66.99" defer></script>
     <script src="safety_lab.js?v=65.81" defer></script>
     <!-- Phase 66.34 — read access to the app's top-level lexical globals. MUST load
          after the declarations exist. Top-level `let` is NOT on window; anything that
@@ -4320,7 +4320,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- Phase 76 — these modules read safety_lab.js constants at definition time (or are only referenced at runtime), so they load AFTER the monolith. None are referenced at the monolith's top level. -->
     <script src="req_taxonomy.js?v=1.1" defer></script>
     <script src="assurance_modules.js?v=1.48" defer></script>
-    <script src="engine_modules.js?v=1.3" defer></script>
+    <script src="engine_modules.js?v=1.4" defer></script>
     <!-- Backlog #1 — AI confidence-tied-to-fidelity badges (born modular; deterministic verdicts from recorded provenance; decorates worksheets, feeds reports + evidence package). Loads BEFORE reports.js so final outputs pick up the labels. -->
     <script src="ai_badges.js?v=1.4" defer></script>
     <script src="autonomy_metrics.js?v=0.3" defer></script>
@@ -4476,7 +4476,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="engine_selftest.js?v=1.1" defer></script>
     <script src="ram_trace.js?v=1.12" defer></script>
     <script src="model_checks.js?v=1.06" defer></script>
-    <script src="tree_warm.js?v=1.6" defer></script>
+    <script src="tree_warm.js?v=1.7" defer></script>
     <script src="fault_sim.js?v=1.22" defer></script>
     <script src="tab_guard.js?v=1.4" defer></script>
     <script src="journal.js?v=1.2" defer></script>
@@ -4552,7 +4552,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="mass_actions.js?v=0.9" defer></script>
     <script src="mbsa_schema.js?v=1.1" defer></script>
     <script src="zonal_model.js?v=1.3" defer></script>
-    <script src="cad_zonal.js?v=1.8" defer></script>
+    <script src="cad_zonal.js?v=1.9" defer></script>
     <script src="pra_refs_data.js?v=1.4" defer></script>
     <script src="pra_models.js?v=1.20" defer></script>
     <!-- 14 Oct 2026: grounded AI for zonal and particular risk drafts (sources checked in code, nothing applied without acknowledgement). -->
@@ -4584,7 +4584,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="cca_report.js?v=2.1" defer></script>
     <script src="zsa_type_hazards.js?v=1.0" defer></script>
     <script src="zsa_autopilot.js?v=1.9" defer></script>
-    <script src="pra_autopilot.js?v=2.8" defer></script>
+    <script src="pra_autopilot.js?v=2.9" defer></script>
     <!-- 6 Nov 2026: the HF Autopilot (SLHfAuto): the human factors work through the design cycle, one plain question at a time, written into the HF tables -->
     <script src="hf_autopilot.js?v=2.1" defer></script>
     <!-- 6 Nov 2026: the Plan Autopilot. After autopilot_ui.js (the shared look), objectives_matrix.js (the objectives) and program_plan.js (the lanes). -->
@@ -4688,7 +4688,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- 8 Nov 2026 (live student data): fta_dedupe.js (SLFtaDedupe) cleans up duplicate auto trees once per project load, before the first sweep (copies with nothing extra are kept aside in projectConfig.retiredDuplicateTrees, extra events merged into the original, real work left flagged for review). stale_revive.js (SLStaleRevive) relinks rows marked stale when their function or failure condition comes back (asks when the name changed) and clears aircraft trees a system change wrongly flagged obsolete. After fc_auto_trees.js, rename_guard.js and safety_lab.js; fta_dedupe.js before stale_revive.js. -->
     <!-- 11 Nov 2026 (live team data): load_repair.js (SLLoadRepair) runs the load clean-ups after every way a project arrives: a file, open from the cloud, the live shared copy pulled in, a teammate's change. -->
     <script src="load_repair.js?v=1.0" defer></script>
-    <script src="fta_dedupe.js?v=1.1" defer></script>
+    <script src="fta_dedupe.js?v=1.2" defer></script>
     <script src="stale_revive.js?v=1.1" defer></script>
     <!-- 31 Oct 2026: comment_kinds.js (SLCommentKinds): review comments on every assessment (fault trees and their nodes, CCMR, MAC, CoFFE, resources, Markov, RBD, ETA, FRACAS, MSG-3, crew credit) and the rows ANEM may change when a comment asks. After assurance_modules.js (Review, Traceability). -->
     <script src="comment_kinds.js?v=1.1" defer></script>
@@ -4700,7 +4700,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="iface_reqs.js?v=1.0" defer></script>
     <!-- 8 Nov 2026: cma_autopilot.js (SLCmaAuto): the CMA Autopilot. Plain questions per independence claim (the gates, the claim, every common mode category, how each concern is closed), answered through SLCmaFlow into the CMA rows, and the CMA report content (one section per claim), inputs and outputs, and inline Edit / Add a CMA. After cma_flow.js and autopilot_ui.js. -->
     <script src="cma_claims.js?v=1.2" defer></script>
-    <script src="cma_autopilot.js?v=1.5" defer></script>
+    <script src="cma_autopilot.js?v=1.6" defer></script>
     <!-- 10 Nov 2026: pasa_autopilot.js (SLPasaAuto): the PASA Autopilot, one report for the aircraft with an appendix per function (cca_report.js 2.1 frame). After cma_claims.js (the tree pictures), req_trace.js and assurance_modules.js (AutoReq). -->
     <!-- 10 Nov 2026: req_trace.js (SLReqTrace): requirement IDs, the level of each requirement type, where each requirement is driven from. After assurance_modules.js (AutoReq) and req_basis.js; the Autopilots below use it. -->
     <script src="req_trace.js?v=1.1" defer></script>

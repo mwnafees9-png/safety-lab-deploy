@@ -62,7 +62,7 @@
 (function (root) {
     'use strict';
 
-    var VERSION = '1.4';   // 1.4 (17 Oct 2026): a box still estimated from the file gives no zone, risk or placement answer (estimatedParts)
+    var VERSION = '1.5';   // 1.5 (11 Nov 2026): a fault tree is built once per data change, not once per question. 1.4 (17 Oct 2026): a box still estimated from the file gives no zone, risk or placement answer (estimatedParts)
     var KINDS = ['rotorBurst', 'tireBurst', 'birdStrike', 'fire', 'fluidLeak', 'iceShedding', 'lightning', 'generic'];   // 14 Oct 2026: fluidLeak, iceShedding, lightning added (configurable volumes)
     var SHAPES = ['box', 'sphere', 'cone', 'disk-sector'];
     var UNITS = { mm: 1, cm: 10, m: 1000, 'in': 25.4, ft: 304.8 };
@@ -725,6 +725,31 @@
             _arr(n.children || n._children).forEach(walk); })(root);
         return out.sort(function (a, b) { return _cmp(a.id, b.id); });
     }
+    // 11 Nov 2026 (speed, same results): evaluate() built every fault tree again for every piece of equipment asked
+    // about, so a ZSA page with many zones built the same trees thousands of times (most of the 9 seconds it took to
+    // open on the demo). A tree's structure function depends only on the project's data, so it is now built once per
+    // data change (SLDataChange.gen()) and kept: the same engine call, the same object, asked about many times. With
+    // no data-change counter to trust, or with window.SL_ZONAL_TREE_MEMO_OFF = true, every call builds afresh as before.
+    var _treeMemo = { gen: null, by: null };
+    function _treeBuild(E, pg) {
+        var T = { dupIds: typeof E.duplicateNodeIds === 'function' ? E.duplicateNodeIds(pg.root) : [], built: null, error: null, _base: undefined };
+        if (!T.dupIds.length) { try { T.built = E.buildBDDFromFT(pg.root); } catch (e) { T.error = e || { name: 'error' }; } }
+        T.base = function () {
+            if (T._base === undefined) T._base = E.minOrder(T.built.bdd, new Set((T.built.varMeta || []).map(function (m, v) { return (m && m.synthetic === 'order') ? v : -1; }).filter(function (v) { return v >= 0; })));
+            return T._base;
+        };
+        return T;
+    }
+    function _treeOf(E, pg) {
+        var dc = root.SLDataChange, gen = (dc && typeof dc.gen === 'function') ? dc.gen() : null;
+        if (gen == null || root.SL_ZONAL_TREE_MEMO_OFF || typeof Map !== 'function') return _treeBuild(E, pg);
+        if (_treeMemo.gen !== gen || !_treeMemo.by) _treeMemo = { gen: gen, by: new Map() };
+        var hit = _treeMemo.by.get(pg);
+        if (hit && hit.root === pg.root) return hit.T;
+        var T = _treeBuild(E, pg);
+        _treeMemo.by.set(pg, { root: pg.root, T: T });
+        return T;
+    }
     function evaluate(sysIds, opts) {
         opts = opts || {};
         var E = _E();
@@ -735,15 +760,15 @@
         var trees = [], errors = [];
         if (!E || typeof E.buildBDDFromFT !== 'function' || typeof E.minOrder !== 'function') return { engine: false, lids: lids, trees: [], errors: [{ text: 'The fault tree engine is not loaded; no result is given rather than a guess.' }], untagged: EI.untagged, index: EI.byLid };
         _pages().slice().sort(function (a, b) { return _cmp(a.id, b.id); }).forEach(function (pg) {
-            var built, dupIds = typeof E.duplicateNodeIds === 'function' ? E.duplicateNodeIds(pg.root) : [];
+            var T = _treeOf(E, pg), built = T.built, dupIds = T.dupIds;
             if (dupIds.length) { errors.push({ pageId: pg.id, text: 'Fault tree ' + (pg.name || pg.id) + ' uses node id' + (dupIds.length > 1 ? 's ' : ' ') + dupIds.slice(0, 5).join(', ') + ' more than once in the page; no result for it.' }); return; }
-            try { built = E.buildBDDFromFT(pg.root); } catch (e) { errors.push({ pageId: pg.id, text: 'Fault tree ' + (pg.name || pg.id) + ' is too large for the engine (' + ((e && e.name) || 'error') + '); no result for it.' }); return; }
+            if (T.error) { errors.push({ pageId: pg.id, text: 'Fault tree ' + (pg.name || pg.id) + ' is too large for the engine (' + ((T.error && T.error.name) || 'error') + '); no result for it.' }); return; }
             if (!built || !built.bdd || built.bdd.isTerminal) return;
             var forced = new Set(), hit = [];
             built.lidToVar.forEach(function (v, lid) { if (lidSet[String(lid)]) { forced.add(v); hit.push(String(lid)); } });
             if (!hit.length) return;
             (built.varMeta || []).forEach(function (m, v) { if (m && m.synthetic === 'order') forced.add(v); });
-            var base = E.minOrder(built.bdd, new Set((built.varMeta || []).map(function (m, v) { return (m && m.synthetic === 'order') ? v : -1; }).filter(function (v) { return v >= 0; })));
+            var base = T.base();
             var after = E.minOrder(built.bdd, forced);
             trees.push({ pageId: pg.id, name: pg.name || String(pg.id), topId: pg.root.displayId || null, events: hit.sort(_cmp),
                          reached: after === 0 && base > 0, alreadyTrue: base === 0, additional: isFinite(after) ? after : null, fhaIds: _pageFhaIds(pg).map(String), nonMonotone: _nonMonoGates(pg.root) });
