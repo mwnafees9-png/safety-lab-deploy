@@ -54,7 +54,7 @@
 // Every number comes from SLTopBasis and the trees. window.SLPasaAuto.
 (function (root) {
     'use strict';
-    var VERSION = '2.2';   // 2.2 11 Nov 2026: a gate whose inputs are all held tighter than their shares says what they use of its budget
+    var VERSION = '2.3';   // 2.2 11 Nov 2026: a gate whose inputs are all held tighter than their shares says what they use of its budget
     function g(n) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(n); if (v !== undefined) return v; } } catch (_) {} try { return root[n]; } catch (_) { return undefined; } }
     function arr(v) { return Array.isArray(v) ? v : []; }
     function S(v) { return v == null ? '' : String(v); }
@@ -733,7 +733,7 @@
     function leftFn(fnId) {
         var f0 = fnOf(fnId), grs = fnGroups(fnId), RT = root.SLReqTrace, h = '';
         h += '<div class="paq-h">' + E(fnTitle(f0)) + '</div><div class="paq-x">' + E(grs.length === 1 ? 'One failure condition of this function has a safety effect.' : grs.length + ' failure conditions of this function have a safety effect.') + ' Each has its own questions below; what the project already holds is filled in and named.</div>';
-        grs.forEach(function (gr) { h += '<div class="paq-fcblock" data-paq-fcblock="' + E(gr.fcId) + '">' + leftFc(gr) + '</div>'; });
+        grs.forEach(function (gr) { h += '<div class="paq-fcblock" data-paq-fcblock="' + E(gr.fcId) + '">' + leftFc(gr) + genCard(fnId, gr) + '</div>'; });
         if (RT) {
             var lv = '<div class="slap-q">Requirement levels for ' + E(fnId) + '</div><div class="paq-x">Ticked on the front of the report. Change one here only if this function needs it.</div><table class="paq-t"><tbody>';
             RT.TYPES.forEach(function (t) {
@@ -741,7 +741,7 @@
                 lv += '<tr><td>' + E(t.name) + (own ? ' (this function)' : '') + '</td><td style="white-space:nowrap">' + RT.PASA_LEVELS.map(function (l) { var on = cur.levels.indexOf(l) >= 0; return '<button type="button" role="checkbox" aria-checked="' + on + '" class="paq-b' + (on ? ' on' : '') + '" onclick="SLPasaAuto.ui.level(' + J(t.id) + ',' + J(l) + ',' + J(fnId) + ')">' + (on ? '\u2713 ' : '') + E(l === 'aircraft' ? 'Aircraft' : 'Systems') + '</button>'; }).join('') + (own ? '<button type="button" class="paq-b" onclick="SLPasaAuto.ui.levelReset(' + J(t.id) + ',' + J(fnId) + ')">As the report</button>' : '') + '</td></tr>';
             });
             var nNew = 0; grs.forEach(function (gr) { reqEntries(reqsFor(gr)).forEach(function (e) { if (!(e.flow ? e.flow.state === 'in' : e.x.state === 'in')) nNew++; }); });
-            lv += '</tbody></table>' + (nNew ? '<div style="margin-top:8px"><button type="button" class="paq-b on" data-paq-acceptreq="' + E(fnId) + '" onclick="SLPasaAuto.ui.acceptReqs(' + J(fnId) + ')">Put the new and changed requirements for ' + E(fnId) + ' in the registers (aircraft and systems)</button></div>' : '<div class="paq-x" style="margin-top:6px">Every requirement for ' + E(fnId) + ' is in the registers.</div>');
+            lv += '</tbody></table>' + (nNew ? '<div style="margin-top:8px"><button type="button" class="paq-b on" data-paq-acceptreq="' + E(fnId) + '" onclick="SLPasaAuto.ui.acceptReqs(' + J(fnId) + ')">Generate the requirements for ' + E(fnId) + ' (' + nNew + ' new or changed)</button><div class="paq-x" style="margin-top:4px">AutoReq writes them from this analysis and puts them in the aircraft and system requirements.</div></div>' : '<div class="paq-x" style="margin-top:6px">Every requirement for ' + E(fnId) + ' is in the registers.</div>');
             h += card('fn.' + fnId + '.req', lv, !nNew);
         }
         return h;
@@ -838,9 +838,24 @@
     function levelReset(type, fnId) { var RT = root.SLReqTrace; if (!RT) return; RT.setLevels(type, null, { fn: fnId }); save(); done('fn.' + fnId + '.req'); }
     // put one function's requirements in the registers: each aircraft row ticked "aircraft" (AutoReq's own merge, by source),
     // then each flowed-down row in its system's requirements, traced to the aircraft row; one row per source, never two
-    function acceptReqs(fnId) {
+    // 11 Nov 2026 (Waqas: "the PASA must have the auto req generator in there too"; "generate requirement for this
+    // fuction/failure condition"): each failure condition has its own Generate button, and so does the function. Both run
+    // AutoReq on what the analysis holds and put the result in the registers; nothing is typed.
+    function waitingFor(gr) { var n = 0; reqEntries(reqsFor(gr)).forEach(function (e) { if (!(e.flow ? e.flow.state === 'in' : e.x.state === 'in')) n++; }); return n; }
+    function genCard(fnId, gr) {
+        var E = function (x) { return S(x).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }, J = function (x) { return E(JSON.stringify(x)); };
+        if (!root.SLReqTrace) return '';
+        var all = reqEntries(reqsFor(gr)).length, n = waitingFor(gr), f = gr.fcId;
+        var body = '<div class="slap-q">Requirements for ' + E(f) + '</div>';
+        if (!all) body += '<div class="paq-x">AutoReq has nothing to write for ' + E(f) + ' yet: its requirements come from the fault tree and the answers above.</div>';
+        else if (n) body += '<div class="paq-x">AutoReq has ' + n + ' requirement' + (n === 1 ? '' : 's') + ' for ' + E(f) + ' that ' + (n === 1 ? 'is' : 'are') + ' not in the registers yet, written from this analysis.</div><div style="margin-top:8px"><button type="button" class="paq-b on" data-paq-genreq="' + E(f) + '" onclick="SLPasaAuto.ui.acceptReqs(' + J(fnId) + ',' + J(f) + ')">Generate the requirements for ' + E(f) + '</button></div>';
+        else body += '<div class="paq-x">All ' + all + ' requirement' + (all === 1 ? '' : 's') + ' for ' + E(f) + ' ' + (all === 1 ? 'is' : 'are') + ' generated and in the registers.</div>';
+        return card('fc.' + f + '.req', body, !n);
+    }
+    function acceptReqs(fnId, fcId) {
         var AR = g('AutoReq'), m = merge(), RT = root.SLReqTrace; if (!AR || !m || !RT) return;
-        var grs = fnGroups(fnId), keepAc = [], flows = [];
+        var grs = fnGroups(fnId).filter(function (gr) { return fcId == null || S(gr.fcId) === S(fcId); }), keepAc = [], flows = [];
+        var before = 0; grs.forEach(function (gr) { before += waitingFor(gr); });
         grs.forEach(function (gr) { reqsFor(gr).forEach(function (x) { if (x.aircraft || !x.levels.length) keepAc.push(S(x.cand.reqSource.sourceId)); x.flows.forEach(function (fl) { if (fl.state !== 'in') flows.push({ x: x, fl: fl }); }); }); });
         var sub = { scope: m.scope || 'ac', isNew: arr(m.isNew).filter(function (c) { return keepAc.indexOf(S(c.reqSource.sourceId)) >= 0; }), isUpdated: arr(m.isUpdated).filter(function (u) { return keepAc.indexOf(S(u.next.reqSource.sourceId)) >= 0; }), unchanged: [], orphaned: [], migrations: [], migrationUnresolved: [] };
         try { if (sub.isNew.length || sub.isUpdated.length) AR.applyMerge(sub, { acceptNew: true, acceptUpdates: true, acceptOrphanRemoval: false }); } catch (e) { return msg('Not added: ' + (e && e.message || e), true); }
@@ -859,7 +874,9 @@
             if (news.length) { try { AR.applyMerge({ scope: 'sys-' + sysId, isNew: news, isUpdated: [], unchanged: [], orphaned: [], migrations: [], migrationUnresolved: [] }, { acceptNew: true, acceptUpdates: false, acceptOrphanRemoval: false }); } catch (e) { return msg('Not added to the ' + sysName(sysId) + ' requirements: ' + (e && e.message || e), true); } }
         });
         _rq.gen = -3; RT.ensureIds(); RT.syncLevels();
-        save(); done('fn.' + fnId + '.req');
+        var left = 0; grs.forEach(function (gr) { left += waitingFor(gr); });
+        try { var made = before - left, what = fcId != null ? S(fcId) : S(fnId); if (typeof root.showToast === 'function') root.showToast(made > 0 ? made + ' requirement' + (made === 1 ? '' : 's') + ' generated for ' + what + ' and put in the registers.' : 'Nothing new to generate for ' + what + '.', made > 0 ? 'success' : 'info', 5000); } catch (_) {}
+        save(); done(fcId != null ? 'fc.' + fcId + '.req' : 'fn.' + fnId + '.req');
     }
     // 11 Nov 2026: opens THAT tree (it opened the list of trees: the function it called does not exist)
     function openTree(pid) { try { if (typeof root.switchTab === 'function') root.switchTab('fta'); if (typeof root.openFTAPageById === 'function') root.openFTAPageById(pid); else if (root.SLTreeHomes) root.SLTreeHomes.open('pasa'); } catch (_) {} }

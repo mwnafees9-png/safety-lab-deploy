@@ -33,7 +33,7 @@
 // (AutoReq.applyMerge). Numbers from SLTopBasis and the trees. window.SLPssaAuto.
 (function (root) {
     'use strict';
-    var VERSION = '2.2';   // 2.2 11 Nov 2026: a gate whose inputs are all held tighter than their shares says what they use of its budget
+    var VERSION = '2.3';   // 2.2 11 Nov 2026: a gate whose inputs are all held tighter than their shares says what they use of its budget
     function g(n) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(n); if (v !== undefined) return v; } } catch (_) {} try { return root[n]; } catch (_) { return undefined; } }
     function L() { return root.SLPasaAuto && root.SLPasaAuto.lib; }
     function S(v) { return v == null ? '' : String(v); }
@@ -425,12 +425,12 @@
     function leftFn(sy, key) {
         var l = L(), E = l.E, J = l.J, fi = fnInfo(sy, key), grs = fnGroups(sy, key), RT = root.SLReqTrace, h = '';
         h += '<div class="paq-h">' + E(fnTitle(fi)) + '</div><div class="paq-x">' + E(grs.length === 1 ? 'One failure condition of this function has a safety effect.' : grs.length + ' failure conditions of this function have a safety effect.') + ' Each has its own questions below; what the project already holds is filled in and named.</div>';
-        grs.forEach(function (gr) { h += '<div class="paq-fcblock" data-psq-fcblock="' + E(gr.fcId) + '">' + leftFc(sy, gr) + '</div>'; });
+        grs.forEach(function (gr) { h += '<div class="paq-fcblock" data-psq-fcblock="' + E(gr.fcId) + '">' + leftFc(sy, gr) + genCard(sy, key, gr) + '</div>'; });
         if (RT) {
             var lv = '<div class="slap-q">Requirement levels for ' + E(key) + '</div><div class="paq-x">Ticked on the front of the report. Change one here only if this function needs it.</div><table class="paq-t"><tbody>';
             RT.TYPES.forEach(function (t) { var cur = RT.pssaLevels(t.id, sy.id, key), own = cur.from === 'function'; lv += '<tr><td>' + E(t.name) + (own ? ' (this function)' : '') + '</td><td style="white-space:nowrap">' + lvlButtons(t, cur.levels, key) + (own ? '<button type="button" class="paq-b" onclick="SLPssaAuto.ui.levelReset(' + J(t.id) + ',' + J(key) + ')">As the report</button>' : '') + '</td></tr>'; });
             var nNew = 0; grs.forEach(function (gr) { reqEntries(reqsFor(sy, gr)).forEach(function (e) { if (e.state !== 'in') nNew++; }); });
-            lv += '</tbody></table>' + (nNew ? '<div style="margin-top:8px"><button type="button" class="paq-b on" data-psq-acceptreq="' + E(key) + '" onclick="SLPssaAuto.ui.acceptReqs(' + J(key) + ')">Put the new and changed requirements for ' + E(key) + ' in the system requirements</button></div>' : '<div class="paq-x" style="margin-top:6px">Every requirement for ' + E(key) + ' is in the system requirements.</div>');
+            lv += '</tbody></table>' + (nNew ? '<div style="margin-top:8px"><button type="button" class="paq-b on" data-psq-acceptreq="' + E(key) + '" onclick="SLPssaAuto.ui.acceptReqs(' + J(key) + ')">Generate the requirements for ' + E(key) + ' (' + nNew + ' new or changed)</button><div class="paq-x" style="margin-top:4px">AutoReq writes them from this analysis and puts them in the system requirements.</div></div>' : '<div class="paq-x" style="margin-top:6px">Every requirement for ' + E(key) + ' is in the system requirements.</div>');
             h += card('fn.' + key + '.req', lv, !nNew);
         }
         return h;
@@ -484,16 +484,32 @@
     // system requirement (parentReqId), updated in place when it is already in the register
     // the rows at the levels ticked, through AutoReq; then each item row traced to its system row (parentReqId)
     // a row can depend on another accepted in the same go (a check requirement names the row it checks): a second pass settles it
-    function acceptReqs(key, again) {
+    // 11 Nov 2026 (Waqas: "and I mean PSSAs too"; "generate requirement for this fuction/failure condition"): each
+    // failure condition has its own Generate button, and so does the function. Both run AutoReq; nothing is typed.
+    function waitingFor(sy, gr) { var n = 0; reqEntries(reqsFor(sy, gr)).forEach(function (e) { if (e.state !== 'in') n++; }); return n; }
+    function genCard(sy, key, gr) {
+        var l = L(), E = l.E, J = l.J; if (!root.SLReqTrace) return '';
+        var all = reqEntries(reqsFor(sy, gr)).length, n = waitingFor(sy, gr), f = gr.fcId;
+        var body = '<div class="slap-q">Requirements for ' + E(f) + '</div>';
+        if (!all) body += '<div class="paq-x">AutoReq has nothing to write for ' + E(f) + ' yet: its requirements come from the fault tree and the answers above.</div>';
+        else if (n) body += '<div class="paq-x">AutoReq has ' + n + ' requirement' + (n === 1 ? '' : 's') + ' for ' + E(f) + ' that ' + (n === 1 ? 'is' : 'are') + ' not in the system requirements yet, written from this analysis.</div><div style="margin-top:8px"><button type="button" class="paq-b on" data-psq-genreq="' + E(f) + '" onclick="SLPssaAuto.ui.acceptReqs(' + J(key) + ',false,' + J(f) + ')">Generate the requirements for ' + E(f) + '</button></div>';
+        else body += '<div class="paq-x">All ' + all + ' requirement' + (all === 1 ? '' : 's') + ' for ' + E(f) + ' ' + (all === 1 ? 'is' : 'are') + ' generated and in the system requirements.</div>';
+        return card('fc.' + f + '.req', body, !n);
+    }
+    function acceptReqs(key, again, fcId, before0) {
         var sy = sysNow(), AR = g('AutoReq'), m = sy ? merge(sy) : null, RT = root.SLReqTrace; if (!sy || !AR || !m || !RT) return;
         var keep = [], kids = [];
-        fnGroups(sy, key).forEach(function (gr) { reqsFor(sy, gr).forEach(function (x) { if (!x.on) return; keep.push(S(x.cand.reqSource.sourceId)); if (x.at === 'item' && x.parent) kids.push(x); }); });
+        var mine = function () { return fnGroups(sy, key).filter(function (gr) { return fcId == null || S(gr.fcId) === S(fcId); }); };
+        var before = before0 != null ? before0 : mine().reduce(function (a, gr) { return a + waitingFor(sy, gr); }, 0);
+        mine().forEach(function (gr) { reqsFor(sy, gr).forEach(function (x) { if (!x.on) return; keep.push(S(x.cand.reqSource.sourceId)); if (x.at === 'item' && x.parent) kids.push(x); }); });
         var sub = { scope: m.scope || ('sys-' + sy.id), isNew: arr(m.isNew).filter(function (c) { return keep.indexOf(S(c.reqSource.sourceId)) >= 0; }), isUpdated: arr(m.isUpdated).filter(function (u) { return keep.indexOf(S(u.next.reqSource.sourceId)) >= 0; }), unchanged: [], orphaned: [], migrations: [], migrationUnresolved: [] };
         try { if (sub.isNew.length || sub.isUpdated.length) AR.applyMerge(sub, { acceptNew: true, acceptUpdates: true, acceptOrphanRemoval: false }); } catch (e) { return msg('Not added: ' + (e && e.message || e)); }
         kids.forEach(function (x) { var c = stored(sy, x.cand.reqSource.sourceId), p = stored(sy, x.parent.cand.reqSource.sourceId); if (c && p) c.parentReqId = S(p.internalId); });
         _rq.k = ''; RT.ensureIds(); RT.syncLevels();
-        if (!again && fnGroups(sy, key).some(function (gr) { return reqsFor(sy, gr).some(function (x) { return x.on && x.state !== 'in'; }); })) return acceptReqs(key, true);
-        save(); done('fn.' + key + '.req');
+        if (!again && mine().some(function (gr) { return reqsFor(sy, gr).some(function (x) { return x.on && x.state !== 'in'; }); })) return acceptReqs(key, true, fcId, before);
+        var left = mine().reduce(function (a, gr) { return a + waitingFor(sy, gr); }, 0);
+        try { var made = before - left, what = fcId != null ? S(fcId) : S(key); if (typeof root.showToast === 'function') root.showToast(made > 0 ? made + ' requirement' + (made === 1 ? '' : 's') + ' generated for ' + what + ' and put in the system requirements.' : 'Nothing new to generate for ' + what + '.', made > 0 ? 'success' : 'info', 5000); } catch (_) {}
+        save(); done(fcId != null ? 'fc.' + fcId + '.req' : 'fn.' + key + '.req');
     }
 
     // ---- outputs and acceptance (the old PSSA checklist) --------------------------------------------------------------------

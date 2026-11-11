@@ -1,4 +1,4 @@
-// cca_report.js (SLCcaReport v2.1, 10 Nov 2026: a third heading level, the front drawn on its own; v2.0 10 Nov 2026: reports with a front and appendices, the dropdown picks the front or one appendix, parts written once per report (the PASA and PSSA Autopilots); v1.9 10 Nov 2026: the AI drafts only once the questions are answered; live comments in the margin; images and captions centered; v1.8 10 Nov 2026; v1.7 9 Nov 2026; v1.6 9 Nov 2026; v1.5 9 Nov 2026; v1.4 9 Nov 2026; v1.3 9 Nov 2026; v1.2 8 Nov 2026): the shared report frame of the PRA, ZSA and CMA Autopilots.
+// cca_report.js (SLCcaReport v2.2, 11 Nov 2026: an answer takes the report to the text it wrote and the question stays put; v2.1, 10 Nov 2026: a third heading level, the front drawn on its own; v2.0 10 Nov 2026: reports with a front and appendices, the dropdown picks the front or one appendix, parts written once per report (the PASA and PSSA Autopilots); v1.9 10 Nov 2026: the AI drafts only once the questions are answered; live comments in the margin; images and captions centered; v1.8 10 Nov 2026; v1.7 9 Nov 2026; v1.6 9 Nov 2026; v1.5 9 Nov 2026; v1.4 9 Nov 2026; v1.3 9 Nov 2026; v1.2 8 Nov 2026): the shared report frame of the PRA, ZSA and CMA Autopilots.
 // v1.8 (10 Nov 2026): Waqas: "we also need to fix how we are not using the full width of the page for the text", for all the
 // reports. Paragraphs, leads, lists, captions and the written parts now run the full width of the document column, the
 // same width as the tables (the 78ch and 980px caps are gone). A section may carry { k:'html', html } (preview only, never in
@@ -124,7 +124,7 @@
 // text (live counts appear only in the panel when asked), plain words, no em dashes.
 (function (root) {
     'use strict';
-    var VERSION = '2.1';   // 2.1 10 Nov 2026: a third heading level (A.1.1); with appendices the front on screen draws the front only, each appendix when picked (a section's blocks may be a getter, worked out only when drawn);   // 2.0 10 Nov 2026: reports with a front and appendices (spec.appendices), the dropdown picks the front or one appendix (tabs.parts), parts written once per report (spec.reportAuthored, { k:'rauth' });   // 1.9 10 Nov 2026: the AI drafts a part only once its questions are answered (spec.aiReady);   // 1.8 10 Nov 2026: text the full width of the document column; { k:'html' } preview-only blocks;   // 1.7 9 Nov 2026: column diagrams with squared connectors in their own lanes, never through a box, lit on hover (flow);   // 1.6 9 Nov 2026: the parts the engineer writes (spec.authored): write it or draft it with the AI, accepted by a person;   // 1.5 9 Nov 2026: every subject its own report, picked from one dropdown, with a register (spec.reports)   // 1.4 9 Nov 2026: pictures placed in the story (shotslot), per-source pictures ticked by default; 1.3: 3D model pictures (spec.shots)
+    var VERSION = '2.2';   // 2.2 11 Nov 2026: after an answer the report goes to the text it wrote (the nearest text of the same subject when the answer's own id is not on a block) and the question answered stays where it was on screen.   // 2.1 10 Nov 2026: a third heading level (A.1.1); with appendices the front on screen draws the front only, each appendix when picked (a section's blocks may be a getter, worked out only when drawn);   // 2.0 10 Nov 2026: reports with a front and appendices (spec.appendices), the dropdown picks the front or one appendix (tabs.parts), parts written once per report (spec.reportAuthored, { k:'rauth' });   // 1.9 10 Nov 2026: the AI drafts a part only once its questions are answered (spec.aiReady);   // 1.8 10 Nov 2026: text the full width of the document column; { k:'html' } preview-only blocks;   // 1.7 9 Nov 2026: column diagrams with squared connectors in their own lanes, never through a box, lit on hover (flow);   // 1.6 9 Nov 2026: the parts the engineer writes (spec.authored): write it or draft it with the AI, accepted by a person;   // 1.5 9 Nov 2026: every subject its own report, picked from one dropdown, with a register (spec.reports)   // 1.4 9 Nov 2026: pictures placed in the story (shotslot), per-source pictures ticked by default; 1.3: 3D model pictures (spec.shots)
     function E(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
     function J(v) { return E(JSON.stringify(v)); }
     function g(name) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(name); if (v !== undefined) return v; } } catch (_) {} try { return root[name]; } catch (_) { return undefined; } }
@@ -980,6 +980,8 @@
                 + bar + '</div>'
                 + nodePanel() + '<div class="ccr-prev" data-ccdoc="1">' + (ui0.adding ? editForm(null) : '') + html + '</div></div></div></div>';
             var pv = h.querySelector('[data-ccdoc]'); if (pv) { pv.scrollTop = scroll; wire(pv); }
+            if (!h._ccAnchor) { h._ccAnchor = true; h.addEventListener('pointerdown', noteAnchor, true); h.addEventListener('mousedown', noteAnchor, true); }
+            holdAnchor(h);
             // v1.9: live comments in the margin of the preview (report_comments.js)
             if (pv && root.SLReportComments) { try { root.SLReportComments.decorate(pv); } catch (e) { try { console.warn('[report comments]', e); } catch (_) {} } }
             var tb = h.querySelector('[data-cctabs]'); if (tb) wireTabs(tb);
@@ -1037,8 +1039,24 @@
             }
             var h = document.getElementById('ccr-host-' + key); var pv = h && h.querySelector('[data-ccdoc]'); if (!pv) return false;
             var els = /^sec:/.test(target) ? [pv.querySelector('[data-ccsec="' + cssq(target.slice(4)) + '"]')] : Array.prototype.slice.call(pv.querySelectorAll('[data-ccq="' + cssq(target) + '"]'));
-            els = els.filter(Boolean); if (!els.length) return false;
-            pv.scrollTop = Math.max(0, els[0].offsetTop - 90);
+            els = els.filter(Boolean);
+            // v2.2 (11 Nov 2026, Waqas: "it should automatically take you to that text that was just added"): an answer whose
+            // own text carries another question's id (a table row that changes owner once answered, a part several answers
+            // write together) used to light nothing and leave the report where it was. It now goes to the nearest text of the
+            // same subject: the text whose id shares the most leading parts with the answer's ("fc.FC-01.trace.sys-eps" goes to
+            // the FC-01 text about how the systems feed it), never to another subject's.
+            if (!els.length && !/^sec:/.test(target)) {
+                var parts = String(target).split(/[./]/), best = 0, hit = [];
+                Array.prototype.forEach.call(pv.querySelectorAll('[data-ccq]'), function (el) {
+                    var p2 = String(el.getAttribute('data-ccq')).split(/[./]/), n = 0;
+                    while (n < parts.length && n < p2.length && parts[n] === p2[n]) n++;
+                    if (n > best) { best = n; hit = [el]; } else if (n === best && n > 0 && hit.length < 1) hit.push(el);
+                });
+                if (best >= Math.min(2, parts.length - 1) && best > 0) els = hit;
+            }
+            if (!els.length) return false;
+            // measured on screen, so it holds whatever the preview sits in
+            pv.scrollTop = Math.max(0, pv.scrollTop + (els[0].getBoundingClientRect().top - pv.getBoundingClientRect().top) - 90);
             els.forEach(function (el) { el.classList.remove('ccr-flash'); void el.offsetWidth; el.classList.add('ccr-flash'); });
             ui0.lit = { target: target, at: Date.now() };
             return true;
@@ -1053,6 +1071,37 @@
         }
         function cssq(s) { return String(s).replace(/["\\]/g, '\\$&'); }
         // v1.5: an answer or a pick that names a section ('sec:<id>') opens that section's report first
+        // v2.2 (11 Nov 2026, Waqas: "not just jump around"): the question just answered stays where it was on screen. The
+        // list of questions changes height when it is redrawn (a follow-up appears, a done one folds), which moved the
+        // question the person was on, sometimes off the screen. The control last pressed is remembered with its place;
+        // after the redraw the same control is put back at that place by scrolling whatever scrolls it.
+        var _anchor = null;
+        function noteAnchor(ev) {
+            try {
+                var t = ev.target && ev.target.closest ? ev.target.closest('[onclick],[onchange]') : null;
+                if (!t || (t.closest('[data-ccdoc]'))) { _anchor = null; return; }
+                var card = t.closest('[data-ccqbox],[data-paq],[data-cmq-qid],.ccr-q,.paq-card,.cmq-q') || null;
+                _anchor = { oc: t.getAttribute('onclick') || t.getAttribute('onchange') || '', top: t.getBoundingClientRect().top, at: Date.now(),
+                    cardSel: card ? (card.getAttribute('data-ccqbox') != null ? '[data-ccqbox="' + cssq(card.getAttribute('data-ccqbox')) + '"]' : card.getAttribute('data-paq') != null ? '[data-paq="' + cssq(card.getAttribute('data-paq')) + '"]' : null) : null, cardTop: card ? card.getBoundingClientRect().top : null };
+            } catch (_) { _anchor = null; }
+        }
+        function scrollerOf(el) {
+            for (var n = el && el.parentElement; n && n !== document.body && n !== document.documentElement; n = n.parentElement) {
+                var cs = getComputedStyle(n); if (/(auto|scroll)/.test(cs.overflowY) && n.scrollHeight > n.clientHeight + 2) return n;
+            }
+            return null;
+        }
+        function holdAnchor(h) {
+            var a = _anchor; if (!a || Date.now() - a.at > 2500 || typeof document === 'undefined') return;
+            try {
+                var el = null, was = a.top;
+                Array.prototype.some.call(h.querySelectorAll('[onclick],[onchange]'), function (x) { if (x.closest('[data-ccdoc]')) return false; if ((x.getAttribute('onclick') || x.getAttribute('onchange') || '') === a.oc) { el = x; return true; } return false; });
+                if (!el && a.cardSel) { el = h.querySelector(a.cardSel); was = a.cardTop; }
+                if (!el) return;
+                var delta = el.getBoundingClientRect().top - was; if (Math.abs(delta) < 2) return;
+                var sc = scrollerOf(el); if (sc) sc.scrollTop += delta; else (document.defaultView || root).scrollBy(0, delta);
+            } catch (_) {}
+        }
         function answered(qid) {
             if (tabsOn() && qid && /^sec:/.test(qid)) { var sq = String(qid).slice(4), rq = safe(function () { return repOfSection(sq); }, null), wq = rq ? (partsOn() ? rq.id + '::' + sq : rq.id) : null; if (rq && tab() !== wq) setTab(wq, { render: false }); }
             ui0.flash = qid || null; ui0.msg = null; render();

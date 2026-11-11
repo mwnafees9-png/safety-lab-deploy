@@ -1,4 +1,4 @@
-// cma_autopilot.js (SLCmaAuto v1.6, 11 Nov 2026: a claim's questions are kept for the turn; v1.5, 10 Nov 2026: the AI drafts only once the questions are answered; v1.4 10 Nov 2026; v1.3 9 Nov 2026; v1.2 v1.1 8 Nov 2026): the CMA Autopilot. The Common Mode Analysis written by answering plain
+// cma_autopilot.js (SLCmaAuto v1.7, 11 Nov 2026: Raise a requirement starts from the requirement the tool writes; v1.6, 11 Nov 2026: a claim's questions are kept for the turn; v1.5, 10 Nov 2026: the AI drafts only once the questions are answered; v1.4 10 Nov 2026; v1.3 9 Nov 2026; v1.2 v1.1 8 Nov 2026): the CMA Autopilot. The Common Mode Analysis written by answering plain
 // questions, one independence claim at a time, with the CMA report built from the answers.
 //
 // Waqas, 8 Nov 2026: "PRA build and ZSA similar to the planing autopilot, ability to see the reports etc. can we do
@@ -53,7 +53,7 @@
 //     becomes a concern of the CMA, closed the way any concern is (a requirement, evidence or a written reason).
 (function (root) {
     'use strict';
-    var VERSION = '1.6';   // 1.6 11 Nov 2026: a claim's questions are kept for the turn. 1.5 10 Nov 2026: the AI drafts a report's parts only once every claim's questions are answered (aiReady);   // 1.3 9 Nov 2026: proposed mitigations, path to compliance and conclusion once per report, written or AI drafted and accepted;   // 1.2 9 Nov 2026: one report per system and one at the aircraft level, picked from a dropdown
+    var VERSION = '1.7';   // 1.7 11 Nov 2026: Raise a requirement starts from the requirement the tool writes. 1.6 11 Nov 2026: a claim's questions are kept for the turn. 1.5 10 Nov 2026: the AI drafts a report's parts only once every claim's questions are answered (aiReady);   // 1.3 9 Nov 2026: proposed mitigations, path to compliance and conclusion once per report, written or AI drafted and accepted;   // 1.2 9 Nov 2026: one report per system and one at the aircraft level, picked from a dropdown
 
     // ==== THE SWITCH ================================================================================================
     // Flip to true in phase 2, once the CMA report (cca_report.js) is on the page: the CMA table, its hidden entry form
@@ -296,10 +296,30 @@
         out.forEach(function (q) { q.cma = r.internalId; q.cmaId = S(r.cmaId); });
         return out;
     }
+    // 11 Nov 2026 (Waqas: "this should be linked to our auto-req generator"): "Raise a requirement" no longer starts from
+    // an empty box. The requirement is written by the tool, the same way every time, from what the project already
+    // holds: the common mode category the concern came from, the gates the claim rests on and the inputs claimed
+    // independent. The engineer reads it, changes it if needed and saves; AutoReq then files it as before (generator
+    // cma-concern, traced to the CMA and its gates). Same inputs, same words.
+    function reqDraft(r, cc) {
+        if (!r || !cc) return '';
+        var gs = cgates(r).map(gateInfo).filter(function (x) { return x && !x.gone; });
+        var gateWords = gs.length ? listJoin(gs.map(function (x) { return x.id; })) : '';
+        var seen = {}, inputs = []; gs.forEach(function (x) { (x.inputs || []).forEach(function (n) { n = T(n); if (n && !seen[n]) { seen[n] = 1; inputs.push(n); } }); });
+        // the inputs are failure events ("... lane A fails"), so they are quoted and said to happen, never to "fail"
+        var who = inputs.length >= 2 ? 'more than one of these at once: ' + listJoin(inputs.map(function (n) { return '"' + n + '"'; })) : 'more than one input at once';
+        var at = gateWords ? ' (the inputs of ' + gateWords + ')' : '';
+        // the category: the questionnaire's own, else the words before the colon of a concern the tool found ("Shared equipment bays: ...")
+        var m = /^questionnaire (.+)$/.exec(S(cc.from)), cat = m ? catPlain(m[1]).name : '';
+        if (!cat) { var head = /^([^:]{3,60}):\s/.exec(S(cc.text)); if (head) cat = T(head[1]); }
+        if (cat) return T('The design shall ensure that no single failure, error or event in the common mode category "' + cat + '" can cause ' + who + at + '.');
+        var what = T(S(cc.text).replace(/[.\s]+$/, ''));
+        return T('The design shall ensure that the common cause recorded as concern ' + cc.id + (what && what.length <= 120 ? ' ("' + what + '")' : '') + ' cannot cause ' + who + at + '.');
+    }
     function concernQ(r, cc, parent, depth) {
         var id = qid(r, 'concern', cc.id);
         return { id: id, kind: 'single', group: '', text: 'How is concern ' + cc.id + ' closed?', intro: T(cc.text) + (cc.from === 'live detection' ? ' Found live in the fault trees: it defeats the claim until it is closed.' : ''), concern: cc.id,
-            options: OPT_CONCERN, picked: concernPick(cc) ? [concernPick(cc)] : [], fields: { text: S(cc.reqText || ''), mitigation: S(cc.mitigation), evidence: cc.raise ? '' : S(cc.backedBy), reason: S(cc.acceptWhy) },
+            options: OPT_CONCERN, picked: concernPick(cc) ? [concernPick(cc)] : [], draft: { text: reqDraft(r, cc) }, fields: { text: S(cc.reqText || ''), mitigation: S(cc.mitigation), evidence: cc.raise ? '' : S(cc.backedBy), reason: S(cc.acceptWhy) },
             complete: concernDone(cc), parent: parent, depth: depth, who: whoOf(r, id) };
     }
     // every question, in the order they are asked: the start question, then claim by claim (critical first)
@@ -809,7 +829,7 @@
         + '.cmq textarea,.cmq input[type=text]{font:inherit;font-size:13px;padding:6px 8px;border-radius:7px;border:1px solid var(--color-border-strong,#c7cbd1);width:100%;box-sizing:border-box;margin-top:6px;background:var(--color-surface-1,#fff);color:inherit}'
         + '.cmq-row{display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap}.cmq-btn{font:inherit;font-size:12.5px;font-weight:600;padding:6px 12px;border-radius:8px;border:1px solid var(--color-border-strong,#c7cbd1);background:var(--color-surface-1,#fff);color:inherit;cursor:pointer}.cmq-btn.p{background:#1A6EF2;border-color:#1A6EF2;color:#fff}'
         + '.cmq-claims{display:flex;flex-direction:column;gap:4px;max-height:300px;overflow:auto;margin:0 0 10px}.cmq-claim{font:inherit;text-align:left;display:flex;justify-content:flex-start;gap:8px;align-items:center;width:100%;padding:7px 10px;border-radius:8px;border:1px solid var(--color-border,#e3e5e8);background:var(--color-surface-1,#fff);color:inherit;cursor:pointer}.cmq-claim.on{border-color:#1A6EF2;background:rgba(26,110,242,.06)}.cmq-cid{font-weight:700;font-size:12.5px;flex:none}.cmq-cs{flex:1;min-width:0;font-size:12.5px}'
-        + '.cmq-gapt{font-size:12px;font-weight:600;color:#9A3412}.cmq-err{font-size:12.5px;font-weight:600;color:#B42318;margin-top:6px}'
+        + '.cmq-drafted{font-size:12px;margin:2px 0 6px;color:var(--color-text-primary,#101216)}body.theme-dark .cmq-drafted{color:#E8EAED}.cmq-gapt{font-size:12px;font-weight:600;color:#9A3412}.cmq-err{font-size:12.5px;font-weight:600;color:#B42318;margin-top:6px}'
         + 'body.theme-dark .cmq{color:#E8EAED}body.theme-dark .cmq-claim,body.theme-dark .cmq-q,body.theme-dark .cmq-opt,body.theme-dark .cmq textarea,body.theme-dark .cmq input[type=text],body.theme-dark .cmq-btn{background:#1E232B !important;color:#E8EAED !important;border-color:#3A414C}'
         + 'body.theme-dark .cmq-claim.on,body.theme-dark .cmq-opt.on{background:rgba(106,166,255,.10) !important;border-color:#6AA6FF}body.theme-dark .cmq-opt.on .cmq-mk{border-color:#6AA6FF;background:#6AA6FF;box-shadow:inset 0 0 0 2.5px #15181E}body.theme-dark .cmq-mk{border-color:#9AA1AD}'
         + '.cmj-gh{font-weight:700;font-size:12.5px;margin:12px 0 2px;text-transform:none}.cmj-cat{margin:6px 0 10px}.cmj-cn{font-weight:600;font-size:13px}.cmj-ci{font-size:12.5px;margin:2px 0 4px}.cmj-opts{display:flex;gap:14px;flex-wrap:wrap;font-size:13px}.cmj textarea{font:inherit;font-size:13px;padding:6px 8px;border-radius:7px;border:1px solid var(--color-border-strong,#c7cbd1);width:100%;box-sizing:border-box;margin-top:4px;background:var(--color-surface-1,#fff);color:inherit}'
@@ -820,7 +840,10 @@
     function needBoxes(q, o) {
         var on = q.picked.indexOf(o.id) >= 0; if (!on || !o.needs) return '';
         var ph = { why: 'Why (it goes into the report as written)', text: q.id.slice(-6) === '/claim' ? 'The claim, in one sentence' : 'The design shall ...', mitigation: 'The mitigation: what keeps the shared cause from failing more than one input', evidence: 'The evidence that backs it: a test, an analysis or a document reference', reason: 'Why it is acceptable as it stands' };
-        return '<div data-cmq-fields="' + E(q.id) + '">' + o.needs.map(function (k) { return '<textarea rows="2" data-cmq-field="' + E(k) + '" placeholder="' + E(ph[k]) + '">' + E(q.fields[k] || '') + '</textarea>'; }).join('')
+        // 11 Nov 2026: a box with nothing saved yet shows what the tool wrote for it (q.draft), marked as such until saved
+        var drafted = false;
+        return '<div data-cmq-fields="' + E(q.id) + '">' + o.needs.map(function (k) { var own = q.fields[k] || '', dr = (!own && q.draft && q.draft[k]) || ''; if (dr) drafted = true; return '<textarea rows="' + (dr ? 3 : 2) + '" data-cmq-field="' + E(k) + '"' + (dr ? ' data-cmq-drafted="1"' : '') + ' placeholder="' + E(ph[k]) + '">' + E(own || dr) + '</textarea>'; }).join('')
+            + (drafted ? '<div class="cmq-drafted" data-cmq-draftnote="1">Written by the tool from the category, the gates and their inputs. Change it if you need to, then Save: it goes to the requirements page as written.</div>' : '')
             + '<div class="cmq-row"><button type="button" class="cmq-btn p" data-cmq-save="' + E(q.id) + '" onclick="SLCmaAuto.ui.saveFields(\'' + jsq(q.id) + '\',\'' + jsq(o.id) + '\', this)">Save</button></div></div>';
     }
     function qHtml(q) {
@@ -1174,7 +1197,7 @@
     if (root.document && typeof root.addEventListener === 'function') root.addEventListener('load', function () { try { applyTableSwitch(); defineFrame(); } catch (_) {} });
     try { applyTableSwitch(); } catch (_) {}
 
-    var api = { VERSION: VERSION, HIDE_CMA_TABLE_UI: HIDE_CMA_TABLE_UI, tableHidden: tableHidden, setTableHidden: setTableHidden, applyTableSwitch: applyTableSwitch,
+    var api = { VERSION: VERSION, reqDraft: reqDraft, HIDE_CMA_TABLE_UI: HIDE_CMA_TABLE_UI, tableHidden: tableHidden, setTableHidden: setTableHidden, applyTableSwitch: applyTableSwitch,
         questions: questions, question: question, answer: answer, setWhy: setWhy, toggleGate: toggleGate, subscribe: subscribe,
         claims: claims, statusOf: statusOf, statusWords: statusWords, draftClaim: draftClaim, ownerOf: ownerOf, gateInfo: gateInfo, categoriesPlain: catList,
         reportSections: reportSections, reportIntro: reportIntro, reportIO: reportIO, reportOutputs: reportOutputs, blocksFor: blocksFor,
