@@ -20,7 +20,12 @@
  *   [J] after an answer whose text carries another question's id, the report still goes to that subject's text; a
  *       question answered in a long list stays where it was on screen.
  *   [X] pins and headers.
- * MUTATION PROOFS (SL_GENREQ_MUTATE): nodraft, samewords, nogenpasa, nogenpssa, nonear, noanchor. Each turns this red.
+ *   [R] (pasa_autopilot.js 2.4) Waqas: "this is a shared resource its requirement will be generated from its most
+ *       conservative instance": a shared resource has one requirement, on the system that provides it, from the
+ *       strictest budget any fault tree gives it; with no event tagged as the resource the PASA says so and offers no
+ *       number; Generate files one requirement however many failure conditions use it.
+ * MUTATION PROOFS (SL_GENREQ_MUTATE): nodraft, samewords, nogenpasa, nogenpssa, nonear, noanchor, loosest, noresreq,
+ *   invented. Each turns this red.
  * Run: node --no-maglev --no-concurrent-sparkplug tests/regression_generated_requirements_20261111.test.js
  */
 'use strict';
@@ -38,6 +43,9 @@ function src(file) {
         if (MUT === 'samewords') rep("var m = /^questionnaire (.+)$/.exec(S(cc.from)), cat = m ? catPlain(m[1]).name : '';", "var m = null, cat = 'a category';");
     }
     if (file === 'pasa_autopilot.js' && MUT === 'nogenpasa') rep("leftFc(gr) + genCard(fnId, gr) + '</div>'", "leftFc(gr) + '</div>'");
+    if (file === 'pasa_autopilot.js' && MUT === 'loosest') rep("var gov = uses.slice().sort(function (a, b) { return a.p - b.p; })[0] || null;", "var gov = uses.slice().sort(function (a, b) { return b.p - a.p; })[0] || null;");
+    if (file === 'pasa_autopilot.js' && MUT === 'noresreq') rep("options: opts }) + rbox + ((w && w.where === 'none')", "options: opts }) + ((w && w.where === 'none')");
+    if (file === 'pasa_autopilot.js' && MUT === 'invented') rep("x = by[S(r.id)] || by[S(r.key).replace(/^res:/, '')] || null; if (!x) return null;", "x = by[S(r.id)] || by[S(r.key).replace(/^res:/, '')] || by[Object.keys(by)[0]] || { cand: { text: 'The probability of loss of it shall not exceed 1.00e-9 per flight.', reqSource: { sourceId: 'x' } }, state: 'new', sysId: 'sys-hyd-a', uses: [], merge: { isNew: [], isUpdated: [] } };");
     if (file === 'pssa_autopilot.js' && MUT === 'nogenpssa') rep("leftFc(sy, gr) + genCard(sy, key, gr) + '</div>'", "leftFc(sy, gr) + '</div>'");
     if (file === 'cca_report.js') {
         if (MUT === 'nonear') rep("if (!els.length && !/^sec:/.test(target)) {", "if (false) {");
@@ -48,7 +56,7 @@ function src(file) {
 
 (async function main() {
     const html = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8');
-    check('[X] pins: cma_autopilot.js 1.7, pasa_autopilot.js 2.3, pssa_autopilot.js 2.3, cca_report.js 2.2; headers the same', ['cma_autopilot.js?v=1.7"', 'pasa_autopilot.js?v=2.3"', 'pssa_autopilot.js?v=2.3"', 'cca_report.js?v=2.2"'].every(x => html.indexOf(x) > 0) && /SLCmaAuto v1\.7/.test(fs.readFileSync(path.join(SITE, 'cma_autopilot.js'), 'utf8').slice(0, 200)) && /SLCcaReport v2\.2/.test(fs.readFileSync(path.join(SITE, 'cca_report.js'), 'utf8').slice(0, 200)));
+    check('[X] pins: cma_autopilot.js 1.7, pasa_autopilot.js 2.4, pssa_autopilot.js 2.3, cca_report.js 2.2; headers the same', ['cma_autopilot.js?v=1.7"', 'pasa_autopilot.js?v=2.4"', 'pssa_autopilot.js?v=2.3"', 'cca_report.js?v=2.2"'].every(x => html.indexOf(x) > 0) && /SLCmaAuto v1\.7/.test(fs.readFileSync(path.join(SITE, 'cma_autopilot.js'), 'utf8').slice(0, 200)) && /SLCcaReport v2\.2/.test(fs.readFileSync(path.join(SITE, 'cca_report.js'), 'utf8').slice(0, 200)));
     const EM = String.fromCharCode(0x2014);
     check('[X] no em dash in this test', fs.readFileSync(__filename, 'utf8').indexOf(EM) < 0);
 
@@ -165,6 +173,44 @@ function src(file) {
         check('[P] pressing it puts that failure condition\'s requirements in the registers (' + P.added + ' rows), says how many, and the button gives way to "generated and in the registers"', !P.none && P.added > 0 && P.added >= P.waiting && !P.still && /generated and in the registers/.test(P.after) && new RegExp('^' + P.waiting + ' requirements? generated for ' + P.fc).test(P.toast), P);
         const S2 = await gen('pssa');
         check('[S] PSSA: the same for a system failure condition, into the system requirements', !S2.none && S2.label === 'Generate the requirements for ' + S2.fc && /^Generate the requirements for /.test(S2.fnLabel) && S2.added > 0 && !S2.still && /generated and in the system requirements/.test(S2.after) && /generated for /.test(S2.toast), S2);
+        // ===== [R] a shared resource: one requirement, from its strictest use ===========================================
+        const R = await pg.evaluate(async () => {
+            const vis = e => e.getBoundingClientRect().width > 0;
+            const openWith = async (selr) => { const sel = Array.from(document.querySelectorAll('select')).find(x => (x.getAttribute('onchange') || '').indexOf('"pasa"') >= 0 && (x.getAttribute('onchange') || '').indexOf("'tab'") >= 0 && vis(x)); const tabs = Array.from(sel.options).map(o => o.value).filter(x => /::fn:/.test(x)); for (const t of tabs) { SLCcaReport.act('pasa', 'tab', t); await new Promise(r => setTimeout(r, 500)); if (document.querySelector(selr)) return t; } return null; };
+            switchTab('pasa'); await new Promise(r => setTimeout(r, 1800));
+            const out = {};
+            // before any event is tagged: the tool says there is no use to take a budget from, and offers no number
+            out.noneTab = await openWith('[data-paq-resnone]');
+            out.none = (document.querySelector('[data-paq-resnone]') || {}).textContent || '';
+            out.boxBefore = !!document.querySelector('[data-paq-resreq]');
+            // two events in two aircraft trees are tagged as the same resource, with different budgets
+            const tagged = [];
+            ftaPages.forEach(p => { if (tagged.length >= 2 || p.verifies || p.treeLevel !== 'aircraft' || !/^PASA/.test(p.name || '') || /seeded/.test(p.name || '')) return; let done = false; (function w(n) { if (!n || done) return; if (n.type === 'basic' && !n.sysNode && !n.externalSource && typeof n.probability === 'number' && n.probability > 0) { n.identity = { kind: 'resource', resourceId: 'RES-02', providerSystemId: 'sys-hyd-a' }; tagged.push({ page: p.name, p: n.probability }); done = true; return; } (n.children || []).forEach(w); })(p.root); });
+            scheduleAutosave(); await new Promise(r => setTimeout(r, 300));
+            out.tagged = tagged;
+            const strict = tagged.slice().sort((a, b) => a.p - b.p)[0], loose = tagged.slice().sort((a, b) => b.p - a.p)[0];
+            out.strict = strict; out.differ = strict.p < loose.p;
+            switchTab('pasa'); await new Promise(r => setTimeout(r, 800));
+            out.tab = await openWith('[data-paq-resreq]');
+            const box = document.querySelector('[data-paq-resreq]');
+            out.box = box ? box.textContent : '';
+            out.btn = (document.querySelector('[data-paq-genres]') || {}).textContent || '';
+            const rows = () => systemsData.reduce((a, sy) => a.concat((sy.req || []).filter(q => q && !q.deleted && q.reqSource && q.reqSource.generator === 'fta-resource').map(q => ({ sys: sy.id, id: q.id, text: q.text }))), []);
+            out.rows0 = rows().length;
+            const b1 = document.querySelector('[data-paq-genres]'); if (b1) b1.click(); await new Promise(r => setTimeout(r, 1200));
+            out.rows1 = rows();
+            out.toast = window.__toasts.slice(-1)[0] || '';
+            const pv = Array.from(document.querySelectorAll('[data-ccdoc]')).find(vis);
+            out.report = pv ? /Its own requirement, generated from its strictest use/.test(pv.textContent) && pv.textContent.indexOf(strict.page) >= 0 : false;
+            // pressed again wherever else it shows: still one requirement
+            for (let i = 0; i < 3; i++) { const b = document.querySelector('[data-paq-genres]'); if (!b) break; b.click(); await new Promise(r => setTimeout(r, 700)); }
+            out.rows2 = rows().length;
+            return out;
+        });
+        check('[R] a shared resource with no event tagged in any fault tree: the PASA says there is no use to take a budget from, and offers no requirement and no number', /no fault tree event is tagged as this resource/.test(R.none) && !R.boxBefore, { none: R.none.slice(0, 120), box: R.boxBefore });
+        check('[R] two fault trees use the resource with different budgets: its requirement is shown, generated from the strictest use, which is named (' + (R.strict && R.strict.page) + '), with both uses counted', R.differ && /generated from its strictest use/.test(R.box) && R.box.indexOf('from its strictest use (' + R.strict.page) >= 0 && /2 uses in all/.test(R.box) && /shall not exceed/.test(R.box) && /^Generate the requirement for /.test(R.btn), { box: R.box.slice(0, 300), btn: R.btn });
+        check('[R] Generate puts ONE requirement in the providing system\'s requirements (AutoReq, fta-resource), says so, and the report table shows it with the use that governs', R.rows0 === 0 && R.rows1.length === 1 && R.rows1[0].sys === 'sys-hyd-a' && /shall not exceed/.test(R.rows1[0].text) && /is generated and in the/.test(R.toast) && R.report, { rows: R.rows1, toast: R.toast, report: R.report });
+        check('[R] pressed again from other failure conditions: still one requirement for the resource', R.rows2 === 1, R.rows2);
         check('no page errors', errs.length === 0, errs.slice(0, 3));
     } catch (e) { check('the browser part ran to the end', false, e && e.stack); }
     await browser.close(); srv.close();

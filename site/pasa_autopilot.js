@@ -54,7 +54,7 @@
 // Every number comes from SLTopBasis and the trees. window.SLPasaAuto.
 (function (root) {
     'use strict';
-    var VERSION = '2.3';   // 2.2 11 Nov 2026: a gate whose inputs are all held tighter than their shares says what they use of its budget
+    var VERSION = '2.4';   // 2.2 11 Nov 2026: a gate whose inputs are all held tighter than their shares says what they use of its budget
     function g(n) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(n); if (v !== undefined) return v; } } catch (_) {} try { return root[n]; } catch (_) { return undefined; } }
     function arr(v) { return Array.isArray(v) ? v : []; }
     function S(v) { return v == null ? '' : String(v); }
@@ -229,6 +229,53 @@
     function cmas() { return arr(g('cmaData')).filter(function (c) { return c && !c.suggested; }); }
     function cmaLabel(c) { return S(c.cmaId || ('CMA ' + c.internalId)) + (c.subject ? ' ' + T(c.subject) : ''); }
     function resWhere(gr, r) { return fcStore(gr.fcId).res[r.key] || null; }
+    // 11 Nov 2026 (Waqas: "this is a shared resource its requirement will be generated from its most conservative
+    // instance"): a shared resource has ONE requirement, on the system that provides it, at the strictest budget any
+    // fault tree gives it. AutoReq already works that out (generator fta-resource) for every event tagged as that
+    // resource in a fault tree (the event's identity: "Interface / common resource"); the PASA did not show it, so the
+    // shared resource question could only point at a review. resReq(r) finds that one requirement: its words, the use
+    // that governs, every use with its budget, and whether it is in the provider's requirements yet. A resource with
+    // no tagged event has no use to take a budget from: null, and the PASA says so (never a number from elsewhere).
+    var _resq = { gen: -2, by: null };
+    function resReqs() {
+        var G = memoGen(); if (_resq.gen === G && G !== -1 && _resq.by) return _resq.by;
+        var AR = g('AutoReq'), by = {};
+        if (AR) {
+            var provs = {}; arr(g('resourcesData')).forEach(function (r) { arr(r && r.providedBy).forEach(function (x) { provs[S(x)] = 1; }); });
+            Object.keys(provs).forEach(function (sysId) {
+                var m = safe(function () { return AR.generate(undefined, 'sys-' + sysId); }, null); if (!m) return;
+                var take = function (c, state) { if (!c || !c.reqSource || c.reqSource.generator !== 'fta-resource') return; var ctx = c.reqSource.context || {}; by[S(ctx.resourceId)] = { cand: c, state: state, scope: 'sys-' + sysId, sysId: sysId, uses: arr(ctx.uses), p: ctx.pAllocated, merge: m }; };
+                arr(m.isNew).forEach(function (c) { take(c, 'new'); });
+                arr(m.isUpdated).forEach(function (u) { take(u.next, 'changed'); });
+                arr(m.unchanged).forEach(function (u) { take(u.next, 'in'); });
+            });
+        }
+        _resq = { gen: G, by: by }; return by;
+    }
+    function resReq(r) {
+        if (!r || r.kind !== 'resource') return null;
+        var by = resReqs(), x = by[S(r.id)] || by[S(r.key).replace(/^res:/, '')] || null; if (!x) return null;
+        var pages = arr(g('ftaPages')), pageName = function (id) { var pg = pages.filter(function (q) { return q && S(q.id) === S(id); })[0]; return pg ? T(pg.name || pg.id) : S(id); };
+        var uses = x.uses.map(function (u) { return { page: pageName(u.page), pageId: S(u.page), p: u.p, consumer: u.consumer ? sysName(u.consumer) : '' }; });
+        var gov = uses.slice().sort(function (a, b) { return a.p - b.p; })[0] || null;
+        var row = storedSys(x.sysId, x.cand.reqSource.sourceId);
+        return { text: T(x.cand.text), state: x.state, sysId: x.sysId, provider: sysName(x.sysId), uses: uses, gov: gov, id: row && row.id ? S(row.id) : '', sourceId: S(x.cand.reqSource.sourceId), x: x };
+    }
+    function pWords(p) { return (typeof p === 'number' && isFinite(p)) ? p.toExponential(2).replace(/e([+-])0?(\d+)$/, function (_, sg, d) { return ' x 10^' + (sg === '-' ? '-' : '') + d; }) : 'not set'; }
+    function resReqWords(rr) { return rr ? (rr.id ? rr.id + ': ' : '') + rr.text + ' On ' + rr.provider + ', from its strictest use' + (rr.gov ? ' (' + rr.gov.page + ', ' + pWords(rr.gov.p) + ' per flight' + (rr.uses.length > 1 ? '; ' + rr.uses.length + ' uses in all' : '') + ')' : '') + '.' + (rr.state === 'in' ? '' : ' Not in the ' + rr.provider + ' requirements yet.') : ''; }
+    function genResReq(fcId, key) {
+        var gr = groups().filter(function (x) { return S(x.fcId) === S(fcId); })[0]; if (!gr) return;
+        var r = resources(gr).filter(function (x) { return x.key === key; })[0], rr = resReq(r), AR = g('AutoReq'), RT = root.SLReqTrace; if (!rr || !AR) return msg('There is no requirement to generate for it yet.', true);
+        if (rr.state !== 'in') {
+            var sid = rr.sourceId, m = rr.x.merge;
+            var sub = { scope: rr.x.scope, isNew: arr(m.isNew).filter(function (c) { return S(c.reqSource.sourceId) === sid; }), isUpdated: arr(m.isUpdated).filter(function (u) { return S(u.next.reqSource.sourceId) === sid; }), unchanged: [], orphaned: [], migrations: [], migrationUnresolved: [] };
+            try { AR.applyMerge(sub, { acceptNew: true, acceptUpdates: true, acceptOrphanRemoval: false }); } catch (e) { return msg('Not added: ' + (e && e.message || e), true); }
+            _resq.gen = -3; _rq.gen = -3; if (RT) { RT.ensureIds(); RT.syncLevels(); }
+            try { if (typeof root.showToast === 'function') root.showToast('The requirement for ' + r.name + ' is generated and in the ' + rr.provider + ' requirements.', 'success', 5000); } catch (_) {}
+        }
+        fcStore(fcId).res[key] = { where: 'req', by: who(), at: now() };
+        save(); done('fc.' + fcId + '.res.' + key);
+    }
     function whereWords(w) {
         if (!w) return 'Not decided yet';
         if (/^cma:/.test(w.where)) { var c = cmas().filter(function (x) { return S(x.internalId) === w.where.slice(4); })[0]; return c ? cmaLabel(c) : 'A common mode analysis no longer in the project'; }
@@ -236,6 +283,7 @@
         if (w.where === 'zsa') return 'The zonal safety analysis';
         if (w.where === 'new') return 'A new common mode review (to be opened)';
         if (w.where === 'none') return 'Cannot defeat an independence here: ' + T(w.why || '');
+        if (w.where === 'req') return 'Its own requirement, generated from its strictest use';
         return 'Not decided yet';
     }
     // the CMA that already reviews a gate of this tree (a suggestion only: the engineer confirms)
@@ -524,7 +572,7 @@
         else {
             var cgs = critGates(gr);
             b.push({ k: 'table', name: 'cr-' + f, title: 'Shared resources and common causes for ' + f, q: q('res'), rowQ: rs.map(function (r) { return q('res.' + r.key); }), rows: rs.map(function (r) {
-                return { 'Shared resource': (r.id ? r.id + ' ' : '') + r.name, 'Shared by': listJoin(r.shared) || 'Not recorded', 'Could defeat': cgs.length ? listJoin(cgs.map(function (x) { return x.displayId + (x.name ? ' ' + T(x.name) : ''); })) : 'No independence claim in the tree', 'Dispositioned in': whereWords(resWhere(gr, r)) };
+                return { 'Shared resource': (r.id ? r.id + ' ' : '') + r.name, 'Shared by': listJoin(r.shared) || 'Not recorded', 'Could defeat': cgs.length ? listJoin(cgs.map(function (x) { return x.displayId + (x.name ? ' ' + T(x.name) : ''); })) : 'No independence claim in the tree', 'Dispositioned in': whereWords(resWhere(gr, r)), 'Its requirement': (function () { var rr = resReq(r); return r.kind !== 'resource' ? 'Not a resource: looked at in the review named' : (rr ? resReqWords(rr) : 'None yet: no fault tree event is tagged as this resource'); })() };
             }), lead: '{N} lists what the systems that feed ' + f + ' share, which independence each could defeat, and where it is looked at.' });
             b.push(P('Every independence the tree relies on can be defeated by something shared here. None is dismissed in this appendix without a reason; each goes to the review named, and the requirements it raises come back into this appendix.'));
         }
@@ -710,7 +758,17 @@
             var qid = 'fc.' + f + '.res.' + r.key, w = resWhere(gr, r), opts = [];
             cmas().forEach(function (c) { opts.push({ id: 'cma:' + c.internalId, label: 'In ' + cmaLabel(c) + (sug && sug === c && !w ? ' (suggested: it reviews a gate of this tree)' : ''), impact: 'The shared resource table points to ' + S(c.cmaId) + '; its requirements come from there.' }); });
             opts.push({ id: 'pra', label: 'In the particular risk assessment', impact: 'The table points to the PRA.' }, { id: 'zsa', label: 'In the zonal safety analysis', impact: 'The table points to the ZSA.' }, { id: 'new', label: 'Needs its own common mode review', impact: 'The table lists it as a new review to open; the CMA Autopilot picks up the gates it could defeat.' }, { id: 'none', label: 'It cannot defeat an independence here', impact: 'You say why; the report records the reason.' });
-            h += card(qid, Q({ id: qid, text: 'Where is ' + lc(r.name) + ' dispositioned?', why: 'Shared by ' + (listJoin(r.shared) || 'the systems that feed ' + f) + '. A shared resource can fail several inputs at once and bypass an AND gate that says they are independent.', picked: w ? w.where : null, options: opts }) + ((w && w.where === 'none') || ui.open[qid] === 'none' ? textBox(qid + '.why', 'Why it cannot defeat an independence for ' + f, w ? w.why : '', '') : ''), !!w);
+            // 11 Nov 2026: the resource's one requirement, generated from its strictest use, or why there is none yet
+            var rr = resReq(r), rbox = '';
+            if (r.kind === 'resource') {
+                if (rr) {
+                    opts.unshift({ id: 'req', label: 'By its own requirement, generated from its strictest use', impact: 'The table points to the requirement on ' + rr.provider + '; nothing is typed.' });
+                    rbox = '<div class="paq-x" data-paq-resreq="' + E(r.key) + '" style="margin-top:8px"><b>The requirement for ' + E(r.name) + ', generated from its strictest use.</b> ' + E(resReqWords(rr)) + '</div>'
+                        + (rr.uses.length > 1 ? '<div class="paq-x">Every use: ' + E(listJoin(rr.uses.map(function (u) { return u.page + ' ' + pWords(u.p); }))) + '. The strictest governs.</div>' : '')
+                        + (rr.state !== 'in' || !(w && w.where === 'req') ? '<div style="margin-top:8px"><button type="button" class="paq-b on" data-paq-genres="' + E(r.key) + '" onclick="SLPasaAuto.ui.genResReq(' + J(f) + ',' + J(r.key) + ')">' + (rr.state === 'in' ? 'Use the requirement for ' + E(r.name) : 'Generate the requirement for ' + E(r.name)) + '</button></div>' : '');
+                } else rbox = '<div class="paq-x" data-paq-resnone="' + E(r.key) + '" style="margin-top:8px">The tool has no requirement for ' + E(r.name) + ' yet: no fault tree event is tagged as this resource, so there is no use to take the strictest budget from. In the fault tree, open the event that stands for it and set its identity to "Interface / common resource"; its one requirement is then generated here from the strictest use.</div>';
+            }
+            h += card(qid, Q({ id: qid, text: 'Where is ' + lc(r.name) + ' dispositioned?', why: 'Shared by ' + (listJoin(r.shared) || 'the systems that feed ' + f) + '. A shared resource can fail several inputs at once and bypass an AND gate that says they are independent.', picked: w ? w.where : null, options: opts }) + rbox + ((w && w.where === 'none') || ui.open[qid] === 'none' ? textBox(qid + '.why', 'Why it cannot defeat an independence for ' + f, w ? w.why : '', '') : ''), !!w);
         });
         // 3. CoFFE cases
         if (coffeOn()) coffeCasesOf(gr).forEach(function (k) {
@@ -956,7 +1014,7 @@
         cutsets: cutsets, metricsOf: metricsOf, allocated: allocated, cgOf: cgOf, cmas: cmas, CLOSE: CLOSE, acRef: acRef, regulation: regulation, style: style, sysName: sysName, sysById: sysById, systems: systems, traceList: traceList };
     var api = { VERSION: VERSION, lib: lib, besideGo: besideGo, placeBeside: placeBeside, candidates: candidates, picks: picks, appendices: appendices, functions: functions, fnGroups: fnGroups, fnSection: fnSection, routeOf: routeOf, isQuant: isQuant, fnLeft: fnLeft, linkCands: linkCands, built: built, gateFlags: gateFlags, fnOf: fnOf, fnTitle: fnTitle, feeders: feeders, critGates: critGates, treeOf: treeOf, groupOf: groupOf, idpRows: idpRows, untraced: untraced, resources: resources, treeFacts: treeFacts, reqsFor: reqsFor,
         frontLeft: frontLeft, fcLeft: fcLeft, openItems: openItems, tracedNotInTree: tracedNotInTree, treeNotInTable: treeNotInTable, section: section, front: front, coffeOn: coffeOn, store: store, outputs: outputs,
-        ui: { pick: pick, text: text, cell: cell, idpNone: idpNone, idpAi: idpAi, level: level, levelReset: levelReset, acceptReqs: acceptReqs, openTree: openTree } };
+        resReq: resReq, ui: { pick: pick, text: text, cell: cell, idpNone: idpNone, idpAi: idpAi, level: level, levelReset: levelReset, acceptReqs: acceptReqs, genResReq: genResReq, openTree: openTree } };
     try { root.SLPasaAuto = api; } catch (_) {}
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
