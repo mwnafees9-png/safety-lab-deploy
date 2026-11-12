@@ -241,6 +241,20 @@
   function _caughtUp() { return !!(_started && ydoc && _online() && _srvLoaded && _subOk); }
   // 12 Nov 2026: a large removal held back by pushLocal, waiting for the person (three-way) or simply kept (seed).
   var _heldDel = null, _askingDel = false;
+  // 12 Nov 2026 (v3.1): a removal Safety Lab itself prepared and approved (project_recovery.js taking a recovery back)
+  // names its fault tree events here first, so the large-removal check does not hold it or ask the person about it.
+  // Only a push whose deletions are ALL on this list, for this project, within ten minutes, passes; anything more asks.
+  var _okDel = null;
+  function allowRemoval(projectId, nodeKeys) {
+    var m = {}; (nodeKeys || []).forEach(function (k) { m[String(k)] = 1; });
+    _okDel = { project: String(projectId || ''), nodes: m, until: Date.now() + 10 * 60 * 1000 };
+  }
+  function _announced(keys) {
+    if (!_okDel || _okDel.project !== String(_projId || '') || Date.now() > _okDel.until) return false;
+    var names = Object.keys(keys || {});
+    if (names.length !== 1 || names[0] !== FTA_NODE) return false;
+    return keys[FTA_NODE].every(function (k) { return _okDel.nodes[String(k)] === 1; });
+  }
   var _saveTimer = null, _pushTimer = null;
   // 13 Sep 2026 — THE SYNCED BASELINE (R18 rebuild). What every keyed row and every
   // whole-value store looked like the last time this tab and the doc agreed (after a
@@ -856,7 +870,7 @@
     var CG = window.SLContentGuard;
     if (CG && (out.rows || out.pages || out.nodes)) {
       var L = CG.isLarge({ rows: out.rows, pages: out.pages, nodes: out.nodes }, out.before);
-      out.large = !!L.big; out.text = L.text;
+      out.large = !!L.big && !_announced(out.keys); out.text = L.text;
     }
     return out;
   }
@@ -1374,7 +1388,7 @@
     undo: undo, redo: redo, canUndo: canUndo, canRedo: canRedo, liveUndo: liveUndo, _undoMgr: function () { return _undoMgr; },
     _base: function () { return _base; },
     retrySave: retrySave, saveState: function () { return { fails: _saveFails, since: _saveFailSince, error: _saveLastErr, busy: _saveBusy, waiting: !!_saveTimer, offline: _saveOffline }; },
-    release: release, pushAccepted: pushAccepted, baseLive: function () { return _baseLive; }, docHasContent: function () { return !!ydoc && _docHasContent(); },
+    release: release, pushAccepted: pushAccepted, allowRemoval: allowRemoval, baseLive: function () { return _baseLive; }, docHasContent: function () { return !!ydoc && _docHasContent(); },
     pull: function (opts) { return pullToModel(opts); }, held: function () { return { push: _heldPush, remote: _heldRemote }; },
     controlFloor: function (c) { try { return _ctlFloor(String(c)); } catch (_) { return 0; } },   // bindings_modules stamps a deliberate change after this
     _fta: { decompose: _ftaDecompose, recompose: _ftaRecompose, rebuildTree: _ftaRebuildTree }

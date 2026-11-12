@@ -184,7 +184,10 @@
         'rename': 1, 'bind': 1, 'unbind': 1, 'mac': 1, 'mac-fcim': 1, 'l3-fmea': 1,
         'xmi-import': 1, 'status-back': 1, 'bridge-sync': 1, 'bridge-check': 1,
         'tree-created': 1, 'trade-tree': 1, 'fc-route': 1,
-        'baseline': 1, 'baseline-reopen': 1, 'baseline-seal': 1, 'baseline-surgical': 1
+        'baseline': 1, 'baseline-reopen': 1, 'baseline-seal': 1, 'baseline-surgical': 1,
+        // 12 Nov 2026: what the large-removal guards and a Safety Lab recovery did is the team's to see, not one browser's
+        'recovery': 1, 'recovery-undo': 1, 'removal-held': 1, 'removal-confirmed': 1, 'removal-cancelled': 1,
+        'save-held': 1, 'save-over': 1                 // 'removal-arrived' stays local: every teammate's screen would log the same line
     };
     function _wrapJrnl() {
         try {

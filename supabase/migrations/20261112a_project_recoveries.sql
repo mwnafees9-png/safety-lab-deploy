@@ -41,6 +41,11 @@ begin
   if not exists (select 1 from public.projects p where p.id = r.project_id and private.can_edit_workspace(p.workspace_id)) then
     return false;
   end if;
+  -- 12 Nov 2026: a row that takes a recovery back (snapshot.undo) can only be marked by a build that knows how to do
+  -- it (it reports result.undo = true). An older open tab reads the row as "nothing to add" and must not close it.
+  if (r.snapshot ? 'undo') and coalesce(p_result->>'undo', '') <> 'true' then
+    return false;
+  end if;
   update public.project_recoveries set applied_at = now(), applied_by = auth.uid(), result = p_result where id = p_id;
   return true;
 end;

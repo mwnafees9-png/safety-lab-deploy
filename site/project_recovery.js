@@ -1,5 +1,5 @@
 // ============================================================================
-// project_recovery.js — v1.0 — SLProjectRecovery (12 Nov 2026).
+// project_recovery.js — v1.1 — SLProjectRecovery (12 Nov 2026).
 //
 // WHY THIS FILE EXISTS. Live team data, 11 Nov 2026: an old copy of a shared project, held in one teammate's browser,
 // was saved over the team's newer work; 45 fault tree events were lost and the team kept working on the smaller copy.
@@ -21,13 +21,21 @@
 //     (projectConfig.retiredDuplicateTrees: it is kept there), otherwise the whole page comes back.
 // An event already in the page (same id) is never touched: what the team has now always stands.
 //
+// v1.1 (12 Nov 2026, the same night): A RECOVERY CAN BE TAKEN BACK. The first recovery put back 45 events that were
+// read as lost work; 43 of them were the tool's own "Decompose" placeholders and the repeat gates above them, which
+// the team had cleared, and it doubled placeholders the trees already had. An UNDO is a recovery row whose snapshot
+// is { undo: { from: <saved version>, pages: { <page id>: [event ids] } } }: it removes exactly the listed events
+// that still stand as the recovery left them (the top of each branch carries recoveredFrom.from === from, and every
+// event below it is on the list). A listed event the team has since built under is kept and counted, never removed.
+// The removal is announced to the live sync first (SafetyLabCRDT.allowRemoval) so nobody is asked about it.
+//
 // API (window.SLProjectRecovery): plan(currentPages, savedPages, retiredIds), apply(currentPages, plan, stamp),
-// check(), last(). Kill switch: window.SL_PROJECT_RECOVERY_OFF = true.
+// undo(currentPages, undoSpec), check(), last(). Kill switch: window.SL_PROJECT_RECOVERY_OFF = true.
 // Load: after crdt_sync.js and load_repair.js. Tests: tests/regression_stale_copy_overwrite_20261112.test.js.
 // ============================================================================
 (function (root) {
     'use strict';
-    var VERSION = '1.0';
+    var VERSION = '1.1';
 
     function _kidsKey(n) { return Array.isArray(n.children) ? 'children' : (Array.isArray(n._children) ? '_children' : null); }
     function _kids(n) { var k = n && _kidsKey(n); return k ? n[k] : []; }
@@ -116,6 +124,39 @@
         return done;
     }
 
+
+    // ---- take a recovery back (pure on the pages it is given; changes them in place) --------------------------------
+    // spec: { from: <saved version>, pages: { <page id>: [event ids] } }
+    // -> { removed, kept, keys: ['<page id>:<event id>'], perPage: [{ id, name, removed, kept }] }
+    function undo(currentPages, spec) {
+        var out = { removed: 0, kept: 0, keys: [], perPage: [] };
+        if (!Array.isArray(currentPages) || !spec || !spec.pages || spec.from == null) return out;
+        currentPages.forEach(function (p) {
+            if (!p || p.id == null || !p.root || typeof p.root !== 'object') return;
+            var ids = spec.pages[String(p.id)]; if (!Array.isArray(ids) || !ids.length) return;
+            var listed = {}; ids.forEach(function (i) { listed[String(i)] = 1; });
+            var removed = 0, kept = 0;
+            var allListed = function (n) { if (!n || n.id == null || !listed[String(n.id)]) return false; return _kids(n).every(allListed); };
+            var stamped = function (n) { return !!(n && n.recoveredFrom && String(n.recoveredFrom.from) === String(spec.from)); };
+            (function w(parent) {
+                var k = _kidsKey(parent); if (!k) return;
+                parent[k] = parent[k].filter(function (c) {
+                    if (!c || typeof c !== 'object' || c.id == null || !listed[String(c.id)]) return true;
+                    if (stamped(c) && allListed(c)) {
+                        (function note(x) { out.keys.push(String(p.id) + ':' + String(x.id)); removed++; _kids(x).forEach(note); })(c);
+                        return false;
+                    }
+                    kept++;                                             // not as the recovery left it: the team's, it stays
+                    return true;
+                });
+                parent[k].forEach(w);
+            })(p.root);
+            if (removed || kept) out.perPage.push({ id: String(p.id), name: p.name || String(p.id), removed: removed, kept: kept });
+            out.removed += removed; out.kept += kept;
+        });
+        return out;
+    }
+
     // ---- the app side ----------------------------------------------------------------------------------------------
     function _g(name) {
         try { var E = root.SLEnv; if (E && typeof E.get === 'function') { var v = E.get(name); if (v !== undefined) return v; } } catch (_) {}
@@ -154,6 +195,25 @@
             var pages = _g('ftaPages'); if (!Array.isArray(pages)) return null;
             var pc = _g('projectConfig');
             var retired = ((pc && pc.retiredDuplicateTrees) || []).map(function (r) { return r && r.page && r.page.id; }).filter(function (x) { return x != null; });
+            if (full.data.snapshot.undo) {
+                // v1.1: this row takes an earlier recovery back
+                var spec = full.data.snapshot.undo;
+                var u = undo(pages, spec);
+                var ures = { undo: true, removed: u.removed, kept: u.kept, perPage: u.perPage, at: new Date().toISOString(), build: VERSION };
+                if (u.removed) {
+                    try { if (C && typeof C.allowRemoval === 'function') C.allowRemoval(pid, u.keys); } catch (_) {}
+                    _call('jrnl', 'recovery-undo', 'Safety Lab took back its recovery of saved version ' + spec.from + ': ' + u.removed + ' placeholder event' + (u.removed === 1 ? '' : 's') + ' it had added were removed (' + u.perPage.filter(function (p) { return p.removed; }).map(function (p) { return p.name + ': ' + p.removed; }).join('; ') + '). Nothing the team built was changed.');
+                    _call('scheduleAutosave'); setTimeout(function () { _call('scheduleAutosave'); }, 0);
+                    try { if (root.SL_FTA_PICKER) root.SL_FTA_PICKER.render(true); } catch (_) {}
+                    _call('renderFTA');
+                    _call('showToast', 'Safety Lab removed ' + u.removed + ' placeholder event' + (u.removed === 1 ? '' : 's') + ' it had added to your fault trees by mistake. Nothing you built was changed. Details are in the change log.', 'info', 14000);
+                }
+                var mu = await client.rpc('mark_project_recovery_applied', { p_id: row.id, p_result: ures });
+                _doneFor[pid] = !!(mu && !mu.error && mu.data === true) || !u.removed;
+                _last = { id: row.id, result: ures, marked: !!(mu && !mu.error && mu.data === true) };
+                try { console.info('[recovery] undo ' + row.id + ': ' + u.removed + ' removed, ' + u.kept + ' kept'); } catch (_) {}
+                return _last;
+            }
             var pl = plan(pages, full.data.snapshot.ftaPages || [], retired);
             var stamp = { from: row.from_version, at: new Date().toISOString() };
             var done = apply(pages, pl, stamp);
@@ -176,7 +236,7 @@
         } finally { _busy = false; }
     }
 
-    var api = { VERSION: VERSION, plan: plan, apply: apply, check: check, last: function () { return _last; }, _count: _count };
+    var api = { VERSION: VERSION, plan: plan, apply: apply, undo: undo, check: check, last: function () { return _last; }, _count: _count };
     try { root.SLProjectRecovery = api; } catch (_) {}
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     try {

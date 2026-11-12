@@ -20,7 +20,8 @@
  *       changed; a page the project retired as a duplicate stays retired; a second run adds nothing;
  *   [P] pins: the scripts are on the page, in order.
  * MUTATION PROOFS: SL_STALE_MUTATE=seed (the seed deletes again), =ask (this tab's large delete is not asked),
- *   =merged (the merged save is not measured), =held (a save goes out while the team's work is held back), =team (online alone is enough), =graft (the recovery doubles an event)
+ *   =merged (the merged save is not measured), =held (a save goes out while the team's work is held back), =team (online alone is enough), =graft (the recovery doubles an event),
+ *   =undo (taking a recovery back removes what the team built under it), =announce (any large removal passes as announced)
  *   must each fail.
  * Run: node tests/regression_stale_copy_overwrite_20261112.test.js
  */
@@ -37,6 +38,8 @@ if (MUT === 'ask') CRDT = mustReplace(CRDT, 'if (_plan.large && !(opts && opts.f
 if (MUT === 'merged') WRITER = mustReplace(WRITER, "if (LM.big) { _reportShrink(projectId, serverVersion, LM); stopReason = 'shrink'; return false; }", '');
 if (MUT === 'held') WRITER = mustReplace(WRITER, "if (hs && hs.heldRemoval) return { ok: false, reason: 'shrink' };", '');
 if (MUT === 'team') STATE = mustReplace(STATE, 'C.release(); team = C.status().caughtUp === true;', 'C.release(); team = !!(C.status().online !== false);');
+if (MUT === 'undo') RECOV = mustReplace(RECOV, 'if (stamped(c) && allListed(c)) {', 'if (stamped(c)) {');
+if (MUT === 'announce') CRDT = mustReplace(CRDT, 'return keys[FTA_NODE].every(function (k) { return _okDel.nodes[String(k)] === 1; });', 'return true;');
 if (MUT === 'graft') RECOV = mustReplace(RECOV, "if (have[String(g.node.id)]) { done.skipped++; return; }", '');
 console.log('[stale copy]' + (MUT ? ' (MUTATION ' + MUT + ')' : ''));
 
@@ -264,11 +267,49 @@ const flush = () => new Promise(r => setImmediate(r));
         check('[R] a project shaped like the live one: 45 events back in 15 trees, the rest untouched', pl.events === 45 && pl.perPage.length === 15 && d.events === 45 && count(now) === had + 45, pl.text);
     }
 
+    // ------------------------------------------------------------ [U] taking a recovery back (12 Nov 2026, v1.1)
+    {   // the live shape: a repeat gate with two identical placeholders put back under the top event; two real events put back under a gate the team still has
+        const stamp = { from: 262, at: 't' };
+        const now = [
+            { id: 'pa', name: 'A', root: { id: 134, name: 'top', children: [{ id: 294, name: 'top', recoveredFrom: stamp, children: [{ id: 135, name: 'Decompose' }, { id: 295, name: 'Decompose' }] }] } },
+            { id: 'pb', name: 'B', root: { id: 146, children: [{ id: 281, name: 'Common failure', children: [{ id: 283, name: 'real one', recoveredFrom: stamp }, { id: 291, name: 'real two', recoveredFrom: stamp }] },
+                                                               { id: 300, name: 'top', recoveredFrom: stamp, children: [{ id: 147, name: 'Decompose' }, { id: 301, name: 'Decompose' }] }, { id: 272, name: 'the team\'s' }] } },
+            { id: 'pc', name: 'C', root: { id: 154, children: [{ id: 304, name: 'top', recoveredFrom: stamp, children: [{ id: 155, name: 'Decompose' }, { id: 305, name: 'Decompose' }, { id: 900, name: 'built since by the team' }] }] } },
+            { id: 'pd', name: 'D', root: { id: 128, children: [{ id: 129, name: 'same id, not from the recovery' }, { id: 292, name: 'the team\'s' }] } }
+        ];
+        const spec = { from: 262, pages: { pa: [294, 135, 295], pb: [300, 147, 301], pc: [304, 155, 305], pd: [129], gone: [1, 2] } };
+        const u = R.undo(now, spec);
+        const ids = n => [n.id].concat(...(n.children || []).map(ids));
+        check('[U] the placeholders and repeat gates the recovery added are removed', u.removed === 6 && ids(now[0].root).join() === '134' && !ids(now[1].root).some(i => [300, 147, 301].includes(i)), JSON.stringify(u.perPage));
+        check('[U] the real events it put back stay, and so does everything the team has', ids(now[1].root).join() === '146,281,283,291,272', ids(now[1].root).join());
+        check('[U] a listed branch the team has built under since is kept whole and counted', ids(now[2].root).join() === '154,304,155,305,900' && u.perPage.some(p => p.id === 'pc' && p.kept >= 1 && p.removed === 0), JSON.stringify(u.perPage));
+        check('[U] an event with a listed id that the recovery did not put back is never removed', ids(now[3].root).join() === '128,129,292');
+        check('[U] the removal names each event for the live sync', u.keys.slice().sort().join() === ['pa:135', 'pa:294', 'pa:295', 'pb:147', 'pb:300', 'pb:301'].join(), u.keys.join());
+        const again = R.undo(now, spec);
+        check('[U] a second run removes nothing more', again.removed === 0);
+        check('[U] the server is told which build did it, and the app announces the removal before the save', RECOV.includes("build: VERSION }") && RECOV.indexOf('C.allowRemoval(pid, u.keys)') > 0 && RECOV.indexOf('C.allowRemoval(pid, u.keys)') < RECOV.indexOf("'recovery-undo'"));
+    }
+    {   // crdt_sync: only a removal made of announced events passes the large-removal check
+        const m = CRDT.match(/function _announced\(keys\) \{[\s\S]*?\n  \}/);
+        const mk = (okDel, proj) => new Function('_okDel', '_projId', 'FTA_NODE', m[0] + '; return _announced;')(okDel, proj, 'ftaNodes');
+        const ok = { project: 'P', nodes: { 'a:1': 1, 'a:2': 1 }, until: Date.now() + 60000 };
+        check('[A] a push that deletes only announced events is not held', !!m && mk(ok, 'P')({ ftaNodes: ['a:1', 'a:2'] }) === true);
+        check('[A] one event more than announced, another kind of row, another project or a stale announcement: held as before',
+            mk(ok, 'P')({ ftaNodes: ['a:1', 'a:3'] }) === false && mk(ok, 'P')({ ftaNodes: ['a:1'], acFhaData: ['x'] }) === false && mk(ok, 'Q')({ ftaNodes: ['a:1'] }) === false &&
+            mk({ project: 'P', nodes: { 'a:1': 1 }, until: Date.now() - 1 }, 'P')({ ftaNodes: ['a:1'] }) === false && mk(null, 'P')({ ftaNodes: ['a:1'] }) === false);
+        check('[A] the check is used where the large removal is decided', CRDT.includes('out.large = !!L.big && !_announced(out.keys);') && CRDT.includes('allowRemoval: allowRemoval'));
+    }
+    {   // the team's change log shows what the guards and a recovery did (they were written to one browser only)
+        const J = S('change_journal_sync.js');
+        check('[J] recovery, its undo, held and confirmed removals and held saves reach the team\'s change log', ["'recovery': 1", "'recovery-undo': 1", "'removal-held': 1", "'removal-confirmed': 1", "'removal-cancelled': 1", "'save-held': 1", "'save-over': 1"].every(k => J.includes(k)) && !J.includes("'removal-arrived': 1"));
+    }
+
     // ------------------------------------------------------------ [P]
     const IDX = S('index.html'), at = s => IDX.indexOf(s);
-    check('[P] content_guard.js loads before cloud_writer.js and crdt_sync.js', at('content_guard.js?v=1.0') > 0 && at('content_guard.js?v=1.0') < at('cloud_writer.js?v=1.5') && at('content_guard.js?v=1.0') < at('crdt_sync.js?v=3.0'));
-    check('[P] project_recovery.js loads after crdt_sync.js and the load clean-ups', at('project_recovery.js?v=1.0') > at('crdt_sync.js?v=3.0') && at('project_recovery.js?v=1.0') > at('stale_revive.js'));
+    check('[P] content_guard.js loads before cloud_writer.js and crdt_sync.js', at('content_guard.js?v=1.0') > 0 && at('content_guard.js?v=1.0') < at('cloud_writer.js?v=1.5') && at('content_guard.js?v=1.0') < at('crdt_sync.js?v=3.1'));
+    check('[P] project_recovery.js loads after crdt_sync.js and the load clean-ups', at('project_recovery.js?v=1.1') > at('crdt_sync.js?v=3.1') && at('project_recovery.js?v=1.1') > at('stale_revive.js'));
     check('[P] save_state.js 3.8', at('save_state.js?v=3.8') > 0);
+    check('[P] change_journal_sync.js 1.3', at('change_journal_sync.js?v=1.3') > 0);
 
     console.log('\n' + pass + ' passed, ' + fail + ' failed');
     process.exit(fail ? 1 : 0);
