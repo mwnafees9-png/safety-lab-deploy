@@ -45,7 +45,7 @@ async function run(cfg) {
             function res() {
                 if (table === 'projects') return q.op === 'update' ? { data: null, error: null } : { data: { id: q.filters.id }, error: null };
                 if (table === 'project_documents') {
-                    if (q.op === 'select') { if (server.moveEvery) server.doc.version++; return { data: { version: server.doc.version }, error: null }; }
+                    if (q.op === 'select') { if (server.moveEvery) server.doc.version++; return { data: { version: server.doc.version, data: server.doc.data }, error: null }; }   // 12 Nov 2026: the writer also reads the saved copy to see what a write over it would remove
                     if (q.op === 'update') {
                         if (server.moveEvery) server.doc.version++;   // a teammate saves again in between
                         if (q.filters.version !== server.doc.version) return { data: [], error: null };
@@ -79,10 +79,10 @@ async function run(cfg) {
     ctx._writeAutosave = () => true;
     let pending = true;
     ctx.SLChangeAck = { pending: () => pending, pendingUser: () => pending, count: () => (pending ? 369 : 0), acceptedSnapshot: () => null, system: f => f(), systemAsync: f => f(), settle() {}, status: () => ({}) };
-    if (cfg.crdt) ctx.SafetyLabCRDT = { status: () => ({ started: true, online: true }), release() {}, pushAccepted: () => true };
+    if (cfg.crdt) ctx.SafetyLabCRDT = { status: () => ({ started: true, online: true, caughtUp: true }), release() {}, pushAccepted: () => true };   // 12 Nov 2026: "team" needs a tab that is caught up, not online alone
     ctx.window = ctx; ctx.globalThis = ctx;
     vm.createContext(ctx);
-    for (const f of ['cloud_writer.js', 'cloud_sync.js', 'save_state.js']) vm.runInContext(src(f), ctx, { filename: f });
+    for (const f of ['content_guard.js', 'cloud_writer.js', 'cloud_sync.js', 'save_state.js']) vm.runInContext(src(f), ctx, { filename: f });
     model.acFhaData[0].severity = 'Hazardous'; pending = false;       // the person's change, now confirmed
     ctx.SLSaveState._ackClosed({}, 'kept');
     const ok = await Promise.race([ctx.SLSaveState.whenSaved(), new Promise(r => setTimeout(() => r('HUNG'), 5000))]);

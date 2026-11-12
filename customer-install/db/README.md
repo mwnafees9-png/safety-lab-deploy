@@ -42,6 +42,8 @@ This runs the SQL files in order:
 26. `25_ai_ledger_from_proxy.sql`: the AI service records each AI call in the ledger itself.
 27. `26_server_admin_check.sql`: lets the server's AI service check that the person setting the server's AI key in the app is its administrator.
 28. `27_connection_secret_kinds.sql`: the vault also keeps each person's Polarion and Codebeamer logins (and DOORS Next, Cameo and GENESYS, named ahead), for Safety Lab Connections; only the server's AI service reads them, to make the call.
+29. `28_project_recoveries.sql`: a recovery puts back what a saved version of a project had and the project lost, on top of the project as it is now; the table holds the saved version and who approved it, and the app applies it once.
+30. `29_history_keeps_fullest_versions.sql`: the project history also keeps the 10 versions holding the most data, so the fullest copies of a project are never the ones pruned.
 
 Run this once, on an empty database. It is a fresh-install sequence, not an upgrade script:
 `00_schema_baseline.sql` fails if the tables already exist. To upgrade an existing install,

@@ -382,8 +382,12 @@
         var ff = fileJob ? await _writeFile(fileJob) : null;
         // 2. the live sync: teammates see it (held while moves still wait; they go together)
         var C = _crdt(), team = false;
-        if (C && !holdsSync()) { try { C.release(); team = !!(C.status().online !== false); } catch (_) {} }
-        else if (C && acc && C.pushAccepted) { try { team = C.pushAccepted(JSON.parse(acc)) === true && C.status().online !== false; } catch (_) {} }   // moves still wait: this change goes on its own
+        // 12 Nov 2026 (live team data, 10 and 11 Nov): "team" (write a moved cloud copy over) needs this tab to be CAUGHT UP:
+        // the server's live copy merged since it started or came back, and the live channel joined. "Online" alone let a
+        // tab holding an old copy write it over the team's newer work, twice. Not caught up: the save is a background one,
+        // which never writes over a copy that moved.
+        if (C && !holdsSync()) { try { C.release(); team = C.status().caughtUp === true; } catch (_) {} }
+        else if (C && acc && C.pushAccepted) { try { team = C.pushAccepted(JSON.parse(acc)) === true && C.status().caughtUp === true; } catch (_) {} }   // moves still wait: this change goes on its own
         // 3. the cloud copy
         // 26 Oct 2026 (customer report): a confirmed change REACHES the server copy. With the live team sync on, this tab holds
         // every teammate's work, so a server copy that moved is written over ('merged'). Without it, a moved copy is

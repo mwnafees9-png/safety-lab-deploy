@@ -134,7 +134,7 @@ const go = (tool, method, target, body, uid, opt) => handle(reqOf(method, body, 
     const m = fs.readFileSync(mig, 'utf8'), ss = fs.readFileSync(path.join(REPO, 'site', 'secret_store.js'), 'utf8');
     const kinds = ['polarion_token', 'codebeamer_token'];
     check('the migration lets the table and save_secret() take each tool\u2019s login', kinds.every(k => (m.match(new RegExp("'" + k + "'", 'g')) || []).length >= 2) && /perform private\.require_mfa\(\);/.test(m));
-    check('the customer kit carries the same file, and apply.sh runs it', fs.existsSync(kit) && fs.readFileSync(kit, 'utf8') === m && / 27_connection_secret_kinds; do/.test(fs.readFileSync(path.join(REPO, 'customer-install', 'db', 'apply.sh'), 'utf8')));
+    check('the customer kit carries the same file, and apply.sh runs it', fs.existsSync(kit) && fs.readFileSync(kit, 'utf8') === m && / 27_connection_secret_kinds[ ;]/.test(fs.readFileSync(path.join(REPO, 'customer-install', 'db', 'apply.sh'), 'utf8')));
     check('the page can save them (secret_store.js) and the relay reads "<tool>_token"', kinds.every(k => new RegExp(k + ': 1').test(ss)) && /readUserSecret\(env, caller\.userId, tool \+ "_token"\)/.test(proxy));
   }
 

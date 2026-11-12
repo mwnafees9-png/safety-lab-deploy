@@ -137,12 +137,47 @@
             new Promise(function (_, rej) { t = setTimeout(function () { var e = new Error('the cloud did not answer within ' + Math.round(ms / 1000) + ' seconds (' + what + ')'); e.code = 'timeout'; rej(e); }, ms); })
         ]);
     }
+    // 12 Nov 2026 (live team data, 10 and 11 Nov): a tab that believed it held every teammate's work ('merged')
+    // wrote an OLD copy of the project over the saved copy, twice: 250 fault tree events became 108, then 135. A save
+    // that would write over a copy that moved now measures what it would remove first (SLContentGuard, the one rule
+    // for every writer). A large removal is never written silently: the merged and background saves hold it back and
+    // say so; the manual save asks with the numbers.
+    var _shrinkTold = {};
+    async function _serverLoss(client, projectId, snapshot) {
+        var CG = G.SLContentGuard;
+        if (!CG) return { error: new Error('content guard missing') };
+        try {
+            var r = await _within(client.from('project_documents').select('data').eq('project_id', projectId).maybeSingle(), 'reading the saved copy to compare');
+            if (r && r.error) return { error: r.error };
+            var server = r && r.data ? r.data.data : null;
+            if (!server) return CG.loss({}, {});            // nothing saved yet: nothing to lose
+            return CG.loss(CG.measure(server), CG.measure(snapshot));
+        } catch (e) { return { error: e }; }
+    }
+    function _reportShrink(projectId, serverVersion, L) {
+        if (_shrinkTold[projectId] === serverVersion) return;
+        _shrinkTold[projectId] = serverVersion;
+        var msg = 'This tab\'s copy of the project is missing ' + L.text + ' that the saved cloud copy has (most likely teammates\' newer work this tab has not received). Nothing was written over. Reload the project to bring this tab up to date.';
+        _toast(msg, 'warning', 12000);
+        try { var j = _fn('jrnl'); if (j) j('save-held', 'cloud save held back: it would have removed ' + L.text + ' from v' + serverVersion); } catch (_) {}
+        try { console.warn('[cloud-writer] SHRINK HELD on ' + projectId + ' (v' + serverVersion + '): would remove ' + L.text); } catch (_) {}
+    }
+
     async function _run(mode, prepare) {
         var ctx = null;
         try { ctx = await prepare(); } catch (e) { return { ok: false, reason: 'error', error: e }; }
         if (!ctx || !ctx.client || !ctx.projectId || !ctx.snapshot) return { ok: false, reason: 'skipped' };
         var client = ctx.client, projectId = ctx.projectId, userId = ctx.userId || null, snapshot = ctx.snapshot;
 
+        // 12 Nov 2026: this tab opened with an older copy and the live shared copy is holding the team's work back for it
+        // (crdt_sync.js). Until that work is on this screen, what this tab would save is the older copy: a save nobody
+        // asked for by hand waits (the version matched on 11 Nov, so nothing else would have stopped it).
+        if (mode !== 'manual') {
+            try {
+                var hs = G.SafetyLabCRDT && typeof G.SafetyLabCRDT.status === 'function' ? G.SafetyLabCRDT.status() : null;
+                if (hs && hs.heldRemoval) return { ok: false, reason: 'shrink' };
+            } catch (_) {}
+        }
         if (!_leaseOk()) {
             if (mode === 'manual') _toast('This project is active in another tab — cloud saving is paused here. Click the banner at the top to make THIS tab active.', 'warning', 6000);
             return { ok: false, reason: 'lease' };
@@ -156,6 +191,7 @@
         };
         // A refusal or a pre-check mismatch: bank → (lock breach: audit + resync) | (ask) → resync | load.
         // Returns true to retry the write, false to stop.
+        var stopReason = null;
         var reconcile = async function (serverVersion) {
             var locks = _heldLocks();
             if (mode === 'silent') {
@@ -165,12 +201,28 @@
             // 26 Oct 2026, 'merged': a CONFIRMED save while the live team sync is on. Every teammate's work is already
             // merged into this tab, so the moved copy is banked and written over, never asked about and never skipped.
             if (mode === 'merged') {
+                var LM = await _serverLoss(client, projectId, snapshot);
+                if (!LM || LM.error) { stopReason = 'error'; return false; }          // can't tell what it would remove: never write blind
+                if (LM.big) { _reportShrink(projectId, serverVersion, LM); stopReason = 'shrink'; return false; }
                 try { var bankM = _fn('_bankWorkingState'); if (bankM) bankM(); } catch (_) {}
                 if (locks.length && _auditedAt[projectId] !== serverVersion) { _auditedAt[projectId] = serverVersion; _auditBreach(locks, projectId, _token(), serverVersion, 'manual'); }
                 _setToken(serverVersion);
                 return true;
             }
             try { var bank = _fn('_bankWorkingState'); if (bank) bank(); } catch (_) {}
+            var LX = await _serverLoss(client, projectId, snapshot);
+            if (LX && !LX.error && LX.big) {
+                var goOver = await _ask('Saving THIS tab\'s copy would remove ' + LX.text + ' from the saved cloud copy. That is usually teammates\' newer work this tab has not received.\n\nOK = save this tab\'s copy anyway (the removed work stays recoverable in the project history)\nCancel = load the cloud copy (this tab\'s state was banked to the recovery ring first)');
+                if (!goOver) {
+                    try { var loadX = _fn('_loadCloudProject'); if (loadX) await loadX(projectId); } catch (_) {}
+                    _toast('Loaded the cloud copy. Your previous state is banked in the recovery ring (Thread Integrity page).', 'info', 8000);
+                    stopReason = 'cancelled';
+                    return false;
+                }
+                try { var jx = _fn('jrnl'); if (jx) jx('save-over', 'saved over the cloud copy v' + serverVersion + ' after being told it removes ' + LX.text); } catch (_) {}
+                _setToken(serverVersion);
+                return true;
+            }
             if (locks.length) {
                 _auditBreach(locks, projectId, _token(), serverVersion, mode);
                 _toast('The cloud copy changed while you hold the lock on ' + locks.map(function (l) { return l.label; }).join(', ') + ' — recorded as a lock breach in the change log. Your state was banked and is being kept.', 'warning', 8000);
@@ -191,7 +243,7 @@
             var cur = await readVersion();
             if (cur != null) {
                 if (_token() == null) _setToken(cur);                     // adopt, never regress the counter
-                else if (cur !== _token()) { if (!(await reconcile(cur))) return { ok: false, reason: mode === 'silent' ? 'refused' : 'cancelled' }; }
+                else if (cur !== _token()) { if (!(await reconcile(cur))) return { ok: false, reason: stopReason || (mode === 'silent' ? 'refused' : 'cancelled') }; }
             }
             var stamp = function () { return { data: snapshot, updated_by: userId, updated_at: new Date().toISOString() }; };
             var nextVersion = null;
@@ -214,7 +266,7 @@
                 // refused: the document moved under this tab — reconcile against what the server holds NOW
                 var now = await readVersion();
                 if (now == null) { _setToken(null); continue; }
-                if (!(await reconcile(now))) return { ok: false, reason: mode === 'silent' ? 'refused' : 'cancelled' };
+                if (!(await reconcile(now))) return { ok: false, reason: stopReason || (mode === 'silent' ? 'refused' : 'cancelled') };
             }
             if (nextVersion == null) {
                 if (mode !== 'manual') return { ok: false, reason: 'refused' };   // merged: the copy moved again in between
@@ -274,5 +326,5 @@
         }
     } catch (_) {}
 
-    G.SLCloudWriter = { _v: '1.2', REQ_TIMEOUT_MS: REQ_TIMEOUT_MS, write: write, flush: flush, status: status, heldLocks: _heldLocks, lastWritten: lastWritten, QUIET_MS: QUIET_MS };
+    G.SLCloudWriter = { _v: '1.3', REQ_TIMEOUT_MS: REQ_TIMEOUT_MS, write: write, flush: flush, status: status, heldLocks: _heldLocks, lastWritten: lastWritten, QUIET_MS: QUIET_MS };
 })();

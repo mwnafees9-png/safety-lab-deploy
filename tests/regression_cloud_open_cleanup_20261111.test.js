@@ -145,7 +145,7 @@ const NOSYNC = () => { try { localStorage.setItem('SLA_CRDT', '0'); } catch (_) 
     // ===== [P] pins and load order ========================================================================================
     const html = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8'), at = s => html.indexOf(s);
     check('[P] pins: load_repair.js 1.0 before fta_dedupe.js 1.2 and stale_revive.js 1.1, after data_ops_modules.js and helpers_modules.js', at('load_repair.js?v=1.0') > 0 && at('load_repair.js?v=1.0') < at('fta_dedupe.js?v=1.2') && at('fta_dedupe.js?v=1.2') < at('stale_revive.js?v=1.1') && at('load_repair.js?v=1.0') > at('data_ops_modules.js?v=') && at('load_repair.js?v=1.0') > at('helpers_modules.js?v='));
-    check('[P] pins: crdt_sync.js 2.9, cloud_writer.js 1.4, save_state.js 3.7', at('crdt_sync.js?v=2.9') > 0 && at('cloud_writer.js?v=1.4') > 0 && at('save_state.js?v=3.7') > 0);
+    check('[P] pins: crdt_sync.js 3.0, cloud_writer.js 1.5, save_state.js 3.8 (12 Nov 2026: the stale copy guards)', at('crdt_sync.js?v=3.0') > 0 && at('cloud_writer.js?v=1.5') > 0 && at('save_state.js?v=3.8') > 0);
     const crdt = fs.readFileSync(path.join(SITE, 'crdt_sync.js'), 'utf8');
     check('[P] the live shared copy\'s save has no silent way out left', crdt.indexOf('if (res && res.error) return;') < 0 && crdt.indexOf('.catch(function () {});\n      } catch (_) {}\n    }, 5000);') < 0);
     if (!pw) { console.log('  SKIP  Playwright is not installed here: the browser part did not run'); console.log('\n' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0); }

@@ -196,7 +196,7 @@
   // authoritative: the doc is made to mirror it, doc-only keys deleted). Otherwise the
   // three-way posture against the baseline (see _base above). Both leave the baseline
   // equal to what was written. Shared by the generic collections and the FTA shells/nodes.
-  function _writeKeyed(name, arr, keyField, full) {
+  function _writeKeyed(name, arr, keyField, full, noDel) {
     var map = ydoc.getMap('col:' + name), ord = ydoc.getMap('ord:' + name), live = {};
     var bcol = _baseCol(name), bord = _baseOrd(name);
     (arr || []).forEach(function (item, i) {
@@ -211,7 +211,10 @@
       if (full ? (ord.get(k) !== i) : (bord.get(k) !== i)) ord.set(k, i);
       bcol.set(k, next); bord.set(k, i);
     });
-    if (full) {
+    if (noDel) {
+      // 12 Nov 2026: a large removal held back (pushLocal): nothing leaves the shared copy here; the keys drop out of
+      // this tab's baseline below, so the next pull brings them back onto this screen.
+    } else if (full) {
       Array.from(map.keys()).forEach(function (k) { if (!live[k]) map.delete(k); });
       Array.from(ord.keys()).forEach(function (k) { if (!live[k]) ord.delete(k); });
     } else {
@@ -231,6 +234,13 @@
 
   var Y = null, ydoc = null, chan = null, _client = null, _idb = null;
   var _started = false, _applying = false, _wsId = null, _projId = null;
+  // 12 Nov 2026 (live team data): CAUGHT UP = this tab has merged the server's live copy since it started or came back,
+  // and its live channel is joined. Only then does it hold every teammate's work. save_state.js used "online" alone
+  // to decide that a moved cloud copy could be written over ('merged'): a tab with an old copy did exactly that.
+  var _srvLoaded = false, _subOk = false, _hiddenAt = 0;
+  function _caughtUp() { return !!(_started && ydoc && _online() && _srvLoaded && _subOk); }
+  // 12 Nov 2026: a large removal held back by pushLocal, waiting for the person (three-way) or simply kept (seed).
+  var _heldDel = null, _askingDel = false;
   var _saveTimer = null, _pushTimer = null;
   // 13 Sep 2026 — THE SYNCED BASELINE (R18 rebuild). What every keyed row and every
   // whole-value store looked like the last time this tab and the doc agreed (after a
@@ -367,7 +377,7 @@
     var seed = force || stamp == null || (V != null && V > stamp);
     if (seed) {
       _adoptUntil = Date.now() + ADOPT_WINDOW_MS;     // protect the seed from a stale server-union pull
-      try { pushLocal({ full: true }); } catch (_) {}
+      try { pushLocal({ full: true, force: !!force }); } catch (_) {}   // a deliberate restore may remove; a plain seed never removes a large part
       if (V != null) _stampSet(V);
     } else {
       _adoptUntil = 0;
@@ -829,6 +839,63 @@
   // pushLocal(opts): opts.full = seed posture (model wins, doc mirrors it) — used by
   // the reconcile/adopt paths that have just replaced the model wholesale. The default
   // is the three-way posture: only what changed HERE since the baseline goes out.
+  // What a push would delete from the shared copy, per kind, with the keys (so a confirmed removal deletes exactly those).
+  function _planDeletes(cap, fta, full) {
+    var out = { rows: 0, pages: 0, nodes: 0, keys: {}, before: { rows: 0, pages: 0, nodes: 0 }, large: false, text: '' };
+    function one(name, arr, keyField) {
+      var map = ydoc.getMap('col:' + name), live = {}, ks = [];
+      (arr || []).forEach(function (it) { var kv = it ? it[keyField] : null; if (kv != null && kv !== '') live[String(kv)] = 1; });
+      var src = full ? Array.from(map.keys()) : Array.from(_baseCol(name).keys());
+      src.forEach(function (k) { if (!live[k] && map.get(k) !== undefined) ks.push(k); });
+      if (ks.length) out.keys[name] = ks;
+      return { del: ks.length, size: map.size };
+    }
+    COLLECTIONS.forEach(function (c) { var r = one(c.name, cap[c.name] || [], c.key); out.rows += r.del; out.before.rows += r.size; });
+    var sp = one(FTA_SHELL, fta.shells, 'id'); out.pages = sp.del; out.before.pages = sp.size;
+    var sn = one(FTA_NODE, fta.nodes, 'nodeKey'); out.nodes = sn.del; out.before.nodes = sn.size;
+    var CG = window.SLContentGuard;
+    if (CG && (out.rows || out.pages || out.nodes)) {
+      var L = CG.isLarge({ rows: out.rows, pages: out.pages, nodes: out.nodes }, out.before);
+      out.large = !!L.big; out.text = L.text;
+    }
+    return out;
+  }
+  function _holdDeletes(plan, full) {
+    var pid = _projId;
+    _heldDel = { at: Date.now(), text: plan.text, keys: plan.keys, full: !!full, project: pid };
+    try { console.warn('[CRDT] a push would have removed ' + plan.text + ' from the shared copy: held back (' + (full ? 'seed' : 'this tab\'s edit') + ')'); } catch (_) {}
+    try { if (typeof window.jrnl === 'function') window.jrnl('removal-held', (full ? 'This tab opened with an older copy that is missing ' : 'A change in this tab would remove ') + plan.text + ' from the shared project. Nothing was removed.'); } catch (_) {}
+    // once the team's work is back on this screen nothing is held any more (the cloud save waits for that: cloud_writer.js)
+    var bringBack = function () { try { if (_projId === pid && !_holding()) { pullToModel(); if (_heldDel && _heldDel.project === pid && !_askingDel) _heldDel = null; } } catch (_) {} };
+    if (full) {
+      try { if (typeof window.showToast === 'function') window.showToast('This tab had an older copy of the project, missing ' + plan.text + ' that your team has. Nothing was removed: the team\'s work stays and appears here in a moment.', 'warning', 12000); } catch (_) {}
+      setTimeout(bringBack, Math.max(0, (_adoptUntil || 0) - Date.now()) + 300);
+      return;
+    }
+    if (_askingDel) return;
+    var c = window.slConfirm;
+    if (typeof c !== 'function') { setTimeout(bringBack, 0); return; }
+    _askingDel = true;
+    Promise.resolve(c('This would remove ' + plan.text + ' from the shared project, for everyone on the team.\n\nIf you did not just delete this yourself, choose Cancel: this tab may have an older copy of the project.', { title: 'Remove ' + plan.text + '?', danger: true, okText: 'Remove for everyone', cancelText: 'Cancel' }))
+      .then(function (yes) {
+        _askingDel = false;
+        if (_projId !== pid || !ydoc) return;
+        if (yes) {
+          ydoc.transact(function () {
+            Object.keys(plan.keys).forEach(function (name) {
+              var map = ydoc.getMap('col:' + name), ord = ydoc.getMap('ord:' + name);
+              plan.keys[name].forEach(function (k) { if (map.has(k)) map.delete(k); if (ord.has(k)) ord.delete(k); });
+            });
+          }, 'local');
+          try { if (typeof window.jrnl === 'function') window.jrnl('removal-confirmed', 'Removed ' + plan.text + ' from the shared project (confirmed).'); } catch (_) {}
+          _heldDel = null;
+        } else {
+          try { if (typeof window.jrnl === 'function') window.jrnl('removal-cancelled', 'Kept ' + plan.text + ' in the shared project.'); } catch (_) {}
+          _heldDel = null;
+        }
+        bringBack();
+      }, function () { _askingDel = false; bringBack(); });
+  }
   function pushLocal(opts) {
     if (!ydoc || _applying) return;
     if (_docStale()) return;                          // H-5: never write this model into another project's doc
@@ -838,12 +905,23 @@
     var cap; try { cap = (opts && opts.capture) ? opts.capture : (window.__crdtCapture ? window.__crdtCapture() : null); } catch (_) { cap = null; }
     if (!cap) return;
     try { _pcMigrateAndImport(); } catch (_) {}
+    var _fta = _ftaDecompose(cap.ftaPages || []);
+    // 12 Nov 2026 (live team data, 10 and 11 Nov): ONE PUSH NEVER SILENTLY REMOVES A LARGE PART OF THE SHARED PROJECT.
+    // A student's browser held an old copy and its writes took 250 fault tree events down to 135 for the whole team.
+    // Measure what this push would delete first (SLContentGuard, the one rule for every writer). Large and not a
+    // deliberate restore (opts.force): nothing is deleted. A seed or adopt (full) keeps the teammates' work and says
+    // so; this tab's own edit (three-way) asks the person before anything leaves the shared copy.
+    var _plan = _planDeletes(cap, _fta, full);
+    var _noDel = false;
+    if (_plan.large && !(opts && opts.force)) {
+      _noDel = true;
+      _holdDeletes(_plan, full);
+    }
     ydoc.transact(function () {
-      COLLECTIONS.forEach(function (c) { _writeKeyed(c.name, cap[c.name] || [], c.key, full); });
+      COLLECTIONS.forEach(function (c) { _writeKeyed(c.name, cap[c.name] || [], c.key, full, _noDel); });
       // fault trees: node-level merge — decompose page trees into shells + flat nodes
-      var _fta = _ftaDecompose(cap.ftaPages || []);
-      _writeKeyed(FTA_SHELL, _fta.shells, 'id', full);
-      _writeKeyed(FTA_NODE, _fta.nodes, 'nodeKey', full);
+      _writeKeyed(FTA_SHELL, _fta.shells, 'id', full, _noDel);
+      _writeKeyed(FTA_NODE, _fta.nodes, 'nodeKey', full, _noDel);
       var wmap = ydoc.getMap('whole');
       WHOLE.forEach(function (name) {
         if (!(name in cap)) return;
@@ -906,6 +984,11 @@
     // is consumed here rather than firing a second, redundant push later.
     if (_pushTimer) { try { clearTimeout(_pushTimer); } catch (_) {} _pushTimer = null; }
     if (!(opts && opts.load)) { try { pushLocal(); } catch (_) {} }
+    // 12 Nov 2026: what this tab showed before the pull (its baseline), to say plainly when a teammate's change removes a lot.
+    var _before = null;
+    if (!(opts && opts.load) && _baseLive) {
+      try { _before = { rows: 0, pages: _baseCol(FTA_SHELL).size, nodes: _baseCol(FTA_NODE).size }; COLLECTIONS.forEach(function (c) { _before.rows += _baseCol(c.name).size; }); } catch (_) { _before = null; }
+    }
     var partial = {};
     COLLECTIONS.forEach(function (c) {
       var map = ydoc.getMap('col:' + c.name);
@@ -922,6 +1005,18 @@
     });
     // fault trees: recompose shells + flat nodes back into nested pages
     partial.ftaPages = _ftaRecompose(_ftaReadKeyed(FTA_SHELL), _ftaReadKeyed(FTA_NODE));
+    if (_before && window.SLContentGuard) {
+      try {
+        var _after = { rows: 0, pages: _baseCol(FTA_SHELL).size, nodes: _baseCol(FTA_NODE).size };
+        COLLECTIONS.forEach(function (c) { _after.rows += (partial[c.name] || []).length; });
+        var _L = window.SLContentGuard.loss(_before, _after);
+        if (_L.big) {
+          try { if (typeof window.showToast === 'function') window.showToast('A teammate\'s change just removed ' + _L.text + ' from the shared project. If that was a mistake, it can be brought back from the project history.', 'warning', 12000); } catch (_) {}
+          try { if (typeof window.jrnl === 'function') window.jrnl('removal-arrived', 'A teammate\'s change removed ' + _L.text + ' from the shared project.'); } catch (_) {}
+          try { console.warn('[CRDT] a teammate\'s change removed ' + _L.text); } catch (_) {}
+        }
+      } catch (_) {}
+    }
     var wmap = ydoc.getMap('whole');
     WHOLE.forEach(function (name) {
       if (wmap.has(name)) { try { partial[name] = JSON.parse(wmap.get(name)); _base.whole[name] = wmap.get(name); } catch (_) {} }
@@ -970,6 +1065,7 @@
       if (!_client) return;
       _wsId = _ws(); _projId = _proj();
       _baseReset();
+      _srvLoaded = false; _subOk = false; _heldDel = null;
       ydoc = new Y.Doc();
       _undoMgr = _makeUndo();
       ydoc.on('update', function (update, origin) {
@@ -1086,7 +1182,8 @@
       try { _broadcast('yupdate', { u: b64enc(Y.encodeStateAsUpdate(ydoc, b64dec(m.payload.sv))), t: _tok }); } catch (_) {}
     });
     chan.subscribe(function (status) {
-      if (status !== 'SUBSCRIBED') return;
+      if (status !== 'SUBSCRIBED') { _subOk = false; return; }
+      _subOk = true;
       // ask peers for what we're missing, then push our full state so peers get our unique data
       try { _broadcast('ysync1', { sv: b64enc(Y.encodeStateVector(ydoc)), t: _tok }); } catch (_) {}
       setTimeout(function () { try { _broadcast('yupdate', { u: b64enc(Y.encodeStateAsUpdate(ydoc)), t: _tok }); } catch (_) {} }, 800);
@@ -1098,8 +1195,10 @@
     try {
       _client.from('project_crdt').select('state').eq('project_id', _projId).maybeSingle()
         .then(function (res) {
+          if (res && res.error) return cb(false);        // 12 Nov 2026: a failed read is not "caught up"
           var st = res && res.data && res.data.state;
-          if (st) { try { Y.applyUpdate(ydoc, b64dec(st), 'persist'); return cb(true); } catch (_) {} }
+          if (st) { try { Y.applyUpdate(ydoc, b64dec(st), 'persist'); _srvLoaded = true; return cb(true); } catch (_) { return cb(false); } }
+          _srvLoaded = true;                              // the server has no live copy yet: nothing to catch up on
           cb(false);
         })
         .catch(function () { cb(false); });
@@ -1193,6 +1292,7 @@
     try { if (_undoMgr && _undoMgr.destroy) _undoMgr.destroy(); } catch (_) {} _undoMgr = null;
     try { if (ydoc) ydoc.destroy(); } catch (_) {}
     ydoc = null; _started = false; _baseReset();
+    _srvLoaded = false; _subOk = false; _heldDel = null;
     try { var b = document.getElementById('crdt-offline'); if (b) b.remove(); } catch (_) {}
   }
 
@@ -1268,7 +1368,7 @@
   window.SafetyLabCRDT = {
     start: start, stop: stop, refresh: refresh, onLocalChange: onLocalChange, enabled: flagOn, adoptModel: adoptModel,
     noteSnapshotVersion: noteSnapshotVersion, authoritative: authOn,
-    status: function () { return { flag: flagOn(), authoritative: authOn(), stamp: _stampGet(), ready: _ready(), started: _started, yjs: !!window.Y, idb: !!_idb, online: _online(), ws: _wsId, project: _projId }; },
+    status: function () { return { flag: flagOn(), authoritative: authOn(), stamp: _stampGet(), ready: _ready(), started: _started, yjs: !!window.Y, idb: !!_idb, online: _online(), ws: _wsId, project: _projId, caughtUp: _caughtUp(), heldRemoval: _heldDel ? _heldDel.text : null }; },
     _doc: function () { return ydoc; },
     keys: function () { var o = {}; COLLECTIONS.forEach(function (c) { o[c.name] = c.key; }); return o; },
     undo: undo, redo: redo, canUndo: canUndo, canRedo: canRedo, liveUndo: liveUndo, _undoMgr: function () { return _undoMgr; },
@@ -1284,7 +1384,18 @@
   try {
     // Phase 2 — react to connectivity changes: merge + re-handshake on reconnect; badge on drop.
     window.addEventListener('online',  function () { try { if (_started) { _goOnline(); if (_saveFails || _saveOffline) retrySave(); } else refresh(); } catch (_) {} });
-    window.addEventListener('offline', function () { try { _renderOfflineBadge(); } catch (_) {} });
+    window.addEventListener('offline', function () { try { _srvLoaded = false; _renderOfflineBadge(); } catch (_) {} });
+    // 12 Nov 2026: a tab left in the background (a laptop asleep overnight) is not caught up when it comes back: it
+    // merges the server's live copy again before it may write a moved cloud copy over ('merged').
+    try {
+      document.addEventListener('visibilitychange', function () {
+        try {
+          if (document.hidden) { _hiddenAt = Date.now(); return; }
+          if (_hiddenAt && Date.now() - _hiddenAt > 120000 && _started) { _srvLoaded = false; _goOnline(); }
+          _hiddenAt = 0;
+        } catch (_) {}
+      });
+    } catch (_) {}
     window.addEventListener('load', function () {
       if (!flagOn()) return;
       setTimeout(refresh, 3500);
