@@ -37,7 +37,7 @@ const worker = R('worker.js');
 const sitemapSrc = R('tools/seo/sitemap.mjs');
 const footerSrc = R('tools/seo/footer.mjs');
 const PAGES = [...sitemapSrc.matchAll(/url:\s*"([^"]+)",\s*file:\s*"([^"]+)"/g)].map(m => ({ url: m[1], file: m[2] }));
-const allow = new Set([...(worker.match(/const CONTENT_PAGES = new Set\(\[([\s\S]*?)\]\);/) || [, ''])[1].matchAll(/'([a-z0-9-]+)'/g)].map(m => m[1]));
+const allow = new Set([...(worker.match(/const CONTENT_PAGES = new Set\(\[([\s\S]*?)\]\);/) || [, ''])[1].matchAll(/'([a-z0-9-]+(?:\/[a-z0-9-]+)?)'/g)].map(m => m[1]));
 
 // ---- [1] canonical redirects + branded 404 ----------------------------------------------------
 {
@@ -102,7 +102,7 @@ check('every public page: title <= 60, description <= 160, one H1, self canonica
   let out = '';
   try { out = execSync('node tools/seo/footer.mjs --check', { cwd: ROOT, encoding: 'utf8' }); } catch (e) { out = (e.stdout || '') + (e.stderr || ''); }
   check('tools/seo/footer.mjs --check passes (every page carries the current shared footer)', /footer check OK/.test(out), out.trim().split('\n').slice(-3).join(' | '));
-  const listed = [...footerSrc.matchAll(/"([a-z0-9-]+\.html)"/g)].map(m => m[1]);
+  const listed = [...footerSrc.matchAll(/"([a-z0-9-]+(?:\/[a-z0-9-]+)?\.html)"/g)].map(m => m[1]);
   const notInFooterList = PAGES.map(p => p.file).filter(f => f !== 'landing.html' && !listed.includes(f));
   check('every sitemap page except the homepage is in the footer generator list', notInFooterList.length === 0, notInFooterList.join(' '));
   const deadEnds = PAGES.filter(p => (new Set([...S(p.file).matchAll(/href="(\/[a-z0-9-]*)"/g)].map(m => m[1]))).size < 8);

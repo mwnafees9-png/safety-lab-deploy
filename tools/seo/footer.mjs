@@ -24,6 +24,7 @@ export const PAGES = [
   "fault-tree-analysis.html", "functional-hazard-assessment.html", "arp-4761a.html", "arp-4754b.html",
   "fmea-software.html", "common-cause-analysis.html", "autopilots.html", "medini-analyze-alternative.html", "resources.html",
   "roi.html", "tools.html", "templates.html", "ai-guardrails.html", "trust.html", "legal.html", "privacy.html", "404.html",
+  "articles.html", "articles/air-france-4590-the-words-were-sufficiently-low.html", "articles/737-max-the-number-that-changed.html", "articles/united-232-the-word-was-independent.html", "articles/nimrod-xv230-the-hazard-was-on-the-list.html", "articles/twa-800-two-things-nobody-drew-together.html",
 ];
 
 export const LINKS = {
@@ -38,6 +39,7 @@ export const LINKS = {
   ],
   Resources: [
     ["/resources", "Guides"],
+    ["/articles", "Articles"],
     ["/tools", "Free calculators"],
     ["/templates", "Free templates"],
     ["/roi", "ROI calculator"],

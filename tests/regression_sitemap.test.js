@@ -27,7 +27,7 @@ const locs = t => [...t.matchAll(/<loc>([^<]+)<\/loc>/g)].map(m => m[1]);
     check('starts with the XML prolog and the sitemaps.org urlset', /^<\?xml version="1\.0" encoding="UTF-8"\?>\n<urlset xmlns="http:\/\/www\.sitemaps\.org\/schemas\/sitemap\/0\.9">/.test(xml));
     const L = locs(xml);
     check('one <url> per page in the list', L.length === gen.PAGES.length && (xml.match(/<url>/g) || []).length === gen.PAGES.length);
-    check('every URL is absolute https on safetylabaero.com', L.every(u => /^https:\/\/safetylabaero\.com(\/[a-z0-9-]*)?$/.test(u)));
+    check('every URL is absolute https on safetylabaero.com', L.every(u => /^https:\/\/safetylabaero\.com(\/[a-z0-9-]*(\/[a-z0-9-]+)?)?$/.test(u)));
     check('no duplicate URLs', new Set(L).size === L.length);
     check('every lastmod is a real YYYY-MM-DD', [...xml.matchAll(/<lastmod>([^<]+)<\/lastmod>/g)].every(m => /^\d{4}-\d{2}-\d{2}$/.test(m[1]) && !isNaN(Date.parse(m[1]))));
     check('no lastmod is the stale 2026-06-05 placeholder for every page', !/(<lastmod>2026-06-05<\/lastmod>[\s\S]*){13}/.test(xml));

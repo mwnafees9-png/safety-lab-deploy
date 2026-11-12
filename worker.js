@@ -181,7 +181,7 @@ function canonicalRedirect(url, contentPages) {
     let p = url.pathname;
     if (p === '/index.html' || p === '/landing.html') { p = '/'; }
     else if (p.length > 1) {
-        const m = p.match(/^\/([a-z0-9-]+)(\.html|\/+)$/);
+        const m = p.match(/^\/([a-z0-9-]+(?:\/[a-z0-9-]+)?)(\.html|\/+)$/);
         if (m && (contentPages.has(m[1]))) p = '/' + m[1];
     }
     if (p !== url.pathname) { url.pathname = p; changed = true; }
@@ -212,6 +212,14 @@ const CONTENT_PAGES = new Set([
     'autopilots',
     'medini-analyze-alternative',
     'privacy',
+    // 12 Nov 2026: the articles section. /articles is the index; each article is /articles/<slug>,
+    // served from site/articles/<slug>.html (its images live beside it in site/articles/<dir>/).
+    'articles',
+    'articles/air-france-4590-the-words-were-sufficiently-low',
+    'articles/737-max-the-number-that-changed',
+    'articles/united-232-the-word-was-independent',
+    'articles/nimrod-xv230-the-hazard-was-on-the-list',
+    'articles/twa-800-two-things-nobody-drew-together',
 ]);
 
 export default {

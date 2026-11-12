@@ -25,6 +25,15 @@ Safety Lab Aero, Inc. (Delaware; operating from Colorado, USA). Contact: waqas.n
 - [AI guardrails](https://safetylabaero.com/ai-guardrails): how the AI is bounded, grounded and verified.
 - [Trust and security](https://safetylabaero.com/trust): data isolation, encryption, subprocessors, export control.
 
+## Articles
+
+- [Articles](https://safetylabaero.com/articles): engineer-to-engineer analyses of aircraft accidents from the public record.
+- [Air France 4590: the words were "sufficiently low"](https://safetylabaero.com/articles/air-france-4590-the-words-were-sufficiently-low): Air France 4590 and the Concorde tire burst: what the 1979 analysis rested on, why the trend line was not enough, and what a particular risk analysis is for.
+- [737 MAX: the number that changed and the analysis that didn't](https://safetylabaero.com/articles/737-max-the-number-that-changed): The 737 MAX MCAS change from 0.6 to 2.5 degrees, and the seven places it needed to reach but did not. The case for a digital thread in safety assessment.
+- [United 232: the word was independent](https://safetylabaero.com/articles/united-232-the-word-was-independent): United 232 lost all three DC-10 hydraulic systems to one fan disk. Why independence is a geometric claim first, and what a particular risks assessment asks.
+- [Nimrod XV230: the hazard was on the list](https://safetylabaero.com/articles/nimrod-xv230-the-hazard-was-on-the-list): Nimrod XV230: a fuel leak met a hot duct in one bay. Hazard H73 was identified, left open and called tolerable. Why no single analysis failed.
+- [TWA 800: two things nobody drew together](https://safetylabaero.com/articles/twa-800-two-things-nobody-drew-together): TWA 800 was lost between two correct statements: a low energy gauging circuit and a nearly empty tank. The AND gate nobody had to defend, under ARP4761A.
+
 ## Legal
 
 - [License agreement](https://safetylabaero.com/legal)

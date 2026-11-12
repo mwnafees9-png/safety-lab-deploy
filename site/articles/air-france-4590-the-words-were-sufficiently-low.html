@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#ffffff">
+<meta name="description" content="Air France 4590 and the Concorde tire burst: what the 1979 analysis rested on, why the trend line was not enough, and what a particular risk analysis is for.">
+<meta name="keywords" content="Air France 4590, Concorde crash, tire burst, particular risk analysis, CS 25.734, AMC 25.734, hydrodynamic ram, fuel tank rupture, common cause analysis, ARP4761A, assumptions management">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<title>Air France 4590: "sufficiently low" | Safety Lab Aero</title>
+<link rel="canonical" href="https://safetylabaero.com/articles/air-france-4590-the-words-were-sufficiently-low">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Safety Lab Aero">
+<meta property="og:title" content="Air France 4590: &quot;sufficiently low&quot; | Safety Lab Aero">
+<meta property="og:description" content="Air France 4590 and the Concorde tire burst: what the 1979 analysis rested on, why the trend line was not enough, and what a particular risk analysis is for.">
+<meta property="og:url" content="https://safetylabaero.com/articles/air-france-4590-the-words-were-sufficiently-low">
+<meta property="og:image" content="https://safetylabaero.com/articles/af-4590/cover.jpg">
+<meta property="article:published_time" content="2026-10-19">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="720">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Air France 4590: &quot;sufficiently low&quot; | Safety Lab Aero">
+<meta name="twitter:description" content="Air France 4590 and the Concorde tire burst: what the 1979 analysis rested on, why the trend line was not enough, and what a particular risk analysis is for.">
+<meta name="twitter:image" content="https://safetylabaero.com/articles/af-4590/cover.jpg">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Article",
+      "@id": "https://safetylabaero.com/articles/air-france-4590-the-words-were-sufficiently-low#article",
+      "headline": "Air France 4590: the words were \"sufficiently low\"",
+      "description": "Air France 4590 and the Concorde tire burst: what the 1979 analysis rested on, why the trend line was not enough, and what a particular risk analysis is for.",
+      "image": [
+        "https://safetylabaero.com/articles/af-4590/cover.jpg"
+      ],
+      "datePublished": "2026-10-19",
+      "dateModified": "2026-10-19",
+      "author": {
+        "@type": "Organization",
+        "name": "Safety Lab Aero, Inc.",
+        "url": "https://safetylabaero.com/",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://safetylabaero.com/logo-512.png"
+        }
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Safety Lab Aero, Inc.",
+        "url": "https://safetylabaero.com/",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://safetylabaero.com/logo-512.png"
+        }
+      },
+      "mainEntityOfPage": "https://safetylabaero.com/articles/air-france-4590-the-words-were-sufficiently-low",
+      "url": "https://safetylabaero.com/articles/air-france-4590-the-words-were-sufficiently-low",
+      "wordCount": 3810,
+      "inLanguage": "en-US",
+      "keywords": "Air France 4590, Concorde crash, tire burst, particular risk analysis, CS 25.734, AMC 25.734, hydrodynamic ram, fuel tank rupture, common cause analysis, ARP4761A, assumptions management",
+      "isPartOf": {
+        "@type": "Blog",
+        "@id": "https://safetylabaero.com/articles#blog",
+        "name": "Safety Lab Aero articles",
+        "url": "https://safetylabaero.com/articles"
+      }
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Home",
+          "item": "https://safetylabaero.com/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Articles",
+          "item": "https://safetylabaero.com/articles"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "Air France 4590: the words were \"sufficiently low\"",
+          "item": "https://safetylabaero.com/articles/air-france-4590-the-words-were-sufficiently-low"
+        }
+      ]
+    }
+  ]
+}
+</script>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="/seo.css?v=2">
+<link rel="stylesheet" href="/marketing.css?v=2">
+<style>
+.art-hero{padding:56px 0 24px;border-bottom:1px solid var(--border-hair)}
+.art-meta{font-family:var(--font-mono);font-size:13px;color:var(--text-muted);margin:0 0 18px}
+.art-hero h1{font-size:40px}
+.art-cover{margin:28px 0 0}
+.art-cover img{display:block;width:100%;height:auto;border:1px solid var(--border-hair);border-radius:var(--r-md)}
+.art-cover figcaption,.fig figcaption{font-size:13px;line-height:1.5;color:var(--text-muted);margin-top:8px}
+.art-body{font-size:18px;line-height:1.75}
+.art-body h2{scroll-margin-top:80px}
+.fig{margin:28px 0}
+.fig img{display:block;width:100%;height:auto;border:1px solid var(--border-hair);border-radius:var(--r-md);background:#fff}
+.fig-2,.fig-3{display:grid;gap:10px;grid-template-columns:repeat(2,minmax(0,1fr))}
+.fig-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.fig-2 img,.fig-3 img{height:100%;object-fit:cover}
+.fig-2 figcaption,.fig-3 figcaption{grid-column:1/-1}
+.art-body blockquote{margin:28px 0;padding:6px 0 6px 22px;border-left:3px solid #7b63f0;font-size:21px;line-height:1.5;color:var(--text-strong)}
+.art-body blockquote p{margin:0 0 8px}
+.art-body blockquote cite{display:block;font-style:normal;font-family:var(--font-mono);font-size:13px;color:var(--text-muted)}
+.timeline{list-style:none;padding:0;margin:0 0 20px;border-left:2px solid var(--border)}
+.timeline li{display:grid;grid-template-columns:96px 1fr;gap:12px;padding:6px 0 6px 16px;margin:0}
+.timeline time{font-family:var(--font-mono);font-size:14px;color:#c2348f;padding-top:3px}
+.tool{margin:28px 0;padding:20px 24px;border:1px solid var(--border);border-radius:var(--r-lg);background:var(--bg-soft)}
+.tool-h{font-family:var(--font-mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#7b4fd1;margin:0 0 10px}
+.tool p:last-child{margin-bottom:0}
+.small{font-size:14px;line-height:1.6;color:var(--text-muted)}
+.notes{font-size:14px;line-height:1.55;color:var(--text-muted);padding-left:28px}
+.notes li{margin:4px 0}
+.notes .back{text-decoration:none;margin-left:2px}
+sup.fn{font-size:.65em;line-height:0}
+sup.fn a{text-decoration:none}
+.art-toc{margin:22px 0 0;font-size:15px}
+.art-toc summary{cursor:pointer;color:var(--text-muted)}
+.art-toc ol{margin:8px 0 0;padding-left:20px}
+.more{margin:40px 0 0;padding-top:24px;border-top:1px solid var(--border-hair)}
+.more h2{font-size:22px;margin:0 0 12px}
+.more ul{list-style:none;padding:0;margin:0}
+.more li{margin:0 0 10px}
+.more .d{font-family:var(--font-mono);font-size:12px;color:var(--text-muted);display:block}
+.cards{display:grid;gap:22px;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));margin:36px 0 8px}
+.card{display:flex;flex-direction:column;border:1px solid var(--border-hair);border-radius:var(--r-lg);overflow:hidden;background:var(--bg-card);color:inherit!important;text-decoration:none!important;transition:transform .15s,box-shadow .15s}
+.card:hover{transform:translateY(-2px);box-shadow:0 10px 30px -14px rgba(20,28,70,.35)}
+.card img{display:block;width:100%;height:auto;aspect-ratio:16/9;object-fit:cover;border-bottom:1px solid var(--border-hair);background:#fff}
+.card .c{padding:16px 18px 18px}
+.card .d{font-family:var(--font-mono);font-size:12px;color:var(--text-muted)}
+.card h2{font-size:20px;line-height:1.3;margin:6px 0 8px;color:var(--text-strong)}
+.card p{font-size:15px;line-height:1.55;margin:0;color:var(--text-muted)}
+@media (max-width:640px){.art-hero h1{font-size:30px}.art-body{font-size:17px}.fig-3{grid-template-columns:1fr}.timeline li{grid-template-columns:76px 1fr}}
+</style>
+</head>
+<body>
+<nav class="nav"><div class="nav-inner">
+  <a href="/" class="nav-brand" aria-label="Safety Lab Aero home">
+    <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><polygon points="32,16 48,48 16,48" fill="#fff"/></svg></span>
+    Safety Lab Aero
+  </a>
+  <div class="nav-links">
+    <a href="/articles">Articles</a>
+    <a href="/resources">Resources</a>
+    <a href="/#pricing">Pricing</a>
+    <a href="/#about">About</a>
+    <a href="/app" class="nav-cta">Sign in</a>
+  </div>
+</div></nav>
+
+<header class="art-hero"><div class="container">
+  <p class="eyebrow"><a href="/articles">Articles</a></p>
+  <h1>Air France 4590: the words were "sufficiently low"</h1>
+  <p class="lede">In 1979 a tire burst on a Concorde holed three fuel tanks. The analysis that followed concluded the leak, the fire risk and the damage would stay small. For twenty-one years tire events kept arriving, and the question of protecting the tanks was not reopened. What a particular risk analysis is for, and how it stays alive.</p>
+  <p class="art-meta">A Safety Lab Aero analysis &middot; <time datetime="2026-10-19">October 19, 2026</time> &middot; 17 min read</p>
+  <div class="related"><a href="/common-cause-analysis">CMA, PRA and ZSA</a><a href="/autopilots">Particular risks on the CAD model</a><a href="/arp-4761a">The ARP 4761A process</a><a href="/articles">All articles</a></div>
+  <figure class="art-cover"><img src="/articles/af-4590/cover.jpg" width="1280" height="720" alt="The Concorde memorial at Gonesse" fetchpriority="high"><figcaption>Cover: the Concorde memorial at Gonesse. Photo: "Concorde Crash site &amp; memorial" by Mike McBey, CC BY 2.0, via Wikimedia Commons.</figcaption></figure>
+  <details class="art-toc"><summary>In this article</summary><ol><li><a href="#ninety-seconds">Ninety seconds</a></li><li><a href="#it-had-happened-before">It had happened before</a></li><li><a href="#what-the-analysis-after-1979-concluded">What the analysis after 1979 concluded</a></li><li><a href="#why-the-trend-line-was-not-enough">Why the trend line was not enough</a></li><li><a href="#what-a-particular-risk-analysis-is-for">What a particular risk analysis is for</a></li><li><a href="#how-we-ask-it-in-safety-lab-and-sys-lab">How we ask it in Safety Lab and Sys Lab</a></li><li><a href="#what-changed">What changed</a></li><li><a href="#the-words-were-sufficiently-low">The words were "sufficiently low"</a></li><li><a href="#sources">Sources</a></li></ol></details>
+</div></header>
+<main class="container"><article class="art-body">
+<p>On 25 July 2000, at 14:42:31 UTC, Air France flight 4590 began its takeoff roll on runway 26 right at Paris Charles de Gaulle. It was a charter to New York: nine crew, one hundred passengers, a takeoff weight that, the BEA later found, was about one metric ton over the aircraft's maximum, with a negligible effect on performance. The crew had briefed V1 at 150 knots.</p>
+<p>The first officer called V1 at 14:43:03.7. About six seconds later the front right tire of the left main landing gear, tire No 2, ran over a strip of titanium lying on the runway and was cut through. Less than a minute and a half after that, the aircraft came down on a hotel in Gonesse. All 109 people on board and four people on the ground were killed.</p>
+<p>The strip had fallen from an aircraft that took off five minutes earlier. That fact gets most of the attention, and the courts spent twelve years on it. It is not the question this article is about. Runways will always have debris on them. Tires will always fail. The engineering question is the one the safety analysis is supposed to answer before the aircraft ever flies: when a tire fails at takeoff speed, where does the debris go, what is in the way, and what happens to the aircraft?</p>
+<p>Concorde had an answer to that question. It was written after a very similar event in 1979, it was reasonable on the evidence of the day, and its central structural decision was not reopened. This is the story of that answer, and of what it takes to keep an answer like it alive.</p>
+<p>Everything below comes from the BEA final report on the accident and the other primary sources listed at the end. Where the investigators were uncertain, we say so.</p>
+<h2 id="ninety-seconds">Ninety seconds</h2>
+<p>The BEA reconstructed the sequence in detail (figure 1).</p>
+<figure class="fig"><img src="/articles/af-4590/fig1.webp" width="1568" height="705" alt="Figure 1. One initiating event, about ninety seconds: the sequence the BEA established, from the loose wear strip on the runway to Gonesse. Diagram by Safety Lab Aero, from the BEA final report." loading="lazy" decoding="async"></figure>
+<p>The strip was a wear strip from a thrust reverser cowl: titanium alloy, 435 mm long, 29 to 34 mm wide, about 1.4 mm thick. Laboratory tests in the United States and at the French test center CEAT showed that a strip like it, standing on its edge, cuts straight through a Concorde tire under load and releases large pieces of tread. A 4.5 kg piece of tire No 2 was found on the runway near the strip.</p>
+<p>The BEA calculated that tearing open the tank needed the energy of a tire piece of about 4.5 kg striking at around 140 m/s, a speed the burst could have given it. The piece did not punch through. A 32 by 32 cm section of the lower skin of tank 5, skin only 1.2 mm thick, was found on the runway. It had no impact marks. It had been pushed out from the inside.</p>
+<p>The investigators judged the most likely mechanism to be this: the impact deformed the tank skin and drove the fuel inside it, and the fuel transmitted the energy to another part of the tank, which tore open. Tank 5 was effectively full: it held about 7.2 t and had barely been drawn on before it ruptured, and under acceleration the free surface of the fuel sat at the front of the tank, away from the impact. The BEA notes that how full the tank was had a significant bearing: a free surface near the impact disturbs the transfer of energy, and there was none. It says the rupture was caused by "a mechanism that had never been seen on civil aircraft before the accident". A separate study by ONERA showed that a small, fast fragment could also create a hydrodynamic pressure surge, not enough on its own to tear out the panel but able to weaken a rib. The final cause statement names a "complex process of transmission of the energy", possibly helped by smaller impacts or that surge.</p>
+<p>What came out was not a drip. The BEA estimated the leak from three approaches, which gave similar results, at close to 60 kg/s, about ten times the leak in the 1979 event. It ignited within seconds. The BEA retains two possible ignition sources and does not choose between them: an electric arc from damaged wiring in the main landing gear bay, or contact with hot parts of the engines and reheat, with the flame then working its way forward. Either way the flame stabilized in the turbulent wake behind the landing gear leg and stayed there.</p>
+<p>Engines 1 and 2, the two on the left wing, both surged, the BEA says mostly from ingesting hot gases, and in engine 1's case possibly tire debris. The crew shut down engine 2 on a fire warning. The gear would not retract, because a left gear door had not opened fully or its opening was not detected. The aircraft was carrying the drag of an extended gear, with one left engine shut down and the other surging. It could not climb or accelerate. Engine 1 failed completely shortly before impact. The recording ends at 14:44:31.6.</p>
+<p>The BEA also adds a finding that is easy to skip and should not be: even with the engines working normally, the fire damage to the structure would have led to the loss of the aircraft.</p>
+<h2 id="it-had-happened-before">It had happened before</h2>
+<p>The BEA collected every tire and wheel event it could verify from Air France, British Airways, the manufacturers, Dunlop and the authorities. It found 57 bursts or deflations between entry into service and the accident, 30 at Air France and 27 at British Airways. Nineteen were caused by foreign objects. Twelve damaged the wing or the tanks, and six of those penetrated a tank (figure 3).</p>
+<figure class="fig"><img src="/articles/af-4590/fig3.webp" width="1270" height="952" alt="Figure 3. Tank 5 had been holed before: the in-service tire events from 1976 to 2000, and the takeoff tire event rate per 10,000 cycles. Diagram by Safety Lab Aero, from the BEA final report." loading="lazy" decoding="async"></figure>
+<p>The first and worst was on 14 June 1979 at Washington Dulles. On takeoff, a deflated tire on F-BVFC lost its tread, the tire next to it burst, a wheel disintegrated, and debris punctured tanks 2, 5 and 6. The combined leak was about 4 kg/s. Hydraulic systems were damaged. There was no fire, and the crew landed back at Dulles 24 minutes later.</p>
+<p>The rate is worth stating plainly. As of July 2000 Concorde averaged one tire deflation or burst every 1,500 cycles, about 4,000 flight hours. For comparison the BEA cites roughly one per 100,000 cycles for a long-haul type like the A340, a figure it notes is probably optimistic because airline reporting is incomplete. At certification, a double tire burst had been classified as "extremely rare", less than once in ten million flight hours. After 1979 the manufacturer's own study reclassified it as "rare". Those figures are for a double burst; 25 July 2000 was a single one, and it produced consequences the analysis had not considered.</p>
+<p>None of these numbers was hidden. They were in the operators' and authorities' records. What matters is what the analysis did with them.</p>
+<h2 id="what-the-analysis-after-1979-concluded">What the analysis after 1979 concluded</h2>
+<p>After Washington, the BEA wrote a report and the manufacturer carried out a study to limit the risks of tire bursts. The final report summarizes its conclusions. The study found the risk was "higher in probability and consequence" than assumed at certification, which was an honest and correct finding. It then worked through the consequences one by one (figure 2):</p>
+<ul><li><strong>Nacelles.</strong> Certification had shown that four pounds of tire debris at 217 knots would not compromise an engine.</li><li><strong>Engines.</strong> Large debris could only reach the inner engines, and only from an outer tire burst. For small debris, experience on aircraft with similar geometry suggested a significant loss of thrust was extremely unlikely.</li><li><strong>Feeder tanks.</strong> The tanks feeding adjacent engines were separated, so losing both at once was sufficiently unlikely.</li><li><strong>Fire.</strong> The risk of fire was limited, because the penetrations and the leak rate were "sufficiently low", because debris entering a tank could not ignite the fuel, and because in the gear bay only the electrical circuits were a possible ignition source.</li></ul>
+<figure class="fig"><img src="/articles/af-4590/fig2.webp" width="1400" height="852" alt="Figure 2. What the analysis after Washington rested on, and what happened on 25 July 2000. Diagram by Safety Lab Aero, from the BEA final report." loading="lazy" decoding="async"></figure>
+<p>Most of the fixes that followed were made mandatory. They included:</p>
+<ul><li>a tire under-inflation detection system;</li><li>better protection for the brake hydraulics;</li><li>a tire and wheel inspection before every takeoff;</li><li>reinforced wheels, and tires able to carry twice their normal load against the regulation's one and a half.</li></ul>
+<p>Protection for the underside of the wing was considered. Tests at CEAT in 1980 supported the integrity of the structure against direct penetration, and it was judged not necessary. The BEA records that "this point was not re-opened subsequently".</p>
+<p>Read that list as a safety engineer and every line is sensible. Each conclusion rests on a specific piece of evidence. That is what good analysis looks like. The problem is in the phrase "rests on". The fire conclusion rests on a leak of 4 kg/s. The structural conclusion rests on tests of direct penetration, not of energy carried through the fuel. The engine conclusion rests on a picture of where large debris goes. None of these was wrong in 1980. Each was an assumption with a boundary, and on 25 July 2000 the event went past several of those boundaries at once.</p>
+<h2 id="why-the-trend-line-was-not-enough">Why the trend line was not enough</h2>
+<p>The fixes worked on the thing they targeted. Takeoff tire events fell from about 5.4 per 10,000 cycles before 1982 to about 0.6 per 10,000 between 1995 and 2000, and the BEA calls the fall significant. After the modifications, the BEA notes, the tank penetrations that followed a tire burst came only from secondary debris, in most cases equipment in the landing gear area, such as water deflector and gear door latch parts, probably knocked loose by pieces of tire. The BEA warns that with so few events the trend gives only a qualitative picture.</p>
+<p>A falling rate tells you that the cause is being controlled. It does not tell you whether the consequence of the next failure has been sized correctly. The tank penetrations after 1979 were minor, and caused by secondary debris, so they looked like confirmation that the 1980 conclusions held. They were confirmation only of the cases the analysis already covered. Nothing in that record tested what happens when a large piece of tire hits a full tank in the wrong place.</p>
+<p>The BEA is careful here, and so should we be. It writes that the accident "was not predictable, even through deep analysis of all the in-service events". We are not going to claim otherwise. The rupture mechanism, energy carried through the fuel, had never been seen on a civil aircraft. After 1979 the decision not to protect the wing underside was not reopened, the BEA says because later incidents showed no particular weakness in the structure. What the record does show is how the analysis was framed. The certification standard required the area around the gear to be protected against a tire burst, but it did not require anyone to describe how a tire comes apart, the size or weight of the debris, or to run a dynamic test of a tire being destroyed. The BEA puts it bluntly: "There are no requirements for the tyre burst mode." An analysis cannot size a threat that nobody is asked to define.</p>
+<p>The BEA's recommendations point in the same direction. The first one specific to Concorde asks the authorities, the manufacturer and the operators to strengthen the analysis of in-service events and the rapid definition of corrective action. The general ones ask for stronger tire requirements and for certification rules that take tank damage and leak ignition into account.</p>
+<h2 id="what-a-particular-risk-analysis-is-for">What a particular risk analysis is for</h2>
+<p>In ARP4761, particular risk analysis is one part of common cause analysis, alongside zonal safety analysis and common mode analysis. A particular risk is an event outside the systems being analyzed that can defeat the separation and redundancy those systems rely on, and in safety assessment practice tire and wheel failure is a classic example. Rotor burst, bird strike and fire belong to the same family. A fault tree built system by system treats a fuel leak, an ignition source and the loss of two engines as independent failures with their own small probabilities. A particular risk analysis asks what one external event can do to all of them at once.</p>
+<p>On 25 July 2000 one tire defeated:</p>
+<ul><li>fuel containment, by tearing open the tank;</li><li>the protection of ignition sources, through either the gear bay wiring or the engines;</li><li>the thrust of two engines on the same side;</li><li>gear retraction, probably through damage to a gear door.</li></ul>
+<p>It was one event with several catastrophic paths. That is why it is analyzed as a common cause and not as a coincidence.</p>
+<p>Doing that analysis well takes four things:</p>
+<ol><li><strong>A defined threat.</strong> You need to know what comes off a tire and how fast. Today's European rules do this. CS-25 Amendment 14 (EASA, December 2013) added CS 25.734, protection against wheel and tire failures, with acceptable means of compliance that define tire debris, wheel flange, flailing tire strip and burst pressure models. The same amendment extended the fuel tank impact requirement in CS 25.963(e) from access covers to the tank as a whole. EASA's proposal for the change cited Concorde directly: "This accident shows that a hydrodynamic pressure failure mode exists".</li><li><strong>The real geometry.</strong> You need to know what sits inside each threat zone: tank skins, harnesses, door mechanisms, intakes.</li><li><strong>A trace to consequence.</strong> You need to know which equipment those parts belong to, and which failure conditions that equipment feeds, so the worst combined effect is visible.</li><li><strong>A record of what the conclusions rest on,</strong> kept live as evidence arrives.</li></ol>
+<p>In Concorde's case the first was only partly defined: the regulation required protection but did not define the threat. On programs of that era the second lived on drawings, and the third and fourth in reports and in engineers' heads. That is not a criticism of the engineers. It is how programs worked, and a great many still work that way.</p>
+<h2 id="how-we-ask-it-in-safety-lab-and-sys-lab">How we ask it in Safety Lab and Sys Lab</h2>
+<p>This is the problem we build for. Figure 4 shows the trace for a gear bay like Concorde's. It is a simplified illustration, not a reconstruction of Concorde's certification data.</p>
+<figure class="fig"><img src="/articles/af-4590/fig4.webp" width="1316" height="915" alt="Figure 4. From a tire burst zone to the conditions it reaches: architecture in Sys Lab, the particular risk on the CAD model in Safety Lab, effects through the fault trees, severity in the FHA. A simplified illustration, not Concorde&#x27;s certification data. Diagram by Safety Lab Aero." loading="lazy" decoding="async"></figure>
+<p><strong>The architecture, in Sys Lab.</strong> Sys Lab is our systems engineering tool: requirements, a SysML-style system model, interfaces and the physical architecture, joining Safety Lab on one platform. The physical architecture records where equipment sits and which zone it belongs to, and the interfaces record what connects to what. For a gear bay that means the brake fan supply, a 115 V three-phase line according to the BEA, the gear door mechanism, the lower skin of the tank above it, and the engine intakes behind it. Those are the facts a particular risk analysis needs, held in the model rather than on a drawing someone has to remember to consult. Zones and the physical architecture pass between Sys Lab and Safety Lab, so both tools work from the same picture of the aircraft.</p>
+<p><strong>The threat, on the CAD model, in Safety Lab.</strong> In Safety Lab you import the CAD model and open the particular risks panel. For a tire burst it builds the threat zones from the EASA AMC 25.734 models, by gear position: large and small tire debris, wheel flange debris, the flailing strip and burst pressure. Where the AMC defines a shape only in a figure, Safety Lab asks the engineer to enter it rather than guessing, every number shows its source, and nothing goes into the analysis without the engineer's name on it. Safety Lab then lists every part inside each zone, the zone of the aircraft it sits in, and the equipment it belongs to. It does not guess the links. A part links to equipment on its own only when its reference designator matches exactly one item of equipment. A matching part number, or anything looser, is put forward as a candidate for the engineer to confirm, because the same part can be installed in several places doing different jobs. The AI can draft a damage assumption for each part, grounded in the standards and your architecture, and the engineer reviews it before it counts.</p>
+<p><strong>The consequence, through the fault trees.</strong> Fault trees and requirements in Safety Lab are generated automatically and deterministically: the same inputs give the same results, and every number traces back to its source. Because each part in the risk area is linked to equipment, and the equipment to the basic events in the fault trees, Safety Lab can show which failure conditions a single tire burst reaches and how severe the worst one is. In a Concorde-like gear bay the answer would not be one condition. It would be a loss of fuel containment, an active ignition source and a loss of thrust on two engines, all from one event. That combination is the thing the 1980 analysis reasoned about one item at a time.</p>
+<p><strong>The assumptions, with what rests on them.</strong> Safety Lab keeps every assumption as a record of its own, with its lifecycle and how it will be validated, and it resolves the other direction too: every FHA row, requirement and zonal or particular risk disposition that rests on it. "The leak from a debris puncture is low, based on the 1979 Washington event." "Tank structure is adequate against direct penetration, based on the 1980 tests." Written that way, an assumption stops being background and becomes a claim with a source and a list of dependents. If an assumption is invalidated or retired while something still rests on it, Safety Lab raises a hard check: the foundation moved, and everything built on it is exposed. Catastrophic and hazardous claims that rest on an assumption still awaiting validation are flagged as well.</p>
+<p><strong>The change, when the source moves.</strong> When the CAD model is revised, Safety Lab compares the new revision against the old one and puts forward the zones, equipment, zonal safety rows and risk areas the change touches, for review. The same thinking applies to a new tire, a new deflector or a new in-service event. The question "which of our conclusions did that just touch?" should have an answer in the model, the moment the change is made, rather than depending on whether someone remembers a study from 1980.</p>
+<p>We want to be precise about the limits. No tool would have predicted the rupture of tank 5; the physics had not been observed, and the BEA says so. What a connected model changes is narrower and, we think, more important. It makes the assumption chain visible, it puts every conclusion next to the evidence it rests on, and it keeps the particular risk question open for the life of the aircraft instead of closing it the year it was answered.</p>
+<h2 id="what-changed">What changed</h2>
+<p>The BEA and the UK AAIB recommended suspending Concorde's certificates of airworthiness on 16 August 2000, and the French and British authorities did so. Before the aircraft flew passengers again, the authorities required:</p>
+<ul><li>flexible liners in tanks 1, 4, 5, 6, 7 and 8, made of Kevlar according to the FAA;</li><li>reinforced electrical harnesses in the main landing gear bays;</li><li>procedures to cut power to the brake fans during critical phases of flight, and no dispatch with the tire under-inflation detection system inoperative;</li><li>Michelin NZG tires and a modified anti-skid computer;</li><li>a reshaped water deflector with its retaining cable removed;</li><li>a ban on volatile fuels and a larger minimum go-around fuel.</li></ul>
+<p>Commercial service resumed on 7 November 2001. Air France retired its Concordes in May 2003 and British Airways flew its last commercial service in October 2003.</p>
+<p>The courts took longer. In 2010 a court in Pontoise convicted Continental Airlines and one of its mechanics of involuntary manslaughter. In 2012 the appeal court at Versailles overturned the criminal convictions, while holding Continental civilly liable. We will leave the legal question there. Blame does not make the next aircraft safer.</p>
+<p>The lasting change was in the rules. Before 2000, certification did not ask an applicant to model how a tire comes apart. Today's European rules give a defined debris threat, require the whole fuel tank to be considered against it, and the rulemaking explicitly recognized that the energy can arrive through the fuel rather than through a hole.</p>
+<h2 id="the-words-were-sufficiently-low">The words were "sufficiently low"</h2>
+<p>The engineers who studied the 1979 event did their job. They found the risk was worse than certification had assumed, fixed what the evidence pointed to, and wrote down why the rest was acceptable. "Sufficiently low" was a fair conclusion in 1980.</p>
+<p>The lesson of Air France 4590 is that a conclusion like that has an expiry date, and that the date is set by evidence, not by the calendar. It needs to sit next to the evidence it rests on, it needs a defined threat to be measured against, and it needs to come back up for review every time the evidence, the design or the operation moves. Twenty-one years of tire events were evidence. The analysis had no structured way to ask whether each new event touched the assumptions it rested on.</p>
+<p>That is what we mean by a connected engineering model, and it is why we built Safety Lab and Sys Lab the way we did.</p>
+<p>Safety Lab is in use at multiple aircraft OEMs. If your team is working through particular risks, zonal safety or common cause on a new program, we would be glad to show you how it works on your architecture.</p>
+<h2 id="sources">Sources</h2>
+<ol><li>BEA (Bureau d'Enquêtes et d'Analyses), Accident on 25 July 2000 at La Patte d'Oie in Gonesse (95) to the Concorde registered F-BTSC operated by Air France, Final Report (English translation, published January 2002). <a href="https://bea.aero/uploads/tx_elydbrapports/f-sc000725a.pdf" rel="noopener">https://bea.aero/uploads/tx_elydbrapports/f-sc000725a.pdf</a> . Sections cited: §1.1, §1.2, §1.6.3, §1.11.2.2, §1.12, §1.16.4 (previous events and the post-1979 study), §1.16.5, §1.16.6.4, §1.16.7, §1.16.8, §1.17.2.2, §1.18.1, §2.3, §2.7, §3.1, §3.2, §4.</li><li>BEA, Incident to the Concorde registered F-BVFC operated by Air France on 14 June 1979 at Washington Dulles. <a href="https://bea.aero/en/investigation-reports/notified-events/detail/incident-to-the-concorde-registered-f-bvfc-operated-by-air-france-on-14-06-79-at-washington-dulles-ad/" rel="noopener">https://bea.aero/en/investigation-reports/notified-events/detail/incident-to-the-concorde-registered-f-bvfc-operated-by-air-france-on-14-06-79-at-washington-dulles-ad/</a></li><li>EASA, ED Decision 2013/033/R, CS-25 Amendment 14, 19 December 2013. <a href="https://www.easa.europa.eu/en/downloads/16744/en" rel="noopener">https://www.easa.europa.eu/en/downloads/16744/en</a></li><li>EASA, CS-25 Amendment 14, CS 25.734 and AMC 25.734 (Protection against wheel and tyre failures), CS 25.963(e). <a href="https://www.faa.gov/sites/faa.gov/files/2022-11/CS-25Amendment14.pdf" rel="noopener">https://www.faa.gov/sites/faa.gov/files/2022-11/CS-25Amendment14.pdf</a></li><li>EASA, NPA 2013-02, Protection from debris impacts. <a href="https://www.easa.europa.eu/sites/default/files/dfu/NPA%202013-02.pdf" rel="noopener">https://www.easa.europa.eu/sites/default/files/dfu/NPA%202013-02.pdf</a></li><li>FAA, Lessons Learned from Transport Airplane Accidents: Air France Concorde F-BTSC (tank liners and harness protection). <a href="https://www.faa.gov/lessons_learned/transport_airplane/accidents/F-BTSC" rel="noopener">https://www.faa.gov/lessons_learned/transport_airplane/accidents/F-BTSC</a></li><li>Return to service, 7 November 2001: CNN. <a href="https://www.cnn.com/TRANSCRIPTS/0111/07/se.02.html" rel="noopener">https://www.cnn.com/TRANSCRIPTS/0111/07/se.02.html</a></li><li>Court rulings: Associated Press via NPR, 6 December 2010. <a href="https://www.npr.org/2010/12/06/131843880/french-court-convicts-continental-in-concorde-crash" rel="noopener">https://www.npr.org/2010/12/06/131843880/french-court-convicts-continental-in-concorde-crash</a> ; Associated Press via the Christian Science Monitor, 29 November 2012. <a href="https://csmonitor.com/layout/set/amphtml/Business/Latest-News-Wires/2012/1129/Continental-Concord-crash-conviction-overturned-by-French-court" rel="noopener">https://csmonitor.com/layout/set/amphtml/Business/Latest-News-Wires/2012/1129/Continental-Concord-crash-conviction-overturned-by-French-court</a></li><li>Appeal ruling and civil liability: AFP via WebManagerCenter, 29 November 2012. <a href="https://www.webmanagercenter.com/2012/11/29/128050/crash-du-concorde-continental-airlines-relaxee-mais-doit-verser-des-indemnites/" rel="noopener">https://www.webmanagercenter.com/2012/11/29/128050/crash-du-concorde-continental-airlines-relaxee-mais-doit-verser-des-indemnites/</a></li><li>EASA, CS-25 Amendment 14 Change Information (amended CS 25.963(e) text). <a href="https://www.easa.europa.eu/en/downloads/16747/en" rel="noopener">https://www.easa.europa.eu/en/downloads/16747/en</a></li><li>Concorde retirement, 2003: History. <a href="https://history.co.uk/this-day-in-history/24-october/the-concorde-makes-its-final-flight" rel="noopener">https://history.co.uk/this-day-in-history/24-october/the-concorde-makes-its-final-flight</a></li><li>SAE International, ARP4761A, Guidelines for Conducting the Safety Assessment Process on Civil Aircraft, Systems, and Equipment (December 2023). <a href="https://saemobilus.sae.org/standards/arp4761a-guidelines-conducting-safety-assessment-process-civil-aircraft-systems-equipment" rel="noopener">https://saemobilus.sae.org/standards/arp4761a-guidelines-conducting-safety-assessment-process-civil-aircraft-systems-equipment</a></li></ol>
+<p class="small">Cover photo: "Concorde Crash site &amp; memorial" by Mike McBey, licensed CC BY 2.0, via Wikimedia Commons. Figures 1 to 4: Safety Lab Aero, drawn from the BEA report.</p>
+<div class="cta-band">
+  <h2>See it on your own program</h2>
+  <p>Fault trees and requirements generated deterministically from your architecture, common cause worked out on your model, every number traceable.</p>
+  <p><a href="/app" class="btn btn-primary">Start free trial</a> <a href="/demo" class="btn">Book a walkthrough</a></p>
+</div>
+<div class="more"><h2>More from Safety Lab Aero</h2><ul><li><span class="d">October 12, 2026</span><a href="/articles/737-max-the-number-that-changed">737 MAX: the number that changed and the analysis that didn't</a></li><li><span class="d">October 6, 2026</span><a href="/articles/united-232-the-word-was-independent">United 232: the word was independent</a></li><li><span class="d">October 5, 2026</span><a href="/articles/nimrod-xv230-the-hazard-was-on-the-list">Nimrod XV230: the hazard was on the list</a></li><li><span class="d">September 28, 2026</span><a href="/articles/twa-800-two-things-nobody-drew-together">TWA 800: two things nobody drew together</a></li></ul></div>
+</article></main>
+<!-- SITE-FOOTER:BEGIN (generated by tools/seo/footer.mjs, do not hand-edit) -->
+<footer class="sf" aria-label="Site footer">
+<style>.sf{margin-top:56px;padding:28px 0 22px;border-top:1px solid rgba(128,128,128,.28);font-size:14px;line-height:1.7}.sf-in{max-width:1080px;margin:0 auto;padding:0 24px;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:18px 28px}.sf-col{display:flex;flex-direction:column}.sf-h{font-weight:700;margin-bottom:4px}.sf a{color:inherit;opacity:.82;text-decoration:none}.sf a:hover{opacity:1;text-decoration:underline}.sf-copy{max-width:1080px;margin:22px auto 0;padding:0 24px;font-size:13px;opacity:.75}</style>
+  <div class="sf-in">
+    <div class="sf-col"><span class="sf-h">Product</span><a href="/fault-tree-analysis">Fault tree analysis</a><a href="/functional-hazard-assessment">Functional hazard assessment</a><a href="/arp-4761a">ARP 4761A process</a><a href="/arp-4754b">ARP 4754B and DAL allocation</a><a href="/fmea-software">FMEA</a><a href="/common-cause-analysis">CMA, PRA and ZSA</a><a href="/autopilots">Autopilots</a></div>
+    <div class="sf-col"><span class="sf-h">Resources</span><a href="/resources">Guides</a><a href="/articles">Articles</a><a href="/tools">Free calculators</a><a href="/templates">Free templates</a><a href="/roi">ROI calculator</a><a href="/medini-analyze-alternative">Medini Analyze alternative</a></div>
+    <div class="sf-col"><span class="sf-h">Company</span><a href="/trust">Trust and security</a><a href="/ai-guardrails">AI guardrails</a><a href="/#pricing">Pricing</a><a href="/#about">About</a><a href="mailto:waqas.nafees@safetylabaero.com">Contact</a><a href="/app">Sign in</a></div>
+    <div class="sf-col"><span class="sf-h">Legal</span><a href="/legal">License agreement</a><a href="/privacy">Privacy policy</a></div>
+  </div>
+  <p class="sf-copy">&copy; 2026 Safety Lab Aero, Inc. &middot; safetylabaero.com &middot; Integrated aerospace safety analysis on the ARP 4761A / 4754B process.</p>
+</footer>
+<!-- SITE-FOOTER:END -->
+</body>
+</html>
