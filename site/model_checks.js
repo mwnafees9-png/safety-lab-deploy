@@ -309,7 +309,7 @@
                 const E = (typeof SLFTAEngine !== 'undefined' && SLFTAEngine && SLFTAEngine.duplicateNodeIds) ? SLFTAEngine : null;
                 if (!E) return { checked, fails };
                 _pages().forEach(p => { if (!p || !p.root) return; checked++; let d = []; try { d = E.duplicateNodeIds(p.root) || []; } catch (_) { d = []; }
-                    if (d.length) fails.push((p.name || p.id) + ': node id' + (d.length > 1 ? 's ' : ' ') + d.slice(0, 10).join(', ') + ' used more than once in this page'); });
+                    if (d.length) fails.push((p.name || p.id) + ': ' + (d.length === 1 ? 'two or more events or gates share the ID ' + d[0] : d.length + ' IDs are each shared by two or more events or gates (' + d.join(', ') + ')') + '. Give each its own ID.'); });
                 return { checked, fails };
             }
         });

@@ -55,6 +55,20 @@
         if (t.hasAttribute('data-clash-scope')) { this._clash = this._clash || {}; this._clash.scope = t.value; this._paneClash(); }
     };
 
+    // ================================================================= paging (13 Nov 2026: no list is cut)
+    // Every list in the panels shows 50 at a time with Previous and Next, and says where it is ("51 to 100 of 1,284").
+    var PG_PER = 50;
+    P._pg = function (key, total) {
+        var pages = this._pages = this._pages || {}, n = Math.max(1, Math.ceil(total / PG_PER)), i = Math.min(Math.max(0, pages[key] | 0), n - 1);
+        pages[key] = i; return { i: i, n: n, from: i * PG_PER, to: Math.min(total, (i + 1) * PG_PER) };
+    };
+    P._pgBar = function (key, total, g) {
+        if (total <= PG_PER) return '';
+        return '<div class="scv-pager" style="display:flex;gap:6px;align-items:center;font-size:12px;margin:6px 0"><span>' + (g.from + 1).toLocaleString('en-US') + ' to ' + g.to.toLocaleString('en-US') + ' of ' + total.toLocaleString('en-US') + '</span>' +
+            '<button type="button" class="scv-btn scv-mini" data-scv-pg="' + esc(key) + '|' + (g.i - 1) + '"' + (g.i === 0 ? ' disabled' : '') + '>Previous</button>' +
+            '<button type="button" class="scv-btn scv-mini" data-scv-pg="' + esc(key) + '|' + (g.i + 1) + '"' + (g.i >= g.n - 1 ? ' disabled' : '') + '>Next</button></div>';
+    };
+
     // ================================================================= Properties
     P._paneProps = function () {
         var self = this, pane = this.$.pane, sel = Array.from(this.sel);
@@ -65,7 +79,7 @@
             var pns = {}; sel.forEach(function (p) { var n = self.metaBy[p] && self.metaBy[p].partNumber; if (n) pns[n] = (pns[n] || 0) + 1; });
             pane.innerHTML = '<div class="scv-h">' + sel.length + ' parts selected</div><dl class="scv-kv"><dt>Part numbers</dt><dd>' + Object.keys(pns).length + ' distinct</dd>' +
                 (bx ? '<dt>Box min</dt><dd>' + bx.min.map(fmtMm).join(', ') + '</dd><dt>Box max</dt><dd>' + bx.max.map(fmtMm).join(', ') + '</dd><dt>Size</dt><dd>' + [0, 1, 2].map(function (j) { return fmtMm(bx.max[j] - bx.min[j]); }).join(' x ') + '</dd>' : '') + '</dl>' +
-                '<div>' + Object.keys(pns).sort().slice(0, 30).map(function (k) { return '<div style="font-size:12px">' + esc(k) + ' <span style="color:var(--scv-muted)">x' + pns[k] + '</span></div>'; }).join('') + '</div>';
+                (function () { var ks = Object.keys(pns).sort(), g = self._pg('pns', ks.length); return '<div>' + ks.slice(g.from, g.to).map(function (k) { return '<div style="font-size:12px">' + esc(k) + ' <span style="color:var(--scv-muted)">x' + pns[k] + '</span></div>'; }).join('') + '</div>' + self._pgBar('pns', ks.length, g); })();
             return;
         }
         var pid = sel[0], m = this.metaBy[pid] || {}, a = (this.attrs || {})[pid] || {}, b = m.bbox;
@@ -219,15 +233,18 @@
             '<div style="color:var(--scv-muted);font-size:11px;margin:4px 0 6px">Checked on the display meshes (as close as the tessellation: marked approximate). With the exact geometry open, "Exact" on a pair measures it on the true surfaces and works out the shared volume of a hard clash.</div>';
         var body = '';
         if (res) {
-            var MAX = 1000;
-            body = res.slice(0, MAX).map(function (r, i) {
+            if (c._pgFor !== res) { (self._pages = self._pages || {}).clash = 0; c._pgFor = res; }
+            if (c.sel != null && c._pgSel !== c.sel) { (self._pages = self._pages || {}).clash = Math.floor(c.sel / PG_PER); c._pgSel = c.sel; }
+            var g = self._pg('clash', res.length);
+            body = res.slice(g.from, g.to).map(function (r, i0) {
+                var i = g.from + i0;
                 var A = self.metaBy[r.pidA] || {}, B = self.metaBy[r.pidB] || {};
                 var ex = r.exactResult;
                 return '<div class="scv-item' + (c.sel === i ? ' scv-sel' : '') + '" data-clash="' + i + '"><span class="scv-badge" style="background:' + KIND_COLORS[r.kind] + '">' + (r.kind === 'clash' ? 'Clash' : r.kind === 'touch' ? 'Touch' : 'Clearance') + '</span> ' +
                     (r.kind === 'clash' ? 'meshes cross' : fmtMm(r.distance)) + (ex ? ' · <b>exact ' + (ex.err ? esc(ex.err) : fmtMm(ex.distance) + (ex.volume != null ? ', shared volume ' + _X().fmtVol(ex.volume) : '')) + '</b>' : ' <span style="color:var(--scv-muted)">(approximate)</span>') +
                     '<div style="font-size:11.5px">' + esc(A.name || r.pidA) + (A.designator ? ' ' + esc(A.designator) : '') + ' ↔ ' + esc(B.name || r.pidB) + (B.designator ? ' ' + esc(B.designator) : '') + '</div>' +
                     (self._exactReady() ? '<button type="button" class="scv-btn scv-mini" data-clash-exact="' + i + '" style="margin-top:3px">Exact</button>' : '') + '</div>';
-            }).join('') + (res.length > MAX ? '<div class="scv-empty">' + (res.length - MAX) + ' more; narrow the check.</div>' : '') + (!res.length ? '<div class="scv-empty">No clash, touch or clearance within the tolerance.</div>' : '');
+            }).join('') + self._pgBar('clash', res.length, g) + (!res.length ? '<div class="scv-empty">No clash, touch or clearance within the tolerance.</div>' : '');
         }
         pane.innerHTML = head + body;
         var s = pane.querySelector('[data-clash-scope]'); if (s) s.value = c.scope;
@@ -431,10 +448,10 @@
         html += '<div style="font-size:12px;margin-bottom:4px">Revision ' + esc(c.older.revision) + ' to ' + esc(c.newer.revision) + (c.missingGeometry ? '<div style="color:#7a5a00">The other revision\'s geometry is not on this computer: removed parts cannot be drawn (open its STEP file once to cache it).</div>' : '') + '</div>';
         ['added', 'removed', 'moved', 'resized', 'renamed'].forEach(function (k) {
             var list = c.lists[k]; if (!list.length) { html += '<div style="font-size:12px">' + sw(k) + ' ' + k + ': 0</div>'; return; }
-            html += '<details' + (list.length <= 20 ? ' open' : '') + '><summary style="font-size:12px;cursor:pointer">' + sw(k) + ' ' + k + ': ' + list.length + '</summary>' + list.slice(0, 500).map(function (pid) {
+            html += '<details' + (list.length <= 20 ? ' open' : '') + '><summary style="font-size:12px;cursor:pointer">' + sw(k) + ' ' + k + ': ' + list.length + '</summary>' + list.slice(self._pg('cmp:' + k, list.length).from, self._pg('cmp:' + k, list.length).to).map(function (pid) {
                 var mv = k === 'moved' && c.diff ? c.diff.moved.find(function (x) { return x.pid === pid; }) : null;
                 return '<div class="scv-item" data-cmp-pid="' + esc(pid) + '" data-cmp-kind="' + k + '">' + name(pid) + (mv ? ' <span style="color:var(--scv-muted)">moved ' + fmtMm(mv.shift) + '</span>' : '') + '</div>';
-            }).join('') + '</details>';
+            }).join('') + self._pgBar('cmp:' + k, list.length, self._pg('cmp:' + k, list.length)) + '</details>';
         });
         var reviews = E && typeof E.openReviews === 'function' ? E.openReviews().filter(function (r) { return (r.fromCadId === c.older.id && r.toCadId === c.newer.id); }) : [];
         if (reviews.length) {
@@ -522,6 +539,12 @@
     // ================================================================= clicks in the panels
     P._otherPaneClick = function (e) {
         var t = e.target, self = this, R = _R(), a;
+        if ((a = t.getAttribute('data-scv-pg'))) {
+            var cut = a.lastIndexOf('|'), open = Array.from(this.$.pane.querySelectorAll('details')).map(function (d) { return d.open; });
+            (this._pages = this._pages || {})[a.slice(0, cut)] = +a.slice(cut + 1); this._renderPane();
+            Array.from(this.$.pane.querySelectorAll('details')).forEach(function (d, j) { if (open[j] != null) d.open = open[j]; });
+            return;
+        }
         if (t.hasAttribute('data-props-exact')) { this.loadExact().then(function () { if (self.tab === 'props') self._paneProps(); }).catch(function (e) { self._hint('The exact geometry could not be opened: ' + ((e && e.message) || e)); }); return; }
         // views
         if (t.hasAttribute('data-view-save')) {

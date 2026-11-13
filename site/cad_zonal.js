@@ -761,7 +761,7 @@
         if (!E || typeof E.buildBDDFromFT !== 'function' || typeof E.minOrder !== 'function') return { engine: false, lids: lids, trees: [], errors: [{ text: 'The fault tree engine is not loaded; no result is given rather than a guess.' }], untagged: EI.untagged, index: EI.byLid };
         _pages().slice().sort(function (a, b) { return _cmp(a.id, b.id); }).forEach(function (pg) {
             var T = _treeOf(E, pg), built = T.built, dupIds = T.dupIds;
-            if (dupIds.length) { errors.push({ pageId: pg.id, text: 'Fault tree ' + (pg.name || pg.id) + ' uses node id' + (dupIds.length > 1 ? 's ' : ' ') + dupIds.slice(0, 5).join(', ') + ' more than once in the page; no result for it.' }); return; }
+            if (dupIds.length) { errors.push({ pageId: pg.id, text: 'Fault tree ' + (pg.name || pg.id) + ': ' + (dupIds.length === 1 ? 'two or more events or gates share the ID ' + dupIds[0] : dupIds.length + ' IDs are each shared by two or more events or gates (' + dupIds.join(', ') + ')') + '. Give each its own ID; until then this tree gets no zonal result.' }); return; }
             if (T.error) { errors.push({ pageId: pg.id, text: 'Fault tree ' + (pg.name || pg.id) + ' is too large for the engine (' + ((T.error && T.error.name) || 'error') + '); no result for it.' }); return; }
             if (!built || !built.bdd || built.bdd.isTerminal) return;
             var forced = new Set(), hit = [];
