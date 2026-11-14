@@ -867,6 +867,7 @@
                 self._hint(entry.fileName + ' rev ' + entry.revision + ' · ' + self.order.length + ' parts · ' + sc.stats.prototypes + ' distinct shapes · ' + sc.drawCalls() + ' draw calls · mm');
                 self.dirty = true;
                 self._emitLoaded();
+                try { if (root.SLCadTrueShape) root.SLCadTrueShape.schedule(800); } catch (_) {}   // 14 Nov 2026: anything the true shapes still have to answer
                 // the pid indexes, once the model is on screen
                 setTimeout(function () { if (self.disposed || self.scene3 !== sc) return; void self.metaBy; void sc.byPid; }, 300);
                 return true;

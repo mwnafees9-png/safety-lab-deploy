@@ -47,7 +47,7 @@ function mutate(file, body) {
 }
 {
     const H = rd('index.html');
-    check('1  zsa_type_hazards.js 1.0 right before zsa_autopilot.js 1.9; cad_viewer.js 2.9; headers say so', /zsa_type_hazards\.js\?v=1\.0" defer><\/script>\s*<script src="zsa_autopilot\.js\?v=1\.9"/.test(H) && H.indexOf('cad_viewer.js?v=2.9') > 0 && /SLZsaTypeHazards v1\.0/.test(rd('zsa_type_hazards.js').slice(0, 200)) && /SLZsaAuto v1\.9/.test(rd('zsa_autopilot.js').slice(0, 200)));
+    check('1  zsa_type_hazards.js 1.0 right before zsa_autopilot.js 1.9; cad_viewer.js 2.10; headers say so', /zsa_type_hazards\.js\?v=1\.0" defer><\/script>\s*<script src="zsa_autopilot\.js\?v=1\.9"/.test(H) && H.indexOf('cad_viewer.js?v=2.10') > 0 && /SLZsaTypeHazards v1\.0/.test(rd('zsa_type_hazards.js').slice(0, 200)) && /SLZsaAuto v1\.9/.test(rd('zsa_autopilot.js').slice(0, 200)));
 }
 // ---- the module alone -------------------------------------------------------------------------------------------------
 function loadModule(extra) {

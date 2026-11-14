@@ -21,7 +21,7 @@
 // ============================================================================
 (function () {
     'use strict';
-    var VERSION = '1.6';   // 1.6 (17 Oct 2026): parts whose size is still being read are named and left out of containment and placement
+    var VERSION = '1.7';   // 1.7 (14 Nov 2026): the true-shape section in Containment (review list, accept with a name); every list paged, never cut.  1.6 (17 Oct 2026): parts whose size is still being read are named and left out of containment and placement
     var state = { cadId: null, viewer: null, job: null, unsub: null, lastSel: null };
     function _esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); }
     function _pc() {
@@ -152,13 +152,34 @@
         if (_metaCache.list !== list || _metaCache.n !== list.length) { var map = {}; list.forEach(function (x) { map[x.pid] = x; }); _metaCache = { list: list, n: list.length, map: map }; }
         return _metaCache.map[pid] || null;
     }
-    // A long list in a panel shows its first LIST_CAP rows and says how many more there are: a
-    // 200,000 part model must never become 200,000 rows of HTML (the parts list in the viewer is
-    // the place to browse them all; it draws only the rows on screen).
-    var LIST_CAP = 100;
-    function _cap(list, row) {
-        var shown = list.length > LIST_CAP ? list.slice(0, LIST_CAP) : list;
-        return shown.map(row).join('') + (list.length > LIST_CAP ? '<div style="' + MUTED + 'padding:3px 6px;" data-cad-more="' + list.length + '">and ' + (list.length - LIST_CAP) + ' more (find them in the viewer\'s parts list)</div>' : '');
+    // Every list in a panel is paged, never cut (14 Nov 2026, Waqas's standing rule: no "and N more"):
+    // a page of PAGE rows with Previous and Next. A 200,000 part model is still never 200,000 rows of
+    // HTML at once. Turning a page redraws only that list, so an open section stays open.
+    var PAGE = 50;
+    state.pagers = {};
+    function _cap(list, row, key, cols) {
+        var old = state.pagers[key];
+        state.pagers[key] = { list: list, row: row, cols: cols || 0, page: old && old.n === list.length ? old.page : 0, n: list.length };
+        var inner = _pageHtml(key);
+        return cols ? '<tbody data-cad-pager="' + _esc(key) + '">' + inner + '</tbody>' : '<div data-cad-pager="' + _esc(key) + '">' + inner + '</div>';
+    }
+    function _pageHtml(key) {
+        var P = state.pagers[key]; if (!P) return '';
+        var pages = Math.max(1, Math.ceil(P.list.length / PAGE));
+        if (P.page >= pages) P.page = pages - 1; if (P.page < 0) P.page = 0;
+        var a = P.page * PAGE, rows = P.list.slice(a, a + PAGE).map(function (x) { return P.row(x); }).join('');
+        if (pages <= 1) return rows;
+        var nav = '<span style="font-size:12px;">' + (a + 1).toLocaleString('en-US') + ' to ' + Math.min(a + PAGE, P.list.length).toLocaleString('en-US') + ' of ' + P.list.length.toLocaleString('en-US') + '</span>' +
+            '<button data-cad-act="page" data-key="' + _esc(key) + '" data-dir="-1" style="' + BTN + '"' + (P.page === 0 ? ' disabled' : '') + '>Previous</button>' +
+            '<button data-cad-act="page" data-key="' + _esc(key) + '" data-dir="1" style="' + BTN + '"' + (P.page >= pages - 1 ? ' disabled' : '') + '>Next</button>';
+        return rows + (P.cols ? '<tr data-cad-pagenav><td colspan="' + P.cols + '" style="padding:4px 6px;"><span style="display:inline-flex;gap:6px;align-items:center;">' + nav + '</span></td></tr>'
+            : '<div data-cad-pagenav style="display:flex;gap:6px;align-items:center;padding:4px 0;">' + nav + '</div>');
+    }
+    function _turnPage(key, dir) {
+        var P = state.pagers[key]; if (!P) return;
+        P.page += dir;
+        var el = document.querySelector('[data-cad-pager="' + (window.CSS && CSS.escape ? CSS.escape(key) : key) + '"]');
+        if (el) el.innerHTML = _pageHtml(key);
     }
     function _partName(pid) { var p = _partMeta(pid); return p ? p.name + (p.designator ? ' ' + p.designator : '') + (p.partNumber ? ' (' + p.partNumber + ')' : '') : pid; }
     function _sysName(id) {
@@ -199,20 +220,20 @@
             '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;">' + _cap(m.exact, function (x) {
                 return '<tr data-cad-exact="' + _esc(x.pid) + '" style="border-top:1px solid var(--color-border-hair);"><td style="padding:3px 6px;">' + _pidLink(x.pid) + '</td><td style="padding:3px 6px;">' + _esc(_sysName(x.sysId)) + '</td><td style="padding:3px 6px;' + MUTED + '">same reference designator ' + _esc((_partMeta(x.pid) || {}).designator || (_partMeta(x.pid) || {}).name || '') + '</td>' +
                     '<td style="padding:3px 6px;text-align:right;white-space:nowrap;"><button data-cad-act="confirm" data-pid="' + _esc(x.pid) + '" data-sys="' + _esc(x.sysId) + '" data-on="' + _esc(x.on) + '" style="' + BTN + '">Accept</button> <button data-cad-act="reject" data-pid="' + _esc(x.pid) + '" data-sys="' + _esc(x.sysId) + '" style="' + BTN_BAD + '">Reject</button></td></tr>';
-            }) + '</table></div>' : '';
+            }, 'exact', 4) + '</table></div>' : '';
         var ca = m.candidates.length ? '<div style="margin-top:8px;"><b style="font-size:12px;">Suggestions to confirm</b> <span style="' + MUTED + '">(shared part number, ATA code or a similar name)</span><table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;">' + _cap(m.candidates, function (c) {
                 return c.sysIds.map(function (sid, i) {
                     return '<tr data-cad-cand="' + _esc(c.pid) + '" style="border-top:1px solid var(--color-border-hair);"><td style="padding:3px 6px;">' + (i === 0 ? _pidLink(c.pid) : '') + '</td><td style="padding:3px 6px;">' + _esc(_sysName(sid)) + '</td>' +
                         '<td style="padding:3px 6px;text-align:right;white-space:nowrap;"><button data-cad-act="confirm" data-pid="' + _esc(c.pid) + '" data-sys="' + _esc(sid) + '" style="' + BTN + '">Confirm</button> <button data-cad-act="reject" data-pid="' + _esc(c.pid) + '" data-sys="' + _esc(sid) + '" style="' + BTN_BAD + '">Reject</button></td></tr>';
                 }).join('');
-            }) + '</table></div>' : '';
+            }, 'candidates', 3) + '</table></div>' : '';
         var opts = sys.map(function (s) { return '<option value="' + _esc(s.id) + '">' + _esc(s.name || s.id) + '</option>'; }).join('');
         var un = m.unmatched.length ? '<details style="margin-top:8px;"><summary style="font-size:12px;cursor:pointer;">' + m.unmatched.length + ' parts with no match (link one by hand)</summary>' + _cap(m.unmatched, function (pid) {
                 return '<div style="display:flex;gap:6px;align-items:center;padding:2px 0;">' + _pidLink(pid) + (opts ? '<select data-cad-manual="' + _esc(pid) + '" style="font-size:11.5px;padding:1px;"><option value="">equipment...</option>' + opts + '</select><button data-cad-act="manual" data-pid="' + _esc(pid) + '" style="' + BTN + '">Confirm link</button>' : '') + '</div>';
-            }) + '</details>' : '';
+            }, 'unmatched') + '</details>' : '';
         var li = m.linked.length ? '<details style="margin-top:8px;"><summary style="font-size:12px;cursor:pointer;">' + m.linked.length + ' linked parts</summary>' + _cap(m.linked, function (l) {
                 return '<div style="display:flex;gap:6px;align-items:center;padding:2px 0;font-size:12px;" data-cad-linked="' + _esc(l.pid) + '">' + _pidLink(l.pid) + ' <span>to ' + _esc(_sysName(l.sysId)) + '</span><button data-cad-act="unlink" data-pid="' + _esc(l.pid) + '" style="' + BTN_BAD + 'margin-left:auto;">Unlink</button></div>';
-            }) + '</details>' : '';
+            }, 'linked') + '</details>' : '';
         _panel('cad-match', 'Equipment links', nameBox + head + ex + ca + un + li, _rule('identity'));
     }
     function _linkAction(btn) {
@@ -232,6 +253,82 @@
     }
     function _afterLinks() { _renderMatching(); _renderContainment(); _renderIndependence(); }
 
+    // ---- True shapes (14 Nov 2026): zones and risk volumes against each part's real surface
+    // Until the engineer accepts them, zones and risk volumes stay on boxes and this section lists
+    // exactly what the real surfaces would change; nothing changes without a click and a name.
+    function _mm(t) { return t == null ? '' : (t < 1 ? t.toFixed(2) : t < 10 ? t.toFixed(1) : String(Math.round(t))); }
+    function _zoneOrNone(id) { return id ? _zoneLink(id) : 'no zone'; }
+    function _volName(id) { var E = _engine(), v = E && E.riskVolume ? E.riskVolume(id) : null; return _esc(v ? (v.label || v.name || id) : id); }
+    function _tsReview() {
+        var E = _engine(), m = _model(); if (!E || !m || !E.trueShapeReview) return null;
+        var t = m.trueShape || {}, key = state.cadId + '|' + (t.at || '') + '|' + JSON.stringify(E.trueShapeNeeds(state.cadId)) + '|' + (m.trueShapeAccepted ? m.trueShapeAccepted.at : '');
+        if (!state.tsReview || state.tsReview.key !== key) state.tsReview = { key: key, r: E.trueShapeReview(state.cadId) };
+        return state.tsReview.r;
+    }
+    function _tsList(title, list, row, key) {
+        if (!list.length) return '';
+        return '<details style="margin-top:4px;" data-cad-ts-list="' + key + '"><summary style="font-size:12px;cursor:pointer;">' + title + ' (' + list.length + ')</summary>' + _cap(list, function (x) { return '<div style="font-size:12px;padding:1px 0;">' + row(x) + '</div>'; }, 'ts-' + key) + '</details>';
+    }
+    function _trueShapeHtml(c) {
+        var E = _engine(), m = _model(); if (!E || !m || !E.trueShapeReview) return '';
+        var S = window.SLCadTrueShape, st = S && S.state ? S.state() : {}, mine = st && st.cadId === state.cadId ? st : {};
+        var head = '<b style="font-size:12px;">True shapes</b>';
+        var status = '';
+        if (mine.phase === 'reading' || mine.phase === 'working') status = 'Checking each part\'s real surface against the zones and risk volumes: ' + Math.floor((mine.frac || 0) * 100) + '% done.';
+        else if (mine.phase === 'no-shapes') status = _esc(mine.why || 'The shapes of this model are not on this computer.');
+        var out = '<div style="margin-bottom:8px;border-bottom:1px solid var(--color-border-hair);padding-bottom:6px;" data-cad-trueshape>' + head +
+            '<div style="font-size:12px;" data-cad-ts-status>' + status + '</div>';
+        var acc = m.trueShapeAccepted, r = c.trueShape || {};
+        if (r.accepted) {
+            var tol = (m.trueShape && m.trueShape.tol != null) ? m.trueShape.tol : null;
+            out += '<div style="font-size:12px;" data-cad-ts-accepted>Zones and risk volumes use the parts\' real surfaces, accepted by ' + _esc(acc.by) + ' on ' + _esc(String(acc.at || '').slice(0, 10)) + '.' +
+                (tol != null ? ' A part closer to an edge than ' + _mm(tol) + ' mm (the accuracy of the display shapes) is counted as inside it, the safe side.' : '') + '</div>';
+            if (c.zonesOnBox && c.zonesOnBox.length) out += '<div style="font-size:12px;" data-cad-ts-onbox>Still worked out from boxes: ' + c.zonesOnBox.map(_zoneLink).join(', ') + '. A zone is checked again after it is edited; one made from parts without an exact shape on this computer stays on boxes.</div>';
+            out += _tsList('Parts at a zone edge', c.boundary || [], function (b) { return _pidLink(b.pid) + ' is at the edge of ' + b.zoneIds.map(_zoneLink).join(', '); }, 'edge');
+            return out + '</div>';
+        }
+        if (!r.ready) {
+            if (!status) status = 'Not checked yet. The real surfaces are read when the model is open on this computer.';
+            return out.replace('data-cad-ts-status></div>', 'data-cad-ts-status>' + status + '</div>') + '</div>';
+        }
+        var v = _tsReview(); if (!v) return out + '</div>';
+        var pend = v.needs.zones.length + v.needs.risks.length;
+        out += '<div style="font-size:12px;">Zones and risk volumes on this page are still worked out from boxes. Checking the real surfaces' + (v.tol != null ? ' (to within ' + _mm(v.tol) + ' mm)' : '') + ' changes ' + (v.changes ? v.changes + ' answer' + (v.changes === 1 ? '' : 's') + ', listed below' : 'no answer') + '. Nothing changes until you accept.</div>' +
+            (pend ? '<div style="font-size:12px;">Still to check: ' + v.needs.zones.length + ' zone' + (v.needs.zones.length === 1 ? '' : 's') + ' and ' + v.needs.risks.length + ' risk volume' + (v.needs.risks.length === 1 ? '' : 's') + '.</div>' : '');
+        out += _tsList('Parts that change zone', v.zoneMoves, function (x) { return _pidLink(x.pid) + ': from ' + _zoneOrNone(x.from) + ' to ' + _zoneOrNone(x.to); }, 'moves') +
+            _tsList('Parts that also reach another zone', v.newCrossings, function (x) { return _pidLink(x.pid) + ': in ' + _zoneOrNone(x.zoneId) + ', also reaches ' + x.also.map(_zoneLink).join(', '); }, 'cross') +
+            _tsList('Parts that no longer cross into another zone', v.crossingsGone, function (x) { return _pidLink(x.pid) + ': in ' + _zoneOrNone(x.zoneId) + ', does not reach ' + x.gone.map(_zoneLink).join(', ') + ' (only its box did)'; }, 'gone') +
+            _tsList('Parts newly inside a risk volume', v.riskAdded, function (x) { return _pidLink(x.pid) + ' in ' + _volName(x.volumeId); }, 'radd') +
+            _tsList('Parts no longer inside a risk volume', v.riskRemoved, function (x) { return _pidLink(x.pid) + ' out of ' + _volName(x.volumeId) + ': its box reaches in, its surface does not'; }, 'rrem') +
+            _tsList('Parts at a zone edge (counted as inside)', v.boundary, function (b) { return _pidLink(b.pid) + ' at the edge of ' + b.zoneIds.map(_zoneLink).join(', '); }, 'edge') +
+            _tsList('Parts at a risk volume edge (counted as inside)', v.riskBoundary, function (x) { return _pidLink(x.pid) + ' at the edge of ' + _volName(x.volumeId); }, 'redge');
+        var onBox = (v.zonesOnBox || []).filter(function (id) { return v.needs.zones.indexOf(id) < 0; }), rOnBox = (v.risksOnBox || []).filter(function (id) { return v.needs.risks.indexOf(id) < 0; });
+        if (onBox.length || rOnBox.length) out += '<div style="font-size:12px;margin-top:4px;" data-cad-ts-onbox>Stay on boxes (made from parts with no exact shape on this computer): ' + onBox.map(_zoneLink).concat(rOnBox.map(_volName)).join(', ') + '.</div>';
+        out += '<button data-cad-act="ts-accept" style="' + BTN + 'margin-top:6px;"' + (pend ? ' disabled' : '') + '>' + (v.changes ? 'Accept the true shapes (' + v.changes + ' change' + (v.changes === 1 ? '' : 's') + ')' : 'Accept the true shapes') + '</button>' +
+            (pend ? '<div style="font-size:12px;">You can accept once every zone and risk volume is checked.</div>' : '');
+        return out + '</div>';
+    }
+    function _acceptTrueShape() {
+        var E = _engine(); if (!E || !E.acceptTrueShape) return;
+        var by = _needWho(); if (!by) return;
+        var r = E.acceptTrueShape(state.cadId, by);
+        if (!r.ok) { _msg(_esc(r.err), 'error'); return; }
+        _msg('True shapes accepted by ' + _esc(by) + ': zones and risk volumes now use the parts\' real surfaces.');
+        state.tsReview = null; _renderPanels();
+    }
+    var _tsTick = 0;
+    function _onTrueShape(s) {
+        if (!s || s.cadId !== state.cadId || !document.getElementById('cad-contain')) return;
+        if (s.phase === 'working' || s.phase === 'reading') {
+            var el = document.querySelector('[data-cad-ts-status]'), now = Date.now();
+            if (el && now - _tsTick > 250) { _tsTick = now; el.textContent = 'Checking each part\'s real surface against the zones and risk volumes: ' + Math.floor((s.frac || 0) * 100) + '% done.'; }
+            return;
+        }
+        state.tsReview = null;
+        if (s.phase === 'done' && s.updated && _engine() && _engine().trueShapeAccepted && _engine().trueShapeAccepted(state.cadId)) _renderPanels();
+        else _renderContainment();
+    }
+
     // ---- Containment: which zone holds each part, and the equipment placement it implies
     function _renderContainment() {
         var E = _engine(); if (!E) { _panel('cad-contain', 'Containment', _noEngine()); return; }
@@ -242,13 +339,13 @@
         var selLine = '';
         if (sel) {
             var rec = null; for (var ri = 0; ri < c.parts.length; ri++) if (c.parts[ri].pid === sel) { rec = c.parts[ri]; break; }
-            selLine = '<div style="font-size:12px;margin-bottom:6px;" data-cad-sel-zone>Selected: ' + _pidLink(sel) + ' is ' + (rec && rec.zoneId ? 'in ' + _zoneLink(rec.zoneId) + (rec.ambiguousWith ? ' (also inside ' + rec.ambiguousWith.map(_zoneLink).join(', ') + ' at the same depth)' : '') : (c.envelopes.indexOf(sel) >= 0 ? 'part of a zone envelope' : 'outside every zone')) + (c.straddling.some(function (s) { return s.pid === sel; }) ? ', and crosses a zone boundary' : '') + '.</div>';
+            selLine = '<div style="font-size:12px;margin-bottom:6px;" data-cad-sel-zone>Selected: ' + _pidLink(sel) + ' is ' + (rec && rec.zoneId ? 'in ' + _zoneLink(rec.zoneId) + (rec.ambiguousWith ? ' (also inside ' + rec.ambiguousWith.map(_zoneLink).join(', ') + ' at the same depth)' : '') : (c.envelopes.indexOf(sel) >= 0 ? 'part of a zone envelope' : 'outside every zone')) + (c.straddling.some(function (s) { return s.pid === sel; }) ? ', and crosses a zone boundary' : '') + (rec && rec.boundary ? ', and is at the edge of ' + rec.boundary.map(_zoneLink).join(', ') : '') + (rec && rec.how === 'box' && c.how !== 'box' ? ' (worked out from boxes)' : '') + '.</div>';
         }
-        var body = selLine + '<div style="font-size:12px;margin-bottom:4px;">' + c.parts.filter(function (r) { return r.zoneId; }).length + ' parts in zones · ' + c.outside.length + ' outside every zone · ' + c.straddling.length + ' crossing a boundary · ' + c.ambiguous.length + ' ambiguous' + (c.estimated.length ? ' · ' + c.estimated.length + ' still being read' : '') + '</div>' +
+        var body = _trueShapeHtml(c) + selLine + '<div style="font-size:12px;margin-bottom:4px;">' + c.parts.filter(function (r) { return r.zoneId; }).length + ' parts in zones · ' + c.outside.length + ' outside every zone · ' + c.straddling.length + ' crossing a boundary · ' + c.ambiguous.length + ' ambiguous' + (c.estimated.length ? ' · ' + c.estimated.length + ' still being read' : '') + '</div>' +
             (c.estimated.length ? '<div style="font-size:12px;margin-bottom:4px;" data-cad-estimated>' + c.estimated.length + ' part' + (c.estimated.length === 1 ? '\'s size is' : 's\' sizes are') + ' still being read from the CAD file. They are left out of zones, risk volumes and placement until their true size is known.</div>' : '') +
             (zones.length ? zones.map(function (zid) { return '<div style="font-size:12px;">' + _zoneLink(zid) + ': ' + c.byZone[zid].length + ' part' + (c.byZone[zid].length === 1 ? '' : 's') + '</div>'; }).join('') : '<div style="' + MUTED + '">No zone with a volume holds any part. Import a zone list with boxes, or define zones from parts.</div>') +
-            (c.straddling.length ? '<details style="margin-top:4px;"><summary style="font-size:12px;cursor:pointer;">Crossing a boundary</summary>' + _cap(c.straddling, function (s) { return '<div>' + _pidLink(s.pid) + '</div>'; }) + '</details>' : '') +
-            (c.outside.length ? '<details style="margin-top:4px;"><summary style="font-size:12px;cursor:pointer;">Outside every zone</summary>' + _cap(c.outside, function (p) { return '<div>' + _pidLink(p) + '</div>'; }) + '</details>' : '') +
+            (c.straddling.length ? '<details style="margin-top:4px;"><summary style="font-size:12px;cursor:pointer;">Crossing a boundary</summary>' + _cap(c.straddling, function (s) { return '<div>' + _pidLink(s.pid) + '</div>'; }, 'straddling') + '</details>' : '') +
+            (c.outside.length ? '<details style="margin-top:4px;"><summary style="font-size:12px;cursor:pointer;">Outside every zone</summary>' + _cap(c.outside, function (p) { return '<div>' + _pidLink(p) + '</div>'; }, 'outside') + '</details>' : '') +
             (c.zoneIssues.length ? '<div style="font-size:12px;color:var(--color-danger,#8E2A2A);margin-top:4px;">' + c.zoneIssues.map(function (i) { return _esc(i.text); }).join('<br>') + '</div>' : '');
         var plan = E.applyContainment(state.cadId);
         body += '<div style="margin-top:8px;border-top:1px solid var(--color-border-hair);padding-top:6px;" data-cad-placement><b style="font-size:12px;">Equipment placement from CAD</b>' +
@@ -468,13 +565,16 @@
                 var f = e.target.closest('[data-cad-flag]'); if (f) { _showFlag(+f.getAttribute('data-cad-flag')); return; }
                 var a = e.target.closest('[data-cad-act]'); if (!a) return;
                 var act = a.getAttribute('data-cad-act');
-                if (act === 'place') _place();
+                if (act === 'page') _turnPage(a.getAttribute('data-key'), +a.getAttribute('data-dir'));
+                else if (act === 'ts-accept') _acceptTrueShape();
+                else if (act === 'place') _place();
                 else if (act === 'reviewed') { var by = _needWho(); if (!by) return; var E = _engine(); var r = E.closeReviewItem(a.getAttribute('data-rev'), a.getAttribute('data-kind'), a.getAttribute('data-ref'), by); if (r && r.ok === false) _msg(_esc(r.err), 'error'); _renderReviews(); }
                 else _linkAction(a);
             });
             wrap.addEventListener('input', function (e) { if (e.target && e.target.id === 'cad-by') state.by = e.target.value; });
         }
         _renderRevisions();
+        if (window.SLCadTrueShape && !state.tsUnsub) state.tsUnsub = window.SLCadTrueShape.onState(_onTrueShape);
         if (!state.viewer && window.SLCadViewer) {
             // 15 Oct 2026: the viewer takes the shared canvas height (--sl-canvas-h in safety_lab.css, 680px on a 900px window) like every diagram.
             state.viewer = window.SLCadViewer.mount(document.getElementById('cad-viewer-host'), { height: 'var(--sl-canvas-h)', onZone: _onZone, onVolume: _onVolume, who: _who, onReview: function () { _renderReviews(); }, onShared: function () { try { if (typeof window.scheduleAutosave === 'function') window.scheduleAutosave(); } catch (_) {} } });

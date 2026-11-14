@@ -4,7 +4,7 @@
  "generator": "Safety Lab Aero zonal exchange 1.3",
  "projectName": "Synthetic aircraft",
  "exportedAt": "2026-10-15T09:00:00.000Z",
- "contentHash": "cebcc0a4",
+ "contentHash": "9d462f7f",
  "cad": {
   "cadId": "cad-1",
   "revision": "A",
@@ -13,7 +13,7 @@
   "partsComplete": true
  },
  "rules": {
-  "containment": "A part is in the zone whose volume holds its centroid. The deepest zone wins; at equal depth the smaller volume, then the lower zone code, then the lower id, and the part is reported as ambiguous. A part whose box crosses the boundary of its zone is reported as straddling.",
+  "containment": "On the parts' true shapes once they are read and accepted (14 Nov 2026): a part is in every zone its surface reaches; its own zone is the one that holds its centroid, the deepest first. Until then (and for a zone whose true answer is not read yet): a part is in the zone whose volume holds its centroid. The deepest zone wins; at equal depth the smaller volume, then the lower zone code, then the lower id, and the part is reported as ambiguous. A part whose box crosses the boundary of its zone is reported as straddling.",
   "identity": "A link is to one installed copy, never to a part number. Only a reference designator (the installed item tag) that is unique on both sides, one CAD part and one equipment item, links by itself. A shared part number or an ATA code is only a candidate, because the same part can be installed several times doing different jobs. Every candidate waits for the engineer to confirm. Equipment is never placed in a zone without a confirmed link.",
   "events": "A basic event belongs to the equipment its declared identity names (the system id, or the provider of an interface or resource event).",
   "impact": "Every basic event of the affected equipment is failed together, everything else works, and each fault tree is evaluated by the existing engine. A failure condition is reached when one of its trees needs no further failure.",

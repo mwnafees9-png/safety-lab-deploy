@@ -43,7 +43,7 @@
 // ============================================================================
 (function (root) {
     'use strict';
-    var VERSION = '2.5';   // 2.5 (17 Oct 2026): full assembly paths (attachTrails), each part's own part number, estimated boxes marked
+    var VERSION = '2.6';   // 2.6 (14 Nov 2026): a mesh simplified for display is marked (decimated), and the cache says it marks them (ts: 1), so the true-shape answers never trust a simplified mesh.  2.5 (17 Oct 2026): full assembly paths (attachTrails), each part's own part number, estimated boxes marked
     var DB_NAME = 'sl-cad', DB_STORE = 'meshes', DB_STEPS = 'steps', DB_VERSION = 2;
     var START_MS = 20000;   // the worker's first message (it comes before any parsing) must arrive within this
     var OCCT_DIR = 'vendor/occt/';
@@ -611,7 +611,7 @@
             var target = Math.min(maxPart > 0 ? maxPart : Infinity, Math.max(2000, Math.floor(tris * scale)));
             if (tris > target) {
                 var d = decimate(p.position, p.index, target);
-                if (d.decimated) { p.position = d.position; p.index = d.index; p.normal = null; p.faces = null; decimatedParts += copies[i]; }
+                if (d.decimated) { p.position = d.position; p.index = d.index; p.normal = null; p.faces = null; p.decimated = true; decimatedParts += copies[i]; }
             }
             trianglesOut += (p.index.length / 3) * copies[i];
         });
@@ -968,7 +968,7 @@
         return pl;
     }
     function _cachePayload0(sha, model) {
-        return { version: 2, sha256: sha, units: 'mm', createdAt: new Date().toISOString(), schema: model.schema || null, reader: model.reader || null, protos: model.protos, packed: null, parts: model.parts && model.parts.length > LOCAL_PARTS_MIN() ? packParts(model.parts, model.meshes) : null, attrs: model.attrs || {}, partial: !!(model.streaming && !(model.streaming.done >= model.streaming.leaves)) };
+        return { version: 2, ts: 1, sha256: sha, units: 'mm', createdAt: new Date().toISOString(), schema: model.schema || null, reader: model.reader || null, protos: model.protos, packed: null, parts: model.parts && model.parts.length > LOCAL_PARTS_MIN() ? packParts(model.parts, model.meshes) : null, attrs: model.attrs || {}, partial: !!(model.streaming && !(model.streaming.done >= model.streaming.leaves)) };
     }
     // The per part records packed into a few flat arrays: storing and reading 200,000 small
     // objects from IndexedDB costs seconds, a handful of typed arrays a few milliseconds.
@@ -1087,6 +1087,7 @@
             if (o.file && cache.putStep) return Promise.resolve(cache.putStep(r.sha256, o.file)).catch(function () {});
         }).then(function () {
             T.putStep = Date.now() - T.start; _trace('step stored');
+            try { if (root.SLCadTrueShape) root.SLCadTrueShape.schedule(500); } catch (_) {}   // the shapes are in the cache: zones and risk volumes on them
             var entry = addToProject(r.model, { fileName: o.fileName || 'model.step', sha256: r.sha256, importedAt: o.at || new Date().toISOString() });
             _trace('added to project');
             if (r.stream) {
@@ -1101,7 +1102,7 @@
                     if (E && E.updatePartBoxes) E.updatePartBoxes(entry.id, upd);
                     _trace('true boxes');
                     // the cache write in a task of its own, so the view draws in between
-                    setTimeout(function () { Promise.resolve(cache.put(r.sha256, _cachePayload(r.sha256, r.model))).then(function () { _trace('cache put (complete model)'); }).catch(function () {}); }, 0);
+                    setTimeout(function () { Promise.resolve(cache.put(r.sha256, _cachePayload(r.sha256, r.model))).then(function () { _trace('cache put (complete model)'); try { if (root.SLCadTrueShape) root.SLCadTrueShape.schedule(500); } catch (_) {} }).catch(function () {}); }, 0);
                 });
             }
             return { entry: entry, model: r.model, revision: reviseFrom(entry, o.by), worker: r.worker || null, stream: r.stream || null };

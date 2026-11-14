@@ -62,7 +62,7 @@
 (function (root) {
     'use strict';
 
-    var VERSION = '1.5';   // 1.5 (11 Nov 2026): a fault tree is built once per data change, not once per question. 1.4 (17 Oct 2026): a box still estimated from the file gives no zone, risk or placement answer (estimatedParts)
+    var VERSION = '1.6';   // 1.6 (14 Nov 2026): zones and risk volumes on the parts' true shapes, once read and accepted (cad_trueshape.js).  1.5 (11 Nov 2026): a fault tree is built once per data change, not once per question. 1.4 (17 Oct 2026): a box still estimated from the file gives no zone, risk or placement answer (estimatedParts)
     var KINDS = ['rotorBurst', 'tireBurst', 'birdStrike', 'fire', 'fluidLeak', 'iceShedding', 'lightning', 'generic'];   // 14 Oct 2026: fluidLeak, iceShedding, lightning added (configurable volumes)
     var SHAPES = ['box', 'sphere', 'cone', 'disk-sector'];
     var UNITS = { mm: 1, cm: 10, m: 1000, 'in': 25.4, ft: 304.8 };
@@ -77,7 +77,7 @@
     var INDEP_GATES = { AND: 1, PAND: 1, SPARE: 1, SEQ: 1, VOTING: 1, INHIBIT: 1 };   // INHIBIT: 19 Oct 2026, both inputs must happen, as an AND
     var SEV_FALLBACK = { 'Catastrophic': 5, 'Hazardous': 4, 'Major': 3, 'Minor': 2, 'Negligible': 1, 'No Safety Effect': 0 };
     var RULES = {
-        containment: 'A part is in the zone whose volume holds its centroid. The deepest zone wins; at equal depth the smaller volume, then the lower zone code, then the lower id, and the part is reported as ambiguous. A part whose box crosses the boundary of its zone is reported as straddling.',
+        containment: 'On the parts\' true shapes once they are read and accepted (14 Nov 2026): a part is in every zone its surface reaches; its own zone is the one that holds its centroid, the deepest first. Until then (and for a zone whose true answer is not read yet): a part is in the zone whose volume holds its centroid. The deepest zone wins; at equal depth the smaller volume, then the lower zone code, then the lower id, and the part is reported as ambiguous. A part whose box crosses the boundary of its zone is reported as straddling.',
         identity: 'A link is to one installed copy, never to a part number. Only a reference designator (the installed item tag) that is unique on both sides, one CAD part and one equipment item, links by itself. A shared part number or an ATA code is only a candidate, because the same part can be installed several times doing different jobs. Every candidate waits for the engineer to confirm. Equipment is never placed in a zone without a confirmed link.',
         events: 'A basic event belongs to the equipment its declared identity names (the system id, or the provider of an interface or resource event).',
         impact: 'Every basic event of the affected equipment is failed together, everything else works, and each fault tree is evaluated by the existing engine. A failure condition is reached when one of its trees needs no further failure.',
@@ -106,7 +106,7 @@
     function _E() { return root.SLFTAEngine || null; }
     function _sys() { return _arr(_g('systemsData')); }
     function _sysById(id) { var s = _sys(); for (var i = 0; i < s.length; i++) if (s[i] && String(s[i].id) === String(id)) return s[i]; return null; }
-    function _save() { _pinReferenced(); try { if (typeof root.scheduleAutosave === 'function') root.scheduleAutosave(); } catch (_) {} }
+    function _save() { _pinReferenced(); try { if (typeof root.scheduleAutosave === 'function') root.scheduleAutosave(); } catch (_) {} try { if (root.SLCadTrueShape && root.SLCadTrueShape.schedule) root.SLCadTrueShape.schedule(); } catch (_) {} }
     // every part a zone volume names is kept in a large model's synced summary
     function _pinReferenced() {
         try {
@@ -473,10 +473,10 @@
     }
     function _zoneLabel(z) { return z ? ((z.code ? z.code + ' ' : '') + (z.name || z.id)) : ''; }
     function _zonesSorted() { var Z = _Z(); return Z ? Z.all().filter(Boolean).slice().sort(function (a, b) { return _nat(a.code, b.code) || _cmp(a.id, b.id); }) : []; }
-    function containment(cadId) {
+    function _containmentBox(cadId) {
         cadId = cadId || latestCadId();
         var Z = _Z();
-        var res = { cadId: cadId, parts: [], byZone: {}, outside: [], straddling: [], ambiguous: [], envelopes: [], zoneIssues: [], estimated: [] };
+        var res = { cadId: cadId, how: 'box', parts: [], byZone: {}, outside: [], straddling: [], ambiguous: [], envelopes: [], zoneIssues: [], estimated: [], boundary: [] };
         if (!Z || !model(cadId)) return res;
         var zones = [], envelope = {};
         _zonesSorted().forEach(function (z) {
@@ -646,7 +646,7 @@
     function removeRiskVolume(id) { var arr = _vols(); for (var i = 0; i < arr.length; i++) if (arr[i] && arr[i].id === id) { arr.splice(i, 1); _save(); return { ok: true }; } return { ok: false, err: 'not found' }; }
     // partsInVolume(volumeId, cadId): every part with a sample point inside; how = 'centroid'
     // when its centroid is inside, else 'box'. Sorted by pid.
-    function partsInVolume(volumeId, cadId) {
+    function _partsInVolumeBox(volumeId, cadId) {
         cadId = cadId || latestCadId();
         var v = riskVolume(volumeId); if (!v || shapeIssue(v.shape) || !model(cadId)) return [];
         var out = [], est = _estSet(cadId);
@@ -1126,12 +1126,170 @@
         return payload;
     }
 
+
+    // ---- true shapes (14 Nov 2026) -------------------------------------------------------------
+    // Waqas, 17 Oct 2026: "true geometry only, no more of these boxes". Where the CAD model's shapes are on this
+    // computer, cad_trueshape.js works out, for every zone and every risk volume, which parts' true surfaces reach
+    // it ('in'), which touch its boundary closer than the meshing tolerance can tell ('edge'), and for a zone
+    // which parts' centroids it holds. Those answers are kept on the model (m.trueShape), each under the zone's or
+    // the volume's own definition: change a zone or a volume and its answer is old until worked out again.
+    // Waqas, 14 Nov 2026 (decision 1): nothing moves silently. The box answers stand until an engineer has looked
+    // at what the true shapes change (trueShapeReview) and accepted it (acceptTrueShape); from then on the true
+    // answers stand for this model, and a zone or volume edited later is answered on its true shape directly.
+    var TRUE_METHOD = 'ts1';
+    function _zoneSig(z) { return JSON.stringify((z && z.volume) || null); }
+    function _riskSig(v) { return JSON.stringify([v && v.shape, v && v.shape ? spreadOf(v.shape) : null]); }
+    function trueShapeOf(cadId) { var m = model(cadId); var t = m && m.trueShape; return t && t.method === TRUE_METHOD && t.sha === (m.sha256 || null) ? t : null; }
+    function trueShapeAccepted(cadId) { var m = model(cadId); return !!(m && m.trueShapeAccepted && m.trueShapeAccepted.sha === (m.sha256 || null) && trueShapeOf(cadId)); }
+    function _tsZone(cadId, z) { var t = trueShapeOf(cadId), f = t && t.zones && t.zones[z.id]; return f && f.sig === _zoneSig(z) ? f : null; }
+    function _tsRisk(cadId, v) { var t = trueShapeOf(cadId), f = t && t.risks && t.risks[v.id]; return f && f.sig === _riskSig(v) ? f : null; }
+    // the zones and volumes whose true answer is missing or old: what the shapes still have to answer
+    function trueShapeNeeds(cadId) {
+        cadId = cadId || latestCadId();
+        var out = { zones: [], risks: [] }; if (!model(cadId)) return out;
+        _zonesSorted().forEach(function (z) { if (z.volume && !_tsZone(cadId, z)) out.zones.push(z.id); });
+        riskVolumes().forEach(function (v) { if (!shapeIssue(v.shape) && !_tsRisk(cadId, v)) out.risks.push(v.id); });
+        return out;
+    }
+    // facts = { tol, zones: { zoneId: { sig, in:[pid], edge:[pid], cin:[pid] } }, risks: { volumeId: { sig, in, edge } } }
+    // Only answers for zones and volumes that still exist, under their current definition, are kept. Answers for
+    // other models of the file (another sha) are replaced, never mixed.
+    function updateTrueShape(cadId, facts) {
+        var m = model(cadId); if (!m) return { ok: false, err: 'CAD model not found: ' + cadId };
+        if (!facts || typeof facts !== 'object') return { ok: false, err: 'No true shape answers given.' };
+        var t = trueShapeOf(cadId) || { method: TRUE_METHOD, sha: m.sha256 || null, zones: {}, risks: {} }, n = 0;
+        var pids = function (a) { return _uniqSorted(_arr(a).map(String)); };
+        var zl = {}; _zonesSorted().forEach(function (z) { zl[z.id] = z; });
+        Object.keys(facts.zones || {}).forEach(function (id) { var z = zl[id], f = facts.zones[id]; if (!z || !f || f.sig !== _zoneSig(z)) return; t.zones[id] = f.box === true ? { sig: f.sig, box: true, in: [], edge: [], cin: [] } : { sig: f.sig, in: pids(f.in), edge: pids(f.edge), cin: pids(f.cin) }; n++; });
+        Object.keys(facts.risks || {}).forEach(function (id) { var v = riskVolume(id), f = facts.risks[id]; if (!v || !f || f.sig !== _riskSig(v)) return; t.risks[id] = f.box === true ? { sig: f.sig, box: true, in: [], edge: [] } : { sig: f.sig, in: pids(f.in), edge: pids(f.edge) }; n++; });
+        Object.keys(t.zones).forEach(function (id) { if (!zl[id]) delete t.zones[id]; });
+        Object.keys(t.risks).forEach(function (id) { if (!riskVolume(id)) delete t.risks[id]; });
+        if (typeof facts.tol === 'number' && facts.tol >= 0) t.tol = facts.tol;
+        t.at = facts.at || new Date().toISOString();
+        m.trueShape = t; _save();
+        return { ok: true, updated: n };
+    }
+    function _containmentTrue(cadId) {
+        cadId = cadId || latestCadId();
+        var Z = _Z();
+        var res = { cadId: cadId, how: 'true shape', parts: [], byZone: {}, outside: [], straddling: [], ambiguous: [], envelopes: [], zoneIssues: [], estimated: [], boundary: [], zonesOnBox: [] };
+        if (!Z || !model(cadId)) return res;
+        var zones = [], envelope = {}, reach = {}, edge = {}, cin = {};
+        _zonesSorted().forEach(function (z) {
+            var boxes = _zoneBoxes(z, cadId);
+            if (boxes === null) return;
+            if (!boxes.length) { res.zoneIssues.push({ zoneId: z.id, text: 'Zone ' + _zoneLabel(z) + ' is defined by CAD parts that are not in this model.' }); return; }
+            if (z.volume.kind === 'parts') z.volume.pids.forEach(function (p) { envelope[p] = 1; });
+            var f = _tsZone(cadId, z); if (f && f.box) f = null;   // answered only by boxes (no exact shape for its bodies)
+            if (f) { f.in.forEach(function (p) { (reach[p] = reach[p] || []).push(z.id); }); f.edge.forEach(function (p) { (edge[p] = edge[p] || []).push(z.id); }); f.cin.forEach(function (p) { (cin[p] = cin[p] || {})[z.id] = 1; }); }
+            else res.zonesOnBox.push(z.id);
+            zones.push({ z: z, boxes: boxes, fact: f, depth: Z.depth(z.id), vol: boxes.reduce(function (s, b) { return s + _boxVol(b); }, 0) });
+        });
+        if (res.zonesOnBox.length) res.how = 'mixed';
+        res.envelopes = Object.keys(envelope).filter(function (p) { return !!_partMap(cadId)[p]; }).sort(_cmp);
+        var est = _estSet(cadId), order = function (a, b) { return (b.depth - a.depth) || (a.vol - b.vol) || _nat(a.z.code, b.z.code) || _cmp(a.z.id, b.z.id); };
+        _partsSorted(cadId).forEach(function (p) {
+            if (envelope[p.pid]) return;
+            if (est[p.pid]) { res.estimated.push(p.pid); res.parts.push({ pid: p.pid, zoneId: null, estimated: true }); return; }
+            // the zones the part is in: every zone its true surface reaches; a zone still on boxes, by the centroid
+            var mine = zones.filter(function (e) { return e.fact ? (reach[p.pid] || []).indexOf(e.z.id) >= 0 : e.boxes.some(function (b) { return _inBox(p.centroid, b.min, b.max); }); });
+            // its own zone: of those, the ones holding its centroid (the deepest first); else the deepest it reaches
+            var holds = mine.filter(function (e) { return e.fact ? !!(cin[p.pid] && cin[p.pid][e.z.id]) : true; }).sort(order);
+            var win = holds[0] || mine.slice().sort(order)[0] || null;
+            var rec = { pid: p.pid, zoneId: win ? win.z.id : null, zones: mine.map(function (e) { return e.z.id; }).sort(_cmp), how: win && !win.fact ? 'box' : 'true shape' };
+            var bnd = _uniqSorted((edge[p.pid] || []).filter(function (id) { return rec.zones.indexOf(id) < 0; }));
+            if (bnd.length) { rec.boundary = bnd; res.boundary.push({ pid: p.pid, zoneIds: bnd }); }
+            if (win) {
+                var tied = holds.filter(function (h) { return h !== win && h.depth === win.depth; });
+                if (tied.length) { rec.ambiguousWith = tied.map(function (h) { return h.z.id; }); res.ambiguous.push({ pid: p.pid, zoneIds: [win.z.id].concat(rec.ambiguousWith) }); }
+                (res.byZone[win.z.id] = res.byZone[win.z.id] || []).push(p.pid);
+                var crosses = mine.filter(function (e) { return e !== win && !Z.isDescendant(win.z.id, e.z.id); }).map(function (e) { return e.z.id; });
+                if (crosses.length) res.straddling.push({ pid: p.pid, zoneId: win.z.id, crosses: crosses });
+            } else res.outside.push(p.pid);
+            res.parts.push(rec);
+        });
+        return res;
+    }
+    function _partsInVolumeTrue(volumeId, cadId) {
+        cadId = cadId || latestCadId();
+        var v = riskVolume(volumeId); if (!v || shapeIssue(v.shape) || !model(cadId)) return [];
+        var f = _tsRisk(cadId, v); if (f && f.box) f = null; if (!f) return _partsInVolumeBox(volumeId, cadId).map(function (h) { return { pid: h.pid, how: h.how, onBox: true }; });
+        var est = _estSet(cadId), out = [];
+        f.in.forEach(function (pid) { if (!est[pid]) out.push({ pid: pid, how: 'true shape' }); });
+        // touching the boundary closer than the meshing tolerance: counted (the safe side), and said
+        f.edge.forEach(function (pid) { if (!est[pid]) out.push({ pid: pid, how: 'boundary' }); });
+        return out.sort(function (a, b) { return _cmp(a.pid, b.pid); });
+    }
+    // containment(cadId[, { mode }]): mode 'auto' (the default: true shapes once accepted), 'box' or 'true'
+    function containment(cadId, opts) {
+        var mode = (opts && opts.mode) || 'auto'; cadId = cadId || latestCadId();
+        var res = mode === 'box' || (mode === 'auto' && !trueShapeAccepted(cadId)) ? _containmentBox(cadId) : _containmentTrue(cadId);
+        res.trueShape = { accepted: trueShapeAccepted(cadId), ready: !!trueShapeOf(cadId) };
+        return res;
+    }
+    function partsInVolume(volumeId, cadId, opts) {
+        var mode = (opts && opts.mode) || 'auto'; cadId = cadId || latestCadId();
+        return mode === 'box' || (mode === 'auto' && !trueShapeAccepted(cadId)) ? _partsInVolumeBox(volumeId, cadId) : _partsInVolumeTrue(volumeId, cadId);
+    }
+    // What the true shapes change, for the engineer to review before they are accepted: parts whose zone
+    // changes, parts reaching more zones, risk volumes that reach more or fewer parts, parts on a boundary,
+    // and what is not answered yet. Equipment placement still goes through applyContainment as before.
+    function trueShapeReview(cadId) {
+        cadId = cadId || latestCadId();
+        var out = { cadId: cadId, ready: !!trueShapeOf(cadId), accepted: trueShapeAccepted(cadId), needs: trueShapeNeeds(cadId), zoneMoves: [], newCrossings: [], crossingsGone: [], boundary: [], riskAdded: [], riskRemoved: [], riskBoundary: [], zonesOnBox: [], risksOnBox: [], tol: null };
+        if (!out.ready) return out;
+        out.tol = trueShapeOf(cadId).tol != null ? trueShapeOf(cadId).tol : null;
+        var B = _containmentBox(cadId), T = _containmentTrue(cadId), bz = {};
+        B.parts.forEach(function (r) { bz[r.pid] = r.zoneId || null; });
+        T.parts.forEach(function (r) {
+            if (r.estimated) return;
+            var was = bz.hasOwnProperty(r.pid) ? bz[r.pid] : null;
+            if (was !== (r.zoneId || null)) out.zoneMoves.push({ pid: r.pid, from: was, to: r.zoneId || null });
+        });
+        // crossings: a part reaching a zone other than its own and that zone's parents and children; new and gone
+        var bs = {}, ts = {};
+        B.straddling.forEach(function (x) { bs[x.pid] = x.crosses || []; });
+        T.straddling.forEach(function (x) { ts[x.pid] = x.crosses || []; var extra = ts[x.pid].filter(function (id) { return (bs[x.pid] || []).indexOf(id) < 0; }); if (extra.length) out.newCrossings.push({ pid: x.pid, zoneId: x.zoneId || null, also: extra }); });
+        B.straddling.forEach(function (x) { if (bz.hasOwnProperty(x.pid) && T.estimated.indexOf(x.pid) < 0) { var gone = (x.crosses || []).filter(function (id) { return (ts[x.pid] || []).indexOf(id) < 0; }); if (gone.length) out.crossingsGone.push({ pid: x.pid, zoneId: x.zoneId || null, gone: gone }); } });
+        out.boundary = T.boundary.slice();
+        out.zonesOnBox = T.zonesOnBox.slice(); out.risksOnBox = [];
+        riskVolumes().forEach(function (v) {
+            var fr = _tsRisk(cadId, v); if (shapeIssue(v.shape)) return; if (!fr || fr.box) { out.risksOnBox.push(v.id); return; }
+            var b = {}, t = {}; _partsInVolumeBox(v.id, cadId).forEach(function (h) { b[h.pid] = 1; });
+            _partsInVolumeTrue(v.id, cadId).forEach(function (h) { t[h.pid] = h.how; });
+            Object.keys(t).sort(_cmp).forEach(function (pid) { if (t[pid] === 'boundary') out.riskBoundary.push({ volumeId: v.id, pid: pid }); else if (!b[pid]) out.riskAdded.push({ volumeId: v.id, pid: pid }); });
+            Object.keys(b).sort(_cmp).forEach(function (pid) { if (!t[pid]) out.riskRemoved.push({ volumeId: v.id, pid: pid }); });
+        });
+        out.changes = out.zoneMoves.length + out.newCrossings.length + out.crossingsGone.length + out.riskAdded.length + out.riskRemoved.length;
+        return out;
+    }
+    // what cad_trueshape.js needs to answer the missing zones and volumes of one model
+    function trueShapeInput(cadId, need) {
+        cadId = cadId || latestCadId(); need = need || trueShapeNeeds(cadId);
+        var zl = {}; _zonesSorted().forEach(function (z) { zl[z.id] = z; });
+        return { cadId: cadId, spreadOf: spreadOf,
+            parts: _partsSorted(cadId).map(function (p) { return { pid: p.pid, bbox: p.bbox, centroid: p.centroid, boxEstimated: p.boxEstimated === true }; }),
+            zones: need.zones.map(function (id) { var z = zl[id]; return z ? { id: id, sig: _zoneSig(z), volume: _clone(z.volume) } : null; }).filter(Boolean),
+            risks: need.risks.map(function (id) { var v = riskVolume(id); return v ? { id: id, sig: _riskSig(v), shape: _clone(v.shape) } : null; }).filter(Boolean) };
+    }
+    // acceptTrueShape(cadId, by): the engineer has reviewed what the true shapes change; from now on they stand
+    function acceptTrueShape(cadId, by) {
+        var m = model(cadId); if (!m) return { ok: false, err: 'CAD model not found: ' + cadId };
+        if (!_s(by)) return { ok: false, err: 'Accepting the true shapes needs the name of who reviewed them.' };
+        if (!trueShapeOf(cadId)) return { ok: false, err: 'The true shapes of this model have not been read yet.' };
+        var r = trueShapeReview(cadId);
+        m.trueShapeAccepted = { sha: m.sha256 || null, by: _s(by), at: new Date().toISOString(), changes: { zoneMoves: r.zoneMoves.length, newCrossings: r.newCrossings.length, crossingsGone: r.crossingsGone.length, riskAdded: r.riskAdded.length, riskRemoved: r.riskRemoved.length, boundary: r.boundary.length + r.riskBoundary.length } };
+        _save();
+        return { ok: true, accepted: m.trueShapeAccepted };
+    }
+
     var api = {
         VERSION: VERSION, RULES: RULES, KINDS: KINDS, SHAPES: SHAPES, FRAGMENTS: FRAGMENTS, DEFAULT_FRAGMENT: DEFAULT_FRAGMENT,
         models: models, model: model, latestCadId: latestCadId, addCadModel: addCadModel, partsOf: partsOf, registerLocalParts: registerLocalParts, updatePartBoxes: updatePartBoxes, estimatedParts: estimatedParts, hasLocalParts: hasLocalParts, LOCAL_PARTS_MIN: LOCAL_PARTS_MIN,
         matchEquipment: matchEquipment, applyExactLinks: applyExactLinks, confirmLink: confirmLink, rejectLink: rejectLink, unlink: unlink,
         link: link, linkKey: linkKey, confirmed: confirmed, equipmentParts: equipmentParts, carryLinks: carryLinks,
-        importZoneList: importZoneList, containment: containment, applyContainment: applyContainment, clearances: clearances, boxDistance: boxDistance,
+        importZoneList: importZoneList, containment: containment, applyContainment: applyContainment,
+        trueShapeOf: trueShapeOf, trueShapeAccepted: trueShapeAccepted, trueShapeNeeds: trueShapeNeeds, updateTrueShape: updateTrueShape, trueShapeInput: trueShapeInput, trueShapeReview: trueShapeReview, acceptTrueShape: acceptTrueShape, zoneSig: _zoneSig, riskSig: _riskSig, TRUE_METHOD: TRUE_METHOD, clearances: clearances, boxDistance: boxDistance,
         riskVolumes: riskVolumes, riskVolume: riskVolume, addRiskVolume: addRiskVolume, removeRiskVolume: removeRiskVolume, shapeIssue: shapeIssue, inShape: inShape, spreadOf: spreadOf, partsInVolume: partsInVolume,
         equipmentOfEvent: equipmentOfEvent, eventIndex: eventIndex, evaluate: evaluate, sevRank: sevRank,
         zoneImpact: zoneImpact, riskImpact: riskImpact, independenceFlags: independenceFlags, leafEquipment: leafEquipment, praFootprints: praFootprints,
