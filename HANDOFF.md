@@ -1,4 +1,14 @@
-## 14 Nov 2026 (latest): ZONES AND RISK VOLUMES ON THE PARTS' TRUE SHAPES, ACCEPTED BY AN ENGINEER BEFORE THEY STAND. Web build only, not shipped (Waqas runs every deploy).
+## 14 Nov 2026 (latest): EVERY ROW OF TABS OR FILTER CHIPS INSIDE A PAGE IS ONE DROP-DOWN; THE FOLD-AND-PAGE PIECE FOR LISTS. Not shipped yet (Waqas runs every deploy).
+
+**Why (Waqas).** "Instead of showing long lists, we should have drop down menus in both tools in all places"; then, of a wall of chips and a row of tabs, "anything that shows like this in both apps should be a drop down list". His answers: every list folds shut behind its title and count, however short; a row of tabs or chips inside a page is one drop-down; the tool's own navigation (left menu, area bar) stays; a row of two or three is a switch, "make them more prominent".
+
+**What.** New site/fold.js 1.0, right after paginate.js. SLMenus: a watcher shows every .prove-tabbar, .mk-phase-tabs, .hfr-tabs, .ar-filter-bar, #backref-tabs and #trace-filter-bar row as one drop-down after it (the row's label as the menu's label, each choice's words, the choice made shown, "N to accept in all" when the choices carry counts, links in the row kept beside the menu); picking clicks that choice, so every page keeps its own handling; the row stays, hidden. A row of three or fewer is a framed switch, the chosen one filled. SLFold.list / section / pick: a folded, paged list (50 a page, "51 to 100 of 1,284"), what is open kept while the page redraws, printing opens every fold. Sys Lab has the same (ui.js fold, menuize).
+
+**Not done yet.** Converting Safety Lab's lists to SLFold (about 130 files); the CAD page's lists are already folded and paged.
+
+**Tests.** New regression_fold_menus_20261114 (21 checks; part E in the browser where Playwright is installed). project_durability now 356 scripts. cad_nav, nav_spine, pagination, canvas_fill and autopilots rerun green in the browser.
+
+## 14 Nov 2026: ZONES AND RISK VOLUMES ON THE PARTS' TRUE SHAPES, ACCEPTED BY AN ENGINEER BEFORE THEY STAND. Web build only, not shipped (Waqas runs every deploy).
 
 **Why (Waqas).** "you get started on the true geometry". Decision 1 (14 Nov): a change the true shapes make to a live result is shown as a list for the engineer to accept, never applied silently. Until now a part was in the zone whose box held its centroid, a zone drawn as CAD bodies was reduced to the bodies' boxes, and a part was in a risk volume when its centroid or a corner of its box was inside (over-claims).
 
