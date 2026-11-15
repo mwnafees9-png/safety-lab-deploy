@@ -54,7 +54,7 @@
 // Every number comes from SLTopBasis and the trees. window.SLPasaAuto.
 (function (root) {
     'use strict';
-    var VERSION = '2.4';   // 2.2 11 Nov 2026: a gate whose inputs are all held tighter than their shares says what they use of its budget
+    var VERSION = '2.5';   // 2.5 15 Nov 2026: an appendix shows what the Interdependence, MAC and CoFFE Autopilots sent (apx_bridge.js). // 2.2 11 Nov 2026: a gate whose inputs are all held tighter than their shares says what they use of its budget
     function g(n) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(n); if (v !== undefined) return v; } } catch (_) {} try { return root[n]; } catch (_) { return undefined; } }
     function arr(v) { return Array.isArray(v) ? v : []; }
     function S(v) { return v == null ? '' : String(v); }
@@ -552,6 +552,10 @@
         // interdependence
         b.push(H(3, 'How the systems feed ' + f));
         var rows = idpRows(gr), feeds = rows.filter(function (r) { return r.state === 'feeds'; }), ex = fcStore(f).ex;
+        // 15 Nov 2026: what the Interdependence, MAC and CoFFE Autopilots sent for this failure condition (apx_bridge.js), shown as they sent it
+        var AX = root.SLApxBridge && root.SLApxBridge.pasa ? safe(function () { return root.SLApxBridge.pasa(gr); }, null) : null;
+        if (AX && AX.changed && AX.changed.length) b.push(P('Finding: the ' + listJoin(AX.changed) + ' Autopilot' + (AX.changed.length > 1 ? 's were' : ' was') + ' changed after being sent for ' + f + ' and not sent again. What it shows is not in this appendix until it is.', q('idp')));
+        if (AX && AX.idp) AX.idp.forEach(function (x) { b.push(x); });
         if (!feeds.length) b.push(P('No system is shown to feed ' + f + ' yet: the interdependence questions for it are still open.', q('idp')));
         else b.push({ k: 'table', name: 'idp-' + f, title: 'The systems that feed ' + f, q: q('idp'), rowQ: feeds.map(function (r) { return ex[r.sysId] || !tracedFrom(gr, r.sysId).length ? q('trace.' + r.sysId) : q('idp'); }), rows: feeds.map(function (r) {
             var tr = tracedFrom(gr, r.sysId), e0 = ex[r.sysId];
@@ -568,6 +572,7 @@
         // common resources
         b.push(H(3, 'Resources the systems share'));
         var rs = resources(gr);
+        if (AX && AX.res) AX.res.forEach(function (x) { b.push(x); });
         if (!rs.length) b.push(P('No resource or common cause is shared by the systems that feed ' + f + '.'));
         else {
             var cgs = critGates(gr);
@@ -577,7 +582,9 @@
             b.push(P('Every independence the tree relies on can be defeated by something shared here. None is dismissed in this appendix without a reason; each goes to the review named, and the requirements it raises come back into this appendix.'));
         }
         // CoFFE
-        if (coffeOn()) {
+        if (AX && AX.mac && AX.mac.length) { b.push(H(3, 'Minimum acceptable configuration (MAC)')); AX.mac.forEach(function (x) { b.push(x); }); }
+        if (AX && AX.cof && AX.cof.length) { b.push(H(3, 'Combined functional failure effects (CoFFE)')); AX.cof.forEach(function (x) { b.push(x); }); }
+        else if (coffeOn()) {
             b.push(H(3, 'Combined functional failure effects (CoFFE)'));
             var ks = coffeCasesOf(gr);
             b.push(ks.length ? { k: 'table', name: 'coffe-' + f, title: 'Which system failures, alone or together, produce ' + f, q: q('coffe'), rowQ: ks.map(function (k) { return q('coffe.' + k.key); }), rows: ks.map(function (k) {
@@ -731,6 +738,9 @@
     function leftFc(gr) {
         var f = gr.fcId, h = '', left = fcLeft(gr), rows = idpRows(gr), RT = root.SLReqTrace;
         h += '<div class="paq-h" data-paq-fc="' + E(f) + '">' + E(fcName(gr)) + ' (' + E(gr.gov.severity) + ', ' + (isQuant(gr) ? 'quantitative' : 'qualitative') + ')</div><div class="paq-x">Answer these and its part of the appendix writes itself. What the project already holds is filled in and named; what is new is checked by you or drafted by the AI from the architecture, then confirmed.</div>';
+        // 15 Nov 2026: with the new Autopilots switched on, they ask the interdependence, MAC and CoFFE questions; this pane shows where each stands
+        var AXS = root.SLApxBridge && root.SLApxBridge.state ? safe(function () { return root.SLApxBridge.state(gr); }, null) : null;
+        if (AXS) { var axw = function (k) { return k === 'sent' ? 'sent to the PASA' : k === 'changed' ? 'changed since it was sent' : k === 'started' ? 'started, not sent' : 'not started'; }; h += '<div class="paq-open" data-paq-apx="' + E(f) + '"><b>The Autopilots that feed ' + E(f) + '</b><br>' + [['idp', 'Interdependence'], ['mac', 'MAC'], ['cof', 'CoFFE']].map(function (x) { return '<button type="button" class="paq-b" onclick="SLApxAuto._ui.fc=' + J(AXS.key) + ';SLApxAuto.open(' + J(x[0]) + ')">' + x[1] + ' Autopilot</button> ' + axw(AXS[x[0]]); }).join('<br>') + '<br>What they send fills the questions below and the tables in the report.</div>'; }
         var items = openItems(gr); if (items.length) h += '<div class="paq-open" data-paq-openitems="1"><b>Open items</b><br>' + items.map(E).join('<br>') + '</div>';
         // 1. interdependence table
         var open = rows.filter(function (r) { return r.state === 'open' || r.state === 'proposed'; });

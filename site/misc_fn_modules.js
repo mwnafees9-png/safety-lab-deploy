@@ -1888,6 +1888,8 @@ function macRuleLevel(rule) {
 const MAC_COMBO_CAP = 50000;   // explosion guard — refuse, never approximate
 // Minimal breach sets. Returns { sets, error } — error only from the guard.
 function macBreachSetsChecked(rule) {
+    // 15 Nov 2026: a rule sent by the MAC Autopilot carries its exact breach sets (named combinations, apx_bridge.js)
+    if (rule && rule.apx && Array.isArray(rule.apx.sets)) return { sets: rule.apx.sets.map(s => s.slice()), error: null };
     const out = [];
     let error = null;
     (rule.clauses || []).forEach(cl => {
@@ -2018,7 +2020,8 @@ function coffeCases(fc) {
 }
 
 function _coffeBreachSetsForFc(fc) {
-    const rules = _macStore().filter(r => r.subId === fc.subId);
+    // 15 Nov 2026: a MAC Autopilot rule is for ONE failure condition, not for every condition of its aircraft function
+    const rules = _macStore().filter(r => r.subId === fc.subId && (!r.apx || String(r.apx.fcId) === String(fc.fcId)));
     let sets = [];
     rules.forEach(r => { sets = sets.concat(macBreachSets(r)); });
     return sets;

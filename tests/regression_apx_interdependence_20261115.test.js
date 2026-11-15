@@ -6,7 +6,7 @@
  * condition is "Block until the link is fixed"; one signature "Once, when sending"; "FYI this will be upgrading the
  * current MAC/CoFFE and Interdependence interface and replacing them, so we have to absolutely nail this"; it is tested
  * on the live site behind a switch only our team sees, saving in its own place.
- * Rebuild: apx_autopilots.js (SLApxAuto 0.2) on apx_engine.js; support_modules.js lets the Interdependence tab open when
+ * Rebuild: apx_autopilots.js (SLApxAuto 1.0) on apx_engine.js; support_modules.js lets the Interdependence tab open when
  * the switch is on.
  *   1  index.html: apx_engine.js, then apx_autopilots.js, both before pasa_autopilot.js
  *   2  wording: American English, no em dashes, "AC" for aircraft (never "AP"), black table headers
@@ -18,7 +18,8 @@
  *      function lands in the architecture; a new resource lands in the resources and in Table Q.4-2
  *   8  sending needs a name and a finished table; once sent, every shown answer carries the name and the date
  *   9  a change after sending says so ("changed since it was sent") until it is sent again
- *  10  today's interdependence tables are not touched by any of it; the switch back shows today's page
+ *  10  today's interdependence tables are not touched until it is sent; once sent they carry it (apx_bridge.js); the
+ *      switch back shows today's page
  *  11  no page errors
  * MUTATION PROOFS (SL_APXI_MUTATE): nolock (a project-fed system can be unticked), leak (every function is shown in the
  *   table), nosign (sending with no name), unfinished (sending an unfinished table), noswitch (the Autopilot shows with
@@ -174,6 +175,8 @@ function mutate(file, body) {
         const s1 = await pg.evaluate((K) => { const A = window.SLApxAuto, f = A.model.fcOf(K); return { noName: A.act.send(f, '  '), unfinished: A.act.send(f, 'Test Engineer'), left: A.model.left(f) }; }, K);
         check('8 sending without a name is refused', s1.noName.ok === false && /name/i.test(s1.noName.why || ''), JSON.stringify(s1.noName));
         check('8 sending an unfinished table is refused with what is left', s1.left.length > 0 && s1.unfinished.ok === false && !!s1.unfinished.why, JSON.stringify(s1).slice(0, 400));
+        const mid = await pg.evaluate(() => JSON.stringify((typeof projectConfig !== 'undefined' && projectConfig && projectConfig.interdep) || null));
+        check("10 until it is sent, today's interdependence tables are not touched", mid === before, 'before ' + before.length + ' chars, now ' + mid.length);
         const s2 = await pg.evaluate((K) => {
             const A = window.SLApxAuto, f = () => A.model.fcOf(K);
             A.model.resPicked(f()).forEach(r => { if (!A.model.resState(f(), r).modes.length) A.act.mode(f(), r.key, 'Total loss', true); });
@@ -193,8 +196,8 @@ function mutate(file, body) {
         check('9 a change after sending is called out until it is sent again', ch === 'changed', ch);
 
         // ---- 10: today's tables are left alone ---------------------------------------------------------------------------------
-        const after = await pg.evaluate(() => JSON.stringify((typeof projectConfig !== 'undefined' && projectConfig && projectConfig.interdep) || null));
-        check("10 today's interdependence tables are not touched", after === before, 'before ' + before.length + ' chars, after ' + after.length);
+        const proj = await pg.evaluate((K) => { const A = window.SLApxAuto, f = A.model.fcOf(K), cells = (projectConfig.interdep || {}).cells || {}, mine = Object.keys(cells).filter(k => k.indexOf(K + '\u00A7') === 0 && cells[k].apx); return { br: !!window.SLApxBridge, n: mine.length, asserted: mine.filter(k => cells[k].state === 'asserted').length, cleared: mine.filter(k => cells[k].state === 'cleared').length, by: mine.every(k => cells[k].by === 'Test Engineer'), cols: A.model.allCols().length }; }, K);
+        check("10 once sent, today's table carries it for the files that read it: ticked functions asserted, the rest cleared, signed", proj.br && proj.n > 0 && proj.asserted > 0 && proj.cleared > 0 && proj.by && proj.n <= proj.cols, JSON.stringify(proj));
         await pg.click('[data-apx-view="old"]'); await tick(1200);
         const old = await pg.evaluate(() => { const v = document.getElementById('view-interdep'), p = v.querySelector(':scope > p'); return { cls: v.classList.contains('apx-on'), p: p ? getComputedStyle(p).display : '', sw: !!document.querySelector('#interdep-host [data-apx-view="new"]'), body: document.querySelector('#interdep-host').innerText.length }; });
         check("10 the switch back shows today's page, with the way back to the Autopilot", !old.cls && old.p !== 'none' && old.sw && old.body > 200, JSON.stringify(old));

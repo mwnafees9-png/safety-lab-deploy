@@ -1,13 +1,16 @@
 /* ============================================================================
- * apx_autopilots.js (SLApxAuto v0.2, 15 Nov 2026): the Interdependence Autopilot. Step 2 of 5 of the Interdependence,
+ * apx_autopilots.js (SLApxAuto v1.0, 15 Nov 2026): the Interdependence Autopilot and the page the three Autopilots share. Step 2 of 5 of the Interdependence,
  * MAC and CoFFE Autopilots (apx_engine.js holds the rulings and the math; the MAC and CoFFE Autopilots join this file
- * in steps 3 and 4).
+ * in steps 3 and 4: apx_mac.js and apx_coffe.js register themselves here, and apx_bridge.js carries the answers
+ * to the PASA and to the files that read today's stores).
  *
  * BEHIND A SWITCH ONLY OUR TEAM SEES. Nothing here shows until the switch is on (open the tool once with ?apx=1 in the
  * address, or SLApxAuto.on(); ?apx=0 or SLApxAuto.off() turns it off). With it on, the Interdependence page shows this
  * Autopilot, with a switch back to today's page. Customers keep today's page, unchanged.
- * IT SAVES IN ITS OWN PLACE (projectConfig.apx). Nothing in an existing project is changed by it, with one exception
- * the engineer asks for by name: creating a system, a system function or a shared resource here adds it to the
+ * IT SAVES IN ITS OWN PLACE (projectConfig.apx). Nothing else in a project is changed until the engineer sends a
+ * failure condition to the PASA: what was sent is then carried to today's stores for the files that read them
+ * (apx_bridge.js, which can also take it back out). One more thing changes the project, and the engineer asks for it
+ * by name: creating a system, a system function or a shared resource here adds it to the
  * architecture, exactly as creating it on its own page does (Waqas: "you create systems and systems function, which
  * should be setting the basis for system level assessments, similarly for common resources").
  *
@@ -34,7 +37,7 @@
  * ==========================================================================*/
 (function (root) {
     'use strict';
-    var VERSION = '0.2';
+    var VERSION = '1.0';
     function g(n) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(n); if (v !== undefined) return v; } } catch (_) {} try { return root[n]; } catch (_) { return undefined; } }
     function arr(v) { return Array.isArray(v) ? v : []; }
     function S(v) { return v == null ? '' : String(v); }
@@ -232,7 +235,14 @@
     }
 
     // ---- what the engineer does -------------------------------------------------------------------------------------------
-    var ui = { fc: null, step: 0, eff: 0, old: false, blocked: '', signMiss: false, open: {} };
+    var ui = { ap: 'idp', stepOf: { idp: 0 }, fc: null, step: 0, eff: 0, old: false, blocked: '', signMiss: false, open: {} };
+    // The MAC and CoFFE Autopilots register here: { name, steps: [title], render(i, fc), click(action, arg, el, fc), change(action, arg, el, fc), status(fc) }
+    var EXT = {}, ORDER = ['idp', 'mac', 'cof'];
+    function register(key, def) { EXT[key] = def; if (ORDER.indexOf(key) === -1) ORDER.push(key); try { rerender(); } catch (_) {} }
+    function apName(k) { return k === 'idp' ? 'Interdependence' : (EXT[k] && EXT[k].name) || k; }
+    function apSteps(k) { return k === 'idp' ? STEPS : (EXT[k] && EXT[k].steps) || []; }
+    function apStatus(k, fc) { return k === 'idp' ? status(fc) : (EXT[k] && EXT[k].status ? safe(function () { return EXT[k].status(fc); }, { k: 'new' }) : { k: 'new' }); }
+    function setAp(k) { if (k !== 'idp' && !EXT[k]) k = 'idp'; ui.stepOf[ui.ap] = ui.step; ui.ap = k; ui.step = ui.stepOf[k] || 0; ui.blocked = ''; ui.signMiss = false; ui.sign = null; }
     function curFc() { var all = fcs(); if (!all.length) return null; var f = ui.fc && fcOf(ui.fc); if (!f) { f = all[0]; ui.fc = f.key; } return f; }
     function tick(fc, colId, role) {
         var col = colOf(colId); if (!col) return;
@@ -263,6 +273,8 @@
         resources().forEach(function (x) { var st = resState(fc, x); if (st.on || (r.res[x.key] && r.res[x.key].on === false)) { r.res[x.key] = { on: st.on, feeds: st.feeds, modes: st.modes }; } });
         effectRows(fc).forEach(function (x) { [''].concat(picked(fc).map(function (c) { return c.colId; })).forEach(function (cid) { var t = craText(fc, x.r, x.mode, cid); if (t) r.cra[x.r.key + '|' + x.mode + '|' + cid] = t; }); });
         r.sent = { by: name, at: at }; delete r.changedSince;
+        // what was sent goes to the PASA and to the files that read today's table (apx_bridge.js)
+        try { if (root.SLApxBridge && root.SLApxBridge.project) root.SLApxBridge.project(fc, 'idp'); } catch (e) { r.bridgeError = e && e.message ? e.message : String(e); }
         save();
         return { ok: true };
     }
@@ -273,7 +285,7 @@
         + '.apx-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 12px}'
         + '.apx-sw{display:inline-grid;grid-auto-flow:column;grid-auto-columns:1fr;border:1.5px solid var(--color-border-strong,#14171C);border-radius:11px;overflow:hidden}'
         + '.apx-sw button{font:inherit;font-weight:600;border:0;background:transparent;color:inherit;padding:8px 16px;cursor:pointer;border-right:1.5px solid var(--color-border-strong,#14171C)}.apx-sw button:last-child{border-right:0}'
-        + '.apx-sw button.on{background:var(--color-text-primary,#101216);color:var(--color-surface-1,#fff)}'
+        + '.apx-sw button.on{background:var(--color-text-primary,#101216);color:var(--color-surface-1,#fff)}.apx-aps{display:grid;margin:0 0 12px;width:100%}.apx-aps button{font-size:15.5px;padding:11px 16px}'
         + '.apx-pills{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}.apx-pill{border:1px solid var(--color-border,rgba(20,23,28,.82));border-radius:999px;padding:4px 12px;background:var(--color-surface-1,#fff);font-size:13px}'
         + '.apx-steps{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:0 0 12px}.apx-prog{flex:1;min-width:160px;height:8px;border-radius:99px;background:var(--color-surface-2,#F6F6F4);overflow:hidden;border:1px solid var(--color-border,rgba(20,23,28,.3))}.apx-prog i{display:block;height:100%;background:#1A6EF2}'
         + '.apx select{font:inherit;color:inherit;padding:8px 12px;border:1px solid var(--color-border-strong,#14171C);border-radius:9px;background-color:var(--color-surface-1,#fff);max-width:100%}'
@@ -320,10 +332,10 @@
 
     function stepFc(fc) {
         var all = fcs();
-        var opts = all.map(function (f) { var st = status(f); return '<option value="' + E(f.key) + '"' + (f.key === fc.key ? ' selected' : '') + '>' + E(f.fcId + '  ' + f.desc + (f.sev ? ' (' + f.sev + ')' : '') + (st.k === 'sent' ? '  · sent to the PASA' : st.k === 'changed' ? '  · changed since it was sent' : st.k === 'started' ? '  · started' : '')) + '</option>'; }).join('');
+        var opts = all.map(function (f) { var st = apStatus(ui.ap, f); return '<option value="' + E(f.key) + '"' + (f.key === fc.key ? ' selected' : '') + '>' + E(f.fcId + '  ' + f.desc + (f.sev ? ' (' + f.sev + ')' : '') + (st.k === 'sent' ? '  · sent to the PASA' : st.k === 'changed' ? '  · changed since it was sent' : st.k === 'started' ? '  · started' : '')) + '</option>'; }).join('');
         var body = '<select class="apx-big" data-apx-fc="1" aria-label="Failure condition">' + opts + '</select>'
             + '<div class="apx-facts"><div class="apx-fact"><b>Aircraft function</b>' + E(acFnLabel(fc)) + '</div><div class="apx-fact"><b>Failure condition ID</b>' + E(fc.fcId) + '</div><div class="apx-fact"><b>Description</b>' + E(fc.desc) + '</div><div class="apx-fact"><b>Classification</b>' + E(fc.sev || 'Not classified') + (fc.phases ? ', ' + E(fc.phases) : '') + '</div></div>';
-        return card('Which failure condition are you working on?', 'You will pick the systems and shared resources behind it. Each failure condition is listed once, as its most conservative case.', body);
+        return card('Which failure condition are you working on?', (ui.ap === 'idp' ? 'You will pick the systems and shared resources behind it. ' : 'The three Autopilots work on the same failure condition. ') + 'Each failure condition is listed once, as its most conservative case.', body);
     }
     function tickRow(fc, c, stepRole) {
         var x = cellOf(fc, c), right = '';
@@ -398,29 +410,47 @@
 
     function html() {
         var fc = curFc();
-        var bar = '<div class="apx-bar"><div class="apx-sw" role="group" aria-label="Which page"><button type="button" class="' + (ui.old ? '' : 'on') + '" data-apx-view="new">New Autopilot (preview)</button><button type="button" class="' + (ui.old ? 'on' : '') + '" data-apx-view="old">Today\'s page</button></div><span style="font-size:12.5px">Only our team sees this switch. The Autopilot saves in its own place and does not change today\'s tables.</span></div>';
+        var bar = '<div class="apx-bar"><div class="apx-sw" role="group" aria-label="Which page"><button type="button" class="' + (ui.old ? '' : 'on') + '" data-apx-view="new">New Autopilot (preview)</button><button type="button" class="' + (ui.old ? 'on' : '') + '" data-apx-view="old">Today\'s page</button></div><span style="font-size:12.5px">Only our team sees this switch. Nothing reaches the PASA or today\'s tables until you send it.</span></div>';
         if (!fc) return '<div class="apx">' + bar + card('Nothing to work on yet', 'The Interdependence Autopilot needs at least one aircraft failure condition. Add them in the aircraft FHA first.', '') + '</div>';
-        ui.step = Math.max(0, Math.min(ui.step, STEPS.length - 1));
-        var st = status(fc), i = ui.step;
-        var h = '<div class="apx">' + bar + '<div class="apx-pills"><span class="apx-pill"><b>Interdependence Autopilot</b></span>'
+        if (ui.ap !== 'idp' && !EXT[ui.ap]) setAp('idp');
+        var STP = apSteps(ui.ap), aps = ORDER.filter(function (k) { return k === 'idp' || EXT[k]; });
+        ui.step = Math.max(0, Math.min(ui.step, STP.length - 1));
+        var st = apStatus(ui.ap, fc), i = ui.step;
+        var h = '<div class="apx">' + bar
+            + (aps.length > 1 ? '<div class="apx-sw apx-aps" role="group" aria-label="Which Autopilot">' + aps.map(function (k) { var sk = apStatus(k, fc).k; return '<button type="button" class="' + (k === ui.ap ? 'on' : '') + '" data-apx-ap="' + k + '">' + E(apName(k)) + (sk === 'sent' ? ' (sent)' : sk === 'changed' ? ' (changed)' : '') + '</button>'; }).join('') + '</div>' : '')
+            + '<div class="apx-pills"><span class="apx-pill"><b>' + E(apName(ui.ap)) + ' Autopilot</b></span>'
             + (i > 0 ? '<span class="apx-pill">Working on <b>' + E(fc.fcId) + '</b> ' + E(fc.desc) + '</span>' + (fc.sev ? '<span class="apx-pill">' + E(fc.sev) + '</span>' : '') + (fc.phases ? '<span class="apx-pill">Phase: <b>' + E(fc.phases) + '</b></span>' : '') : '')
             + '<span class="apx-pill">' + (st.k === 'sent' ? 'Sent to the PASA' : st.k === 'changed' ? 'Changed since it was sent' : st.k === 'started' ? 'Started, not sent' : 'Not started') + '</span></div>'
-            + '<div class="apx-steps"><select data-apx-jump="1" aria-label="Step" style="font-weight:600;border-width:1.5px">' + STEPS.map(function (t, k) { return '<option value="' + k + '"' + (k === i ? ' selected' : '') + '>Step ' + (k + 1) + ' of ' + STEPS.length + ': ' + E(t) + '</option>'; }).join('') + '</select><div class="apx-prog"><i style="width:' + Math.round((i + 1) / STEPS.length * 100) + '%"></i></div></div>';
-        h += [stepFc, stepDoes, stepFails, stepRes, stepModes, stepEffects, stepSend][i](fc);
-        h += '<div class="apx-nav"><button class="apx-btn big" data-apx-nav="-1"' + (i === 0 ? ' disabled' : '') + '>Back</button><button class="apx-btn p big" data-apx-nav="1"' + (i === STEPS.length - 1 ? ' disabled' : '') + '>Next</button></div></div>';
+            + '<div class="apx-steps"><select data-apx-jump="1" aria-label="Step" style="font-weight:600;border-width:1.5px">' + STP.map(function (t, k) { return '<option value="' + k + '"' + (k === i ? ' selected' : '') + '>Step ' + (k + 1) + ' of ' + STP.length + ': ' + E(t) + '</option>'; }).join('') + '</select><div class="apx-prog"><i style="width:' + Math.round((i + 1) / STP.length * 100) + '%"></i></div></div>';
+        if (ui.ap === 'idp') h += [stepFc, stepDoes, stepFails, stepRes, stepModes, stepEffects, stepSend][i](fc);
+        else if (i === 0) h += stepFc(fc);
+        else { var body; try { body = EXT[ui.ap].render(i, fc); } catch (e) { body = card('This step could not be drawn', E(e && e.message ? e.message : e), ''); } h += body; }
+        h += '<div class="apx-nav"><button class="apx-btn big" data-apx-nav="-1"' + (i === 0 ? ' disabled' : '') + '>Back</button><button class="apx-btn p big" data-apx-nav="1"' + (i === STP.length - 1 ? ' disabled' : '') + '>Next</button></div></div>';
         return h;
     }
 
     var _host = null, _orig = null;
     function mark(onNow) { try { var v = document.getElementById('view-interdep'); if (v) v.classList.toggle('apx-on', !!onNow); } catch (_) {} }
-    function draw() { if (!_host) return; style(); mark(true); var y = typeof root.scrollY === 'number' ? root.scrollY : 0; _host.innerHTML = html(); try { root.scrollTo(0, y); } catch (_) {} }
+    // Drawing replaces the page; a field that loses focus as it is replaced may report its change mid-draw. That change
+    // is taken, and the page is drawn once more after, never inside itself.
+    var _drawing = false, _again = false;
+    function draw() {
+        if (!_host) return;
+        if (_drawing) { _again = true; return; }
+        _drawing = true;
+        try { style(); mark(true); var y = typeof root.scrollY === 'number' ? root.scrollY : 0; _host.innerHTML = html(); try { root.scrollTo(0, y); } catch (_) {} }
+        finally { _drawing = false; }
+        if (_again) { _again = false; draw(); }
+    }
     function val(sel) { var el = _host && _host.querySelector(sel); return el ? el.value : ''; }
     function onClick(e) {
-        var t = e.target && e.target.closest ? e.target.closest('[data-apx-view],[data-apx-nav],[data-apx-tick],[data-apx-prop],[data-apx-res],[data-apx-feed],[data-apx-eff],[data-apx-addfn],[data-apx-addsys],[data-apx-addres],[data-apx-send],[data-apx-ai]') : null;
+        var t = e.target && e.target.closest ? e.target.closest('[data-apx-view],[data-apx-ap],[data-apx-x],[data-apx-nav],[data-apx-tick],[data-apx-prop],[data-apx-res],[data-apx-feed],[data-apx-eff],[data-apx-addfn],[data-apx-addsys],[data-apx-addres],[data-apx-send],[data-apx-ai]') : null;
         if (!t || !_host || !_host.contains(t)) return;
         var d = t.dataset, fc = curFc();
-        if (d.apxView) { ui.old = d.apxView === 'old'; rerender(); return; }
+        if (d.apxView) { ui.old = d.apxView === 'old'; if (ui.old && ui.ap === 'mac' && typeof root.switchTab === 'function') { root.switchTab('mac'); return; } rerender(); return; }
         if (!fc) return;
+        if (d.apxAp) { setAp(d.apxAp); draw(); return; }
+        if (d.apxX != null && EXT[ui.ap] && EXT[ui.ap].click) { var xa = d.apxX.split('|'), xr; try { xr = EXT[ui.ap].click(xa[0], xa.slice(1).join('|'), t, fc); } catch (e) { toast(e && e.message ? e.message : String(e), 'warning'); xr = true; } if (xr && typeof xr.then === 'function') { xr.then(draw, function (e) { toast(e && e.message ? e.message : String(e), 'warning'); draw(); }); return; } if (xr !== false) draw(); return; }
         if (d.apxNav) { ui.step += Number(d.apxNav); ui.blocked = ''; draw(); try { _host.scrollIntoView({ block: 'start' }); } catch (_) {} return; }
         if (d.apxTick) tick(fc, d.apxTick, ui.step === 2 ? 'fails' : 'does');
         else if (d.apxProp) { var pp = d.apxProp.split('|'); proposal(fc, pp[0], pp[1] === '1'); }
@@ -440,6 +470,7 @@
         if (d.apxFc) { ui.fc = t.value; ui.eff = 0; ui.blocked = ''; ui.signMiss = false; ui.sign = null; draw(); return; }
         if (d.apxJump) { ui.step = Number(t.value); ui.blocked = ''; draw(); return; }
         if (!fc) return;
+        if (d.apxXc != null && EXT[ui.ap] && EXT[ui.ap].change) { var ca = d.apxXc.split('|'), cr; try { cr = EXT[ui.ap].change(ca[0], ca.slice(1).join('|'), t, fc); } catch (e2) { toast(e2 && e2.message ? e2.message : String(e2), 'warning'); cr = true; } if (cr !== false) draw(); return; }
         if (d.apxHow) { setRole(fc, d.apxHow, 'fails', t.value); draw(); }
         else if (d.apxMode) { var m = d.apxMode.split('|'); mode(fc, m[0], m[1], !!t.checked); draw(); }
         else if (d.apxCra != null && d.apxCra !== '') { if (t.value === '__own') { ui.own = d.apxCra; draw(); var inp = _host.querySelector('[data-apx-craown="' + d.apxCra.replace(/"/g, '\\"') + '"]'); if (inp) inp.focus(); return; } ui.own = null; setCra(fc, d.apxCra, t.value); draw(); }
@@ -482,7 +513,7 @@
 
     // The page is opened like any other (switchTab('interdep')); it is drawn on arrival. With the switch on, the PASA page
     // carries the way in: the Autopilots that feed it.
-    function open(which) { try { if (typeof root.switchTab === 'function') root.switchTab(which === 'idp' || !which ? 'interdep' : which); } catch (_) {} }
+    function open(which) { try { ui.old = false; setAp(which || 'idp'); if (typeof root.switchTab === 'function') root.switchTab('interdep'); } catch (_) {} }
     function placeEntry() {
         if (typeof document === 'undefined') return;
         var v = document.getElementById('view-pasa'); if (!v) return;
@@ -490,7 +521,7 @@
         if (!enabled()) return;
         style();
         var b = document.createElement('div'); b.className = 'apx'; b.setAttribute('data-apx-entry', '1');
-        b.innerHTML = '<div class="apx-bar" style="margin:0 0 10px"><b>The Autopilots that feed this report (preview, our team only):</b><button type="button" class="apx-btn" data-apx-open="idp">Interdependence Autopilot</button></div>';
+        b.innerHTML = '<div class="apx-bar" style="margin:0 0 10px"><b>The Autopilots that feed this report (preview, our team only):</b>' + ORDER.filter(function (k) { return k === 'idp' || EXT[k]; }).map(function (k) { return '<button type="button" class="apx-btn" data-apx-open="' + k + '">' + E(apName(k)) + ' Autopilot</button>'; }).join('') + '</div>';
         b.addEventListener('click', function (e) { var t = e.target && e.target.closest ? e.target.closest('[data-apx-open]') : null; if (t) open(t.dataset.apxOpen); });
         var head = v.querySelector(':scope > .header-with-export');
         if (head && head.nextSibling) v.insertBefore(b, head.nextSibling); else v.insertBefore(b, v.firstChild);
@@ -511,7 +542,8 @@
     var api = { VERSION: VERSION, open: open, enabled: enabled, on: on, off: off, render: render,
         model: { fcs: fcs, fcOf: fcOf, allCols: allCols, cellOf: cellOf, picked: picked, resources: resources, resState: resState, resPicked: resPicked, effectRows: effectRows, craText: craText, left: left, status: status, MODES: MODES },
         act: { tick: tick, setRole: setRole, proposal: proposal, resTick: resTick, feed: feed, mode: mode, setCra: setCra, send: send, addSystem: addSystem, addFunction: addFunction, addResource: addResource },
-        tables: { q41: tableQ41, q42: tableQ42, b3: tableB3 }, _ui: ui, _html: html };
+        tables: { q41: tableQ41, q42: tableQ42, b3: tableB3 }, _ui: ui, _html: html, register: register, setAp: setAp,
+        kit: { g: g, arr: arr, S: S, E: E, T: T, lc: lc, safe: safe, fn: fn, pc: pc, now: now, who: who, save: save, toast: toast, store: store, card: card, preview: preview, abbr: abbr, style: style, fcs: fcs, fcOf: fcOf, curFc: curFc, systems: systems, allCols: allCols, colOf: colOf, cellOf: cellOf, picked: picked, resources: resources, resState: resState, resPicked: resPicked, providerNames: providerNames, acFnName: acFnName, acFnLabel: acFnLabel, fcWord: fcWord, status: status, apStatus: apStatus, peek: peek, ui: ui, draw: function () { draw(); }, val: function (sel) { return val(sel); }, rerender: function () { rerender(); } } };
     try { root.SLApxAuto = api; } catch (_) {}
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
