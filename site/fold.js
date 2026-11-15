@@ -267,28 +267,33 @@
     function _titleOf(L) {
         var T = L.previousElementSibling;
         if (!T || !TITLE_TAGS[T.tagName] || T.closest(DOCS)) return null;
-        if (T.querySelector('table, ul, ol, input, select, textarea, button, details, svg, img')) return null;
-        var t = String(T.textContent || '').replace(/\s+/g, ' ').trim();
-        return t && t.length <= (/^H[2-6]$/.test(T.tagName) ? 160 : 80) ? T : null;
+        if (T.querySelector('table, ul, ol, details, svg, img')) return null;
+        // a header with its own buttons: the fold is titled by its words, and the header, buttons and all, stays at
+        // the top of the opened list
+        if (T.querySelector('input, select, textarea')) return null;   // a form above a table is not its title
+        var t = _words2(T);
+        return t && t.length <= (/^H[2-6]$/.test(T.tagName) || /head|(^|[ -])[a-z]*-h(\b|$)/.test(T.className || '') ? 160 : 80) ? T : null;
     }
+    function _words2(T) { var c = T.cloneNode(true); Array.prototype.forEach.call(c.querySelectorAll('button, select, input, textarea, [onclick]'), function (x) { x.parentNode.removeChild(x); }); return String(c.textContent || '').replace(/\s+/g, ' ').trim(); }
     function autoFold(L) {
         if (!L || L.__slAuto || !L.isConnected || L.closest(DOCS) || L.closest(SKIP) || !_isList(L) || _isWorksheet(L)) return;
         var H = _titleOf(L); if (!H || H.__slAuto) return;
         var rows = _rowsOf(L); if (!rows || !rows.length) return;
         L.__slAuto = H.__slAuto = true;
         var view = H.closest('[id^="view-"], [role="dialog"], .modal');
-        var key = 'auto|' + (view && view.id ? view.id : 'page') + '|' + String(H.textContent || '').replace(/\s*\(\d[\d,]*\)\s*$/, '').replace(/\s+/g, ' ').trim();
+        var words = _words2(H), live = !!H.querySelector('button, select, input, [onclick]');
+        var key = 'auto|' + (view && view.id ? view.id : 'page') + '|' + words.replace(/\s*\(\d[\d,]*\)\s*$/, '');
         _style();
         var d = document.createElement('details');
         d.className = 'sl-fold sl-fold-auto'; d.setAttribute('data-fold', key);
         if (_open[key] === true) d.open = true;
         var sm = document.createElement('summary');
-        var hasCount = /\(\d[\d,]*\)\s*$/.test(H.textContent || '');
+        var hasCount = /\(\d[\d,]*\)\s*$/.test(words);
         H.parentNode.insertBefore(d, H);
-        sm.appendChild(H); H.style.display = 'inline'; H.style.margin = '0';
+        if (live) { var w = document.createElement('span'); w.textContent = words; sm.appendChild(w); } else { sm.appendChild(H); H.style.display = 'inline'; H.style.margin = '0'; }
         if (!hasCount) { var c = document.createElement('span'); c.className = 'sl-fold-n'; c.textContent = ' (' + _n(rows.length) + ')'; sm.appendChild(c); }
         d.appendChild(sm);
-        var b = document.createElement('div'); b.className = 'sl-fold-body'; d.appendChild(b); b.appendChild(L);
+        var b = document.createElement('div'); b.className = 'sl-fold-body'; d.appendChild(b); if (live) b.appendChild(H); b.appendChild(L);
         if (rows.length > PAGE) _domPager(b, rows, key);
     }
     function _domPager(box, rows, key) {
