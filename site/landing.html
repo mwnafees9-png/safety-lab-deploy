@@ -1022,8 +1022,7 @@ body{text-align:center}
 @media (min-width:900px){
   .features-grid{display:flex;flex-wrap:wrap;justify-content:center;gap:var(--s-5)}
   .features-grid .feature-card{flex:0 1 calc((100% - 2*var(--s-5))/3)}
-  /* the four autopilots: two by two (7 Nov 2026) */
-  #autopilots .features-grid .feature-card{flex:0 1 calc((100% - var(--s-5))/2)}
+  /* 15 Nov 2026: twelve autopilots, three to a row like the other grids (it was four, two by two) */
 }
 </style>
 <style>
@@ -1814,7 +1813,7 @@ body{text-align:center}
 
 
 <!-- ═══════════════════════════════════════════════════════════════════════
-     Autopilots (7 Nov 2026)
+     Autopilots (7 Nov 2026; 15 Nov 2026: the PASA, PSSA, SSA, ASA, CMA, Interdependence, MAC and CoFFE Autopilots)
      ═══════════════════════════════════════════════════════════════════════ -->
 <section class="features" id="autopilots">
     <div class="container">
@@ -1849,10 +1848,98 @@ body{text-align:center}
                 <p>The human factors work through the design cycle, in order: who does each function, the crew procedures, workload in every flight phase from times you measure or estimate, crew error, alerting, the 25.1302 questions, reach and view, and the minimum flight crew. Each result feeds the HF plan and the safety analysis.</p>
             </div>
 
+            <div class="feature-card">
+                <div class="feature-icon">✈️</div>
+                <h3>PASA Autopilot</h3>
+                <p>One Preliminary Aircraft Safety Assessment for the aircraft, with an appendix per function. For each failure condition: how the systems feed it, what they share, its fault tree and what it says, the numbers against the objective, and the requirements that close it. It asks whether each system tree is ready to be linked in, and a tree nobody has built yet says so.</p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">🧩</div>
+                <h3>PSSA Autopilot</h3>
+                <p>One Preliminary System Safety Assessment per system. Each failure condition starts from the system FHA and the budget the aircraft hands down, the stricter one where two apply. Then the tree down to items, item assurance levels, hidden failures and their check intervals, independence claims, the requirements and the path to compliance.</p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">🔬</div>
+                <h3>SSA Autopilot</h3>
+                <p>One System Safety Assessment per system, opened once its PSSA is baselined. The trees are worked out again from the bottom up with the real rates from the FMEA, the budget is checked against the design, and every requirement shows its verification method, its evidence and its status.</p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">🏁</div>
+                <h3>ASA Autopilot</h3>
+                <p>One Aircraft Safety Assessment, opened once the PASA and every SSA are baselined. Every aircraft failure condition is sorted: closed by an SSA, needs aircraft-level work, or open. Trees that span several systems are worked out again with the systems&rsquo; measured numbers, and the common causes are closed.</p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">🔗</div>
+                <h3>CMA Autopilot</h3>
+                <p>Common mode analysis, one independence claim at a time. It takes each independence the fault trees rely on, asks the questions for that claim, and builds the CMA report from the answers. A concern that needs one raises its requirement.</p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">🕸️</div>
+                <h3>Interdependence Autopilot</h3>
+                <p>Pick a failure condition, tick the system functions that do the job or cause it by failing, and the shared resources that feed them. The interdependence and common resource tables come out in the layout of the ARP 4761A example, showing only what applies. What your own project data says feeds it cannot be left out.</p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">🎛️</div>
+                <h3>MAC Autopilot</h3>
+                <p>The minimum acceptable configuration, found by switching things off. You set how each system is built, at assembly level. The tool switches assemblies off, asks whether the aircraft can still do the job, and works out every mix it can from your answers. The rules come out as named combinations with your reason for each, marked Assumed until they are compared with the system design description.</p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">🧮</div>
+                <h3>CoFFE Autopilot</h3>
+                <p>Combined functional failure effects. The tool writes out every mix of failed, degraded and working, asks only what it cannot work out, and fills the full table, its summary, the gate under the failure condition and the pairs of failures that share one resource.</p>
+            </div>
+
         </div>
         <p class="section-sub" style="margin-top: var(--s-5); text-align: center;">
             Every answer records who gave it and when, and the analyses the autopilots fill stay open for your engineers to review and sign. <a href="/autopilots" style="color: inherit; text-decoration: underline;">How the autopilots work &rarr;</a>
         </p>
+    </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     Generated, not typed (15 Nov 2026): fault trees, multi-system trees, rebalancing, AutoReq
+     ═══════════════════════════════════════════════════════════════════════ -->
+<section class="features" id="generated">
+    <div class="container">
+        <span class="section-eyebrow">Generated, not typed</span>
+        <h2 class="section-title">Fault trees and requirements, generated.</h2>
+        <p class="section-sub">
+            The engine does this work, not the AI. Same inputs, same results, every number traceable to what drove it. Your engineers review, link and sign; they do not start from a blank sheet.
+        </p>
+        <div class="features-grid">
+
+            <div class="feature-card">
+                <div class="feature-icon">🌱</div>
+                <h3>A fault tree for every failure condition</h3>
+                <p>Once a failure condition is classified, its tree exists with its top event and its target from your certification basis. Your minimum acceptable configuration compiles into fault trees, and a second engine checks they hold exactly the same combinations. A tree nobody has built yet says so. Nothing is invented under it.</p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">🌐</div>
+                <h3>Multi-system, multi-function trees</h3>
+                <p>One aircraft tree across systems and functions. A system failure condition is one node, shared by every aircraft tree it feeds. It keeps the strictest budget any of them gives it, and its own tree takes that as its target. The aircraft trees and the system trees cannot disagree.</p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">⚖️</div>
+                <h3>Fault trees that rebalance themselves</h3>
+                <p>Hold one input tighter and the rest of the gate takes up the spare at once. The gate is flagged as rebalanced for an engineer to accept or keep tighter, signed and reversible. A gate over its budget is an open item, never a quiet number.</p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">🧾</div>
+                <h3>AutoReq: requirements, generated</h3>
+                <p>AutoReq writes the safety requirements straight from your fault trees and assessments: probability budgets, development assurance levels, shared resources and common-mode concerns. Each one says why it exists and what drove it, and flows down to the systems that feed the failure condition. A shared resource gets one requirement, at the strictest budget any tree gives it. Same analysis in, same requirements out.</p>
+            </div>
+
+        </div>
     </div>
 </section>
 

@@ -5,25 +5,25 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#0b0d12" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-<meta name="description" content="Autopilots that write the safety program plans and work the zonal, particular risk and human factors analyses from your project and CAD model.">
+<meta name="description" content="Autopilots for safety plans, aircraft and system safety assessments, interdependence, MAC, CoFFE, common mode, zonal, particular risk and human factors.">
 <meta name="keywords" content="system safety program plan, SSPP, safety program plan ARP 4754B, zonal safety analysis CAD, particular risk analysis rotor burst AC 20-128A, human factors certification plan, minimum flight crew, ARP 4761A">
 <title>Safety Analysis Autopilots | Safety Lab Aero</title>
 <link rel="canonical" href="https://safetylabaero.com/autopilots">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="Safety Lab Aero">
 <meta property="og:title" content="Safety Analysis Autopilots | Safety Lab Aero">
-<meta property="og:description" content="Autopilots that write the safety program plans and work the zonal, particular risk and human factors analyses from your project and CAD model.">
+<meta property="og:description" content="Autopilots for safety plans, aircraft and system safety assessments, interdependence, MAC, CoFFE, common mode, zonal, particular risk and human factors.">
 <meta property="og:url" content="https://safetylabaero.com/autopilots">
 <meta property="og:image" content="https://safetylabaero.com/og.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Safety Analysis Autopilots | Safety Lab Aero">
-<meta name="twitter:description" content="Autopilots that write the safety program plans and work the zonal, particular risk and human factors analyses from your project and CAD model.">
+<meta name="twitter:description" content="Autopilots for safety plans, aircraft and system safety assessments, interdependence, MAC, CoFFE, common mode, zonal, particular risk and human factors.">
 <meta name="twitter:image" content="https://safetylabaero.com/og.png">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@graph": [
-    { "@type": "WebPage", "@id": "https://safetylabaero.com/autopilots#webpage", "url": "https://safetylabaero.com/autopilots", "name": "Safety Analysis Autopilots | Safety Lab Aero", "description": "Autopilots that write the safety program plans and work the zonal, particular risk and human factors analyses from your project and CAD model.", "isPartOf": { "@id": "https://safetylabaero.com/#software" }, "about": { "@id": "https://safetylabaero.com/#software" }, "inLanguage": "en" },
+    { "@type": "WebPage", "@id": "https://safetylabaero.com/autopilots#webpage", "url": "https://safetylabaero.com/autopilots", "name": "Safety Analysis Autopilots | Safety Lab Aero", "description": "Autopilots for safety plans, aircraft and system safety assessments, interdependence, MAC, CoFFE, common mode, zonal, particular risk and human factors.", "isPartOf": { "@id": "https://safetylabaero.com/#software" }, "about": { "@id": "https://safetylabaero.com/#software" }, "inLanguage": "en" },
     { "@type": "BreadcrumbList", "itemListElement": [ { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://safetylabaero.com/" }, { "@type": "ListItem", "position": 2, "name": "Autopilots", "item": "https://safetylabaero.com/autopilots" } ] }
   ]
 }
@@ -99,6 +99,48 @@
 <li>the workload functions and factors of Part 25 Appendix D, then the minimum flight crew.</li>
 </ul>
 <p>The crew actions the safety analysis counts on are listed and checked before they are given credit.</p>
+
+<h2>PASA Autopilot: the preliminary aircraft safety assessment</h2>
+<p>One Preliminary Aircraft Safety Assessment for the aircraft, with one appendix per aircraft function holding every failure condition of that function rated Minor or above.</p>
+<ul>
+<li>For each failure condition: what is being evaluated, the AFHA entry, how the systems feed it, the resources they share, its fault tree and what it says, the numbers against the objective, the requirements and the path to compliance.</li>
+<li>It asks whether each system failure condition's fault tree is ready to be linked into the aircraft tree. A tree nobody has built yet says so: no picture, no numbers.</li>
+<li>The interdependence table and the fault tree are checked against each other, both ways.</li>
+</ul>
+
+<h2>Interdependence, MAC and CoFFE Autopilots: multi-system failure conditions</h2>
+<p>Three autopilots work on one failure condition and send their results to the PASA, which only shows them.</p>
+<ul>
+<li><strong>Interdependence Autopilot.</strong> Tick the system functions that do the job or cause it by failing, and the shared resources that feed them. The interdependence table, the common resource table and the common resource analysis come out in the layout of the ARP 4761A example, showing only what applies. What the project's own data says feeds the failure condition cannot be left out.</li>
+<li><strong>MAC Autopilot.</strong> You set how each system is built, at assembly level: by hand, or the AI reads a design document or your own words and proposes it for you to accept. The tool then switches assemblies off and asks whether the aircraft can still do the job, working out every mix it can from your answers. The rules are named combinations of assemblies, each with your reason. They stay marked Assumed until the builds are compared with the system design description.</li>
+<li><strong>CoFFE Autopilot.</strong> The tool writes out every mix of failed, degraded and working, asks only what it cannot work out, and fills the full table, its summary, the gate under the failure condition, the probability check against the objective and the pairs of failures that share one resource.</li>
+</ul>
+
+<h2>PSSA Autopilot: one per system</h2>
+<p>One Preliminary System Safety Assessment per system, with one appendix per function. Each failure condition starts from the system FHA entry and what the aircraft hands down; where two aircraft failure conditions set a budget, the stricter applies, worked out.</p>
+<ul>
+<li>The tree down to items, what it says and the numbers.</li>
+<li>Item assurance levels, and whether to claim independence to set them lower.</li>
+<li>Hidden failures and the check intervals that keep them in budget.</li>
+<li>Independence claims handed to the CMA Autopilot, the requirements and the path to compliance.</li>
+</ul>
+
+<h2>SSA and ASA Autopilots: closing the loop</h2>
+<ul>
+<li><strong>SSA Autopilot.</strong> One System Safety Assessment per system, opened once its PSSA is baselined. The trees are worked out again from the bottom up with the real rates from the FMEA, the budget is checked against the design, and every requirement shows its verification method, evidence and status.</li>
+<li><strong>ASA Autopilot.</strong> One Aircraft Safety Assessment, opened once the PASA and every SSA are baselined. Every aircraft failure condition is sorted: closed by an SSA, needs aircraft-level work, or open. Trees that span several systems are worked out again with the systems' measured numbers, and the common causes are closed.</li>
+</ul>
+
+<h2>CMA Autopilot: one independence claim at a time</h2>
+<p>The common mode analysis takes each independence the fault trees rely on, asks the questions for that claim, and builds the CMA report from the answers. A concern that needs one raises its requirement.</p>
+
+<h2>What is generated for you</h2>
+<ul>
+<li><strong>A fault tree for every failure condition.</strong> Once a failure condition is classified, its tree exists with its top event and its target from the certification basis. A minimum acceptable configuration compiles into fault trees, and a second engine checks they hold exactly the same combinations. Nothing is invented under a top event.</li>
+<li><strong>Multi-system, multi-function trees.</strong> A system failure condition is one node, shared by every aircraft tree it feeds. It keeps the strictest budget any of them gives it, and its own tree takes that as its target.</li>
+<li><strong>Fault trees that rebalance themselves.</strong> Hold one input tighter and the rest of the gate takes up the spare at once. The gate is flagged as rebalanced for an engineer to accept or keep tighter, signed and reversible.</li>
+<li><strong>AutoReq.</strong> The safety requirements are written from the fault trees and assessments: probability budgets, development assurance levels, shared resources and common-mode concerns, each with why it exists and what drove it, flowed down to the systems that feed the failure condition.</li>
+</ul>
 
 <h2>What the autopilots do not do</h2>
 <p>They do not make engineering decisions. Fault trees and requirements are generated deterministically from the model: same inputs, same results, every number traceable. Where the AI drafts text, it is grounded in the standards and your architecture, and nothing it drafts counts until an engineer accepts it. How that works is on the <a href="/ai-guardrails">AI guardrails page</a>.</p>
