@@ -1,4 +1,11 @@
-## 14 Nov 2026 (latest): EVERY ROW OF TABS OR FILTER CHIPS INSIDE A PAGE IS ONE DROP-DOWN; THE FOLD-AND-PAGE PIECE FOR LISTS. Not shipped yet (Waqas runs every deploy).
+## 14 Nov 2026, later (latest): EVERY TITLED LIST IN A PAGE FOLDS; MORE ROWS ARE DROP-DOWNS. Not shipped yet (Waqas runs every deploy).
+
+**What.** fold.js now also folds the lists pages draw themselves (SLAutoFold): a table or list under a short title (a heading, a bold line, a caption up to 80 characters, 160 for a heading) folds behind that title with its count; over 50 rows it pages inside. Left open on purpose: a page's worksheet (its first table.data-table, or a table marked data-sl-worksheet, as the Requirements Repository table now is), tables with fields to fill in, tables with their own pager, reports and plans drawn as documents (.ccr-doc, .ccr-tabdoc, [data-pladoc], .pra-rep), dialogs, a list under a long description. The page's own code is untouched. A walk over every page of the K350 demo: about 100 lists fold over some 20 pages.
+More rows made drop-downs: the system workspace bar, the Fault trees / MAC / MF&MS / Cascading bar, the V&V Status chips (one drop-down per group: Scope, Level, Type, From, Status; "Unmapped" a heading inside its group), the Validation Matrix set chips, the CAD viewer's Parts / Props / Views / Notes, the particular risk tabs. Hand-folded too: pra_panel.js (sources, rotors, exposed parts, functions) and plan_autopilot.js (inputs, outputs, data exchanged, settings, objectives, outputs to accept, to be decided).
+
+**Tests.** regression_fold_menus_20261114 now 24 checks. zsa_page_ui and zonal_exchange_ui read their lists with the folds open. 36 of 38 browser suites green in the cloud copy; hl1_cad_demo needs the demo STEP (not in that copy), cloud_open_cleanup fails the same way with fold.js empty (not this change).
+
+## 14 Nov 2026: EVERY ROW OF TABS OR FILTER CHIPS INSIDE A PAGE IS ONE DROP-DOWN; THE FOLD-AND-PAGE PIECE FOR LISTS. Not shipped yet (Waqas runs every deploy).
 
 **Why (Waqas).** "Instead of showing long lists, we should have drop down menus in both tools in all places"; then, of a wall of chips and a row of tabs, "anything that shows like this in both apps should be a drop down list". His answers: every list folds shut behind its title and count, however short; a row of tabs or chips inside a page is one drop-down; the tool's own navigation (left menu, area bar) stays; a row of two or three is a switch, "make them more prominent".
 

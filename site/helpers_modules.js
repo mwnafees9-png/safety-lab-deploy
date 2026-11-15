@@ -6280,7 +6280,7 @@ function renderRequirementsRepository() {
     if (!reqs.length) {
         body += '<div style="padding: 24px; text-align: center; color: var(--color-text-tertiary); font-style: italic; border: 1px dashed var(--color-border-hair); border-radius: 8px;">No requirements in this scope yet. Add some via the corresponding Requirements tab, or use Auto-generate Requirements on the FHA/FTA/CMA/PRA/ZSA tabs.</div>';
     } else {
-        body += '<table style="width: 100%; border-collapse: collapse; font-size: 13px;">';
+        body += '<table data-sl-worksheet="1" style="width: 100%; border-collapse: collapse; font-size: 13px;">';   // 14 Nov 2026: the page's worksheet, never folded (fold.js)
         body += '<thead><tr style="background: var(--color-surface-2); text-align: left;">';
         body += '<th style="padding: 8px;">ID</th>';
         if (scopeKind === 'all-sys') body += '<th style="padding: 8px;">System</th>';
@@ -6357,7 +6357,7 @@ function renderVVStatusPage() {
     function _chip(label, key, val, current) {
         const isActive = current === val;
         const bg = isActive ? 'background: var(--color-accent, #3b82f6); color: #fff;' : 'background: var(--color-surface-2); color: var(--color-text-secondary);';
-        return '<button onclick="setVVFilter(\'' + esc(key) + '\',\'' + esc(val) + '\')" style="' + bg + ' border: 1px solid var(--color-border-hair); border-radius: 999px; padding: 4px 11px; font-size: 12px; cursor: pointer;">' + esc(label) + '</button>';
+        return '<button aria-pressed="' + isActive + '" onclick="setVVFilter(\'' + esc(key) + '\',\'' + esc(val) + '\')" style="' + bg + ' border: 1px solid var(--color-border-hair); border-radius: 999px; padding: 4px 11px; font-size: 12px; cursor: pointer;">' + esc(label) + '</button>';
     }
     let chips = '';
     chips += '<span style="font-size: 11px; color: var(--color-text-tertiary); margin-right: 4px;">Scope</span>';
@@ -6389,7 +6389,7 @@ function renderVVStatusPage() {
         const known = list.filter(x => x.known), unknown = list.filter(x => !x.known);
         known.forEach(x => { h += _chip(x.value + ' (' + x.count + ')', field, x.value, active); });
         if (unknown.length) {
-            h += '<span style="font-size: 11px; color: var(--color-text-tertiary); margin: 0 4px 0 8px;" ' +
+            h += '<span data-sl-pm-sub="1" style="font-size: 11px; color: var(--color-text-tertiary); margin: 0 4px 0 8px;" ' +
                  'title="Values this project holds that are not ARP4754B §5.3.1 classes. Shown so the rows stay reachable — the migration deliberately does not guess at an engineer\u2019s meaning.">Unmapped</span>';
             unknown.forEach(x => { h += _chip(x.value + ' (' + x.count + ')', field, x.value, active); });
         }

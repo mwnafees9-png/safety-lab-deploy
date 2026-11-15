@@ -483,9 +483,9 @@
         const set = sets.find(s => s.scope === window._vvValScope) || sets[0];
         const posture = vvProgramPosture();
 
-        let html = '<div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px;">' + sets.map(s => {
+        let html = '<div class="vv-set-chips" role="tablist" aria-label="Requirement set" style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px;">' + sets.map(s => {
             const active = s.scope === set.scope;
-            return '<button onclick="vvValSetScope(\'' + _esc(s.scope) + '\')" style="border:1px solid var(--color-border-hair); border-radius:999px; padding:4px 12px; font-size:12px; cursor:pointer;' +
+            return '<button role="tab" aria-selected="' + active + '" onclick="vvValSetScope(\'' + _esc(s.scope) + '\')" style="border:1px solid var(--color-border-hair); border-radius:999px; padding:4px 12px; font-size:12px; cursor:pointer;' +
                 (active ? ' background:var(--color-accent, #3b82f6); color:#fff;' : ' background:var(--color-surface-2); color:var(--color-text-secondary);') + '">' +
                 _esc(s.name) + ' (' + (s.reqs || []).length + ')</button>';
         }).join('') + '</div>';

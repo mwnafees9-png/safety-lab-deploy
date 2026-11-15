@@ -15,7 +15,8 @@
  *   D  wiring: fold.js right after paginate.js; no em dash; no eval
  *   E  in the browser (Playwright, where installed): the ZSA tabs are one drop-down with its label, the row hidden, the
  *      CAD link still on screen; picking a page opens it; a row of three or fewer is a framed switch; the area bar is
- *      left alone; no page errors
+ *      left alone; a list under a short title folds with its count and pages; a table under a description or with
+ *      fields to fill in is left open; a page's worksheet is never folded; no page errors
  *
  * Run: node tests/regression_fold_menus_20261114.test.js
  */
@@ -109,6 +110,16 @@ function load() { const G = {}; vm.runInNewContext(SRC, { globalThis: G, Math, N
             check('E4 the area bar is the tool\'s navigation: left as it is', E4.navMenus === 0 && !E4.navHidden, JSON.stringify(E4));
             const E5 = await pg.evaluate(() => { const r = document.createElement('div'); r.className = 'ar-filter-bar'; r.innerHTML = '<span class="ar-filter-label">Show</span><span class="ar-filter-chip active" role="button">All</span><span class="ar-filter-chip" role="button">Issues</span>'; document.body.appendChild(r); return new Promise(res => setTimeout(() => { const c = getComputedStyle(r); res({ sw: r.classList.contains('sl-pm-switch'), border: c.borderTopWidth, shown: c.display !== 'none' }); r.remove(); }, 200)); });
             check('E5 a row of two or three is a framed switch, still shown', E5.sw && E5.border !== '0px' && E5.shown, JSON.stringify(E5));
+            const E7 = await pg.evaluate(() => new Promise(res => {
+                const host = document.createElement('div'); host.innerHTML = '<h4>Parts named</h4><ul>' + Array.from({ length: 120 }, (_, i) => '<li>part ' + (i + 1) + '</li>').join('') + '</ul><p>A long paragraph that describes what the next table holds and why, written at length so that it is clearly no title at all for it.</p><table><tbody><tr><td>a</td></tr><tr><td>b</td></tr></tbody></table><div>Edits</div><table><tbody><tr><td><input value="x"></td></tr></tbody></table>';
+                document.body.appendChild(host);
+                setTimeout(() => { const d = host.querySelector('details.sl-fold-auto'); const nav = d && d.querySelector('.sl-fold-nav'); const shown = d ? [...d.querySelectorAll('li')].filter(li => li.style.display !== 'none').length : 0;
+                    res({ folded: !!d && !d.open, title: d ? d.querySelector('summary').textContent.trim() : '', shown, nav: nav ? nav.textContent : '', folds: host.querySelectorAll('details.sl-fold-auto').length }); host.remove(); }, 300);
+            }));
+            check('E7 a list under a short title folds behind it with its count, and pages 50 at a time', E7.folded && E7.title === 'Parts named (120)' && E7.shown === 50 && /1 to 50 of 120/.test(E7.nav), JSON.stringify(E7));
+            check('E8 a table under a long description, and a table with fields to fill in, are left open', E7.folds === 1, JSON.stringify(E7));
+            const E9 = await pg.evaluate(async () => { switchTab('reqs-repo'); await new Promise(r => setTimeout(r, 1200)); const t = document.querySelector('#view-reqs-repo table[data-sl-worksheet]'); return { has: !!t, folded: !!(t && t.closest('details')) }; });
+            check('E9 a page\'s worksheet (the requirements table) is never folded', !E9.folded, JSON.stringify(E9));
             check('E6 no page errors', errs.length === 0, errs.slice(0, 3).join(' | '));
         } finally { await b.close(); srv.close(); }
     }

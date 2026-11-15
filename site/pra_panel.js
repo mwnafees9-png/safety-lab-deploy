@@ -40,21 +40,23 @@
     function nmRow(R, row) { return R && R.nonMonotone ? row('Fault tree logic', '<b data-pra-nonmono>non-monotone tree: worst case over subsets used</b>' + (R.nonMonotone.trees && R.nonMonotone.trees.length ? ' (' + R.nonMonotone.trees.map(_esc).join('; ') + ')' : '')) : ''; }
     function impactLine(r) { return 'Worst: ' + (r.worst ? sev(r.worst) : 'none') + (r.conditions && r.conditions.length ? ' · ' + r.conditions.map(function (c) { return _esc(c.fcId); }).join(', ') : '') + (r.shared && r.shared.length ? ' · <b style="color:var(--color-danger,#8E2A2A);">shared exposure: ' + r.shared.map(function (f) { return _esc(f.gate); }).join(', ') + '</b>' : ''); }
 
+    // 14 Nov 2026 (Waqas: every list folds shut behind its title and count, and pages inside): fold.js SLFold
+    function _fold(key, title, items, row, o) { var F = window.SLFold; if (!F) return items.map(row).join(''); return F.list(Object.assign({ key: 'pra|' + key, title: title, items: items, row: row }, o || {})); }
     function tabs() {
-        return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">' + [['rotor', 'Rotor burst'], ['tire', 'Tire burst'], ['bird', 'Bird strike'], ['light', 'Lightning'], ['generic', 'Fire, leak, ice'], ['func', 'By function']].map(function (t) {
-            return '<button data-pra-tab="' + t[0] + '" style="' + BTN + (st.open === t[0] ? 'background:#007AFF;color:#fff;' : '') + '">' + t[1] + '</button>'; }).join('') + '</div><div id="cad-pra-msg" style="display:none;font-size:12px;margin:4px 0;"></div>';
+        return '<div class="pra-tabs" role="tablist" aria-label="Particular risk" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">' + [['rotor', 'Rotor burst'], ['tire', 'Tire burst'], ['bird', 'Bird strike'], ['light', 'Lightning'], ['generic', 'Fire, leak, ice'], ['func', 'By function']].map(function (t) {
+            return '<button data-pra-tab="' + t[0] + '" role="tab" aria-selected="' + (st.open === t[0]) + '" style="' + BTN + (st.open === t[0] ? 'background:#007AFF;color:#fff;' : '') + '">' + t[1] + '</button>'; }).join('') + '</div><div id="cad-pra-msg" style="display:none;font-size:12px;margin:4px 0;"></div>';
     }
     // ---- rotor burst
     function rotorHtml() {
         var m = M(), id = cadId(), out = '';
         var props = m.proposeRotors(id), conf = m.rotors();
         out += '<div style="' + MUTED + '">AC 20-128A failure model. Rotors are proposed from the CAD part names; enter the disc radius and blade length and confirm.</div>';
-        out += props.map(function (p, i) {
+        out += (props.length ? _fold('props', 'Rotors proposed from the part names', props, function (p, i) {
             return '<div style="font-size:12px;padding:3px 0;border-top:1px solid var(--color-border-hair);" data-pra-rotor-prop="' + _esc(p.pid) + '">' + pidsLink([p.pid], p.name) + ' <span style="' + MUTED + '">at ' + p.center.map(Math.round).join(', ') + ' mm</span> <span style="' + MUTED + '">' + _esc(p.why) + '; outer radius from the box ' + p.radius + ' mm</span><br>' +
                 'disc radius <input id="pra-r-' + i + '" style="' + INP + '" placeholder="mm"> blade <input id="pra-b-' + i + '" style="' + INP + '" placeholder="mm"> rotation <select id="pra-rot-' + i + '" style="font-size:11.5px;width:auto;display:inline-block;padding:1px 4px;height:auto;min-height:0;"><option value="1">+1</option><option value="-1">-1</option></select> ' +
                 '<button data-pra-act="rotor-confirm" data-i="' + i + '" style="' + BTN + '">Confirm rotor</button></div>';
-        }).join('') || '<div style="' + MUTED + '">No part name names a rotor, disc, fan, turbine or compressor.</div>';
-        out += conf.map(function (r) { return '<div style="font-size:12px;margin-top:6px;">' + _esc(r.label) + ' <span style="' + MUTED + '">confirmed by ' + _esc(r.confirmedBy) + '; R ' + r.discRadius + ' mm, b ' + r.bladeLength + ' mm; disc mass ' + (r.bladedDiscMassKg || 'missing') + ', speed ' + (r.rpm ? r.rpm + ' rpm' : 'missing') + (r.shields.length ? '; shields ' + r.shields.length : '') + '</span> <button data-pra-act="sweep" data-rotor="' + _esc(r.id) + '" style="' + BTN + '">Sweep 360 degrees</button>' + aiBtn('pra.writeup', { kind: 'rotorBurst', rotorId: r.id, label: r.label, cadId: cadId(), part: r.pid != null ? aiPart(r.pid) : undefined }) + aiNotes('praWriteups', r.id) + '</div>'; }).join('');
+        }) : '') || '<div style="' + MUTED + '">No part name names a rotor, disc, fan, turbine or compressor.</div>';
+        out += _fold('conf', 'Confirmed rotors', conf, function (r) { return '<div style="font-size:12px;margin-top:6px;">' + _esc(r.label) + ' <span style="' + MUTED + '">confirmed by ' + _esc(r.confirmedBy) + '; R ' + r.discRadius + ' mm, b ' + r.bladeLength + ' mm; disc mass ' + (r.bladedDiscMassKg || 'missing') + ', speed ' + (r.rpm ? r.rpm + ' rpm' : 'missing') + (r.shields.length ? '; shields ' + r.shields.length : '') + '</span> <button data-pra-act="sweep" data-rotor="' + _esc(r.id) + '" style="' + BTN + '">Sweep 360 degrees</button>' + aiBtn('pra.writeup', { kind: 'rotorBurst', rotorId: r.id, label: r.label, cadId: cadId(), part: r.pid != null ? aiPart(r.pid) : undefined }) + aiNotes('praWriteups', r.id) + '</div>'; });
         var s = st.sweep;
         if (s && s.ok) {
             out += '<div style="margin-top:8px;font-size:12px;" data-pra-sweep="' + _esc(s.rotorId) + '"><b>' + _esc(s.label) + '</b> <span style="' + MUTED + '">' + _esc(s.method) + '</span>' +
@@ -149,7 +151,7 @@
             nmRow(R, row) + row('Linked equipment', R.equipment.length ? R.equipment.map(_esc).join(', ') : 'none') +
             row('Failure conditions', condText(R)) +
             '</table><div style="' + MUTED + 'margin-top:4px;">' + _esc(R.method) + '</div>' +
-            '<div style="margin-top:4px;"><b>Sources</b>' + R.refs.map(function (x) { return '<div>' + _esc(x.doc + ' ' + x.section) + ': "' + _esc(x.quote) + '"</div>'; }).join('') + '</div></div>';
+            '<div style="margin-top:4px;">' + _fold('src|' + R.label, 'Sources', R.refs, function (x) { return '<div>' + _esc(x.doc + ' ' + x.section) + ': "' + _esc(x.quote) + '"</div>'; }) + '</div></div>';
     }
     function flowVolumes(keys) {
         var m = M(), v = viewer(); if (!v || !v.showSpreadVolumes) return 0;
@@ -249,7 +251,7 @@
             nmRow(R, row) + row('Linked equipment', R.equipment.length ? R.equipment.map(_esc).join(', ') : 'none') +
             row('Failure conditions', condText(R)) +
             (R.shared.length ? row('Shared exposure', R.shared.map(function (f) { return _esc(f.gate); }).join(', ')) : '') +
-            '</table><div style="' + MUTED + '">' + _esc(R.method) + '</div><div><b>Sources</b>' + R.refs.map(function (x) { return '<div>' + _esc(x.doc + ' ' + x.section) + ': "' + _esc(x.quote) + '"</div>'; }).join('') + '</div></div>';
+            '</table><div style="' + MUTED + '">' + _esc(R.method) + '</div><div>' + _fold('src|' + R.label, 'Sources', R.refs, function (x) { return '<div>' + _esc(x.doc + ' ' + x.section) + ': "' + _esc(x.quote) + '"</div>'; }) + '</div></div>';
     }
     function _impactPoint(bv) { var d = M().bird(st.bFlow).direction, b = bv.box, c = [0, 1, 2].map(function (i) { return (b.min[i] + b.max[i]) / 2; }); for (var i = 0; i < 3; i++) if (d[i] > 0) c[i] = b.min[i]; else if (d[i] < 0) c[i] = b.max[i]; return c; }
     function birdVolumes(pids) {
@@ -282,7 +284,7 @@
             nmRow(R, row) + row('Linked equipment', R.equipment.length ? R.equipment.map(_esc).join(', ') : 'none') +
             row('Failure conditions', condText(R)) +
             (R.shared && R.shared.length ? row('Shared exposure', R.shared.map(function (f) { return _esc(f.gate); }).join(', ')) : '') + '</table>' +
-            (R.refs && R.refs.length ? '<div><b>Sources</b>' + R.refs.map(function (x) { return '<div>' + _esc(x.doc + ' ' + x.section) + ': "' + _esc(x.quote) + '"</div>'; }).join('') + '</div>' : '') + '</div>';
+            (R.refs && R.refs.length ? '<div>' + _fold('src|' + R.label, 'Sources', R.refs, function (x) { return '<div>' + _esc(x.doc + ' ' + x.section) + ': "' + _esc(x.quote) + '"</div>'; }) + '</div>' : '') + '</div>';
     }
     function regionVolumes(list) { var v = viewer(); if (!v || !v.showSpreadVolumes) return 0; return v.showSpreadVolumes(list.map(function (x) { var mm = boxMesh(x.box); return { model: x.key, label: x.label, color: x.color, opacity: 0.3, callout: { pos: boxCenter(x.box), text: x.callout }, positions: mm.positions, index: mm.index, spec: null }; }), { frame: true, regionView: true, title: 'Region', xrayHits: [].concat.apply([], list.map(function (x) { return x.hits || []; })) }); }
     function exportRegion(R, x, title, heading, tableHtml) {
@@ -419,7 +421,7 @@
             row('In a wheel well or gear bay', R.wheelWellHits.length ? names(R.wheelWellHits) : 'none') +
             nmRow(R, row) + row('Linked equipment', R.equipment.length ? R.equipment.map(_esc).join(', ') : 'none') +
             row('Failure conditions', condText(R)) +
-            '</table><div style="' + MUTED + '">' + _esc(R.method) + '</div><div><b>Sources</b>' + R.refs.map(function (x) { return '<div>' + _esc(x.doc + ' ' + x.section) + ': "' + _esc(x.quote) + '"</div>'; }).join('') + '</div></div>';
+            '</table><div style="' + MUTED + '">' + _esc(R.method) + '</div><div>' + _fold('src|' + R.label, 'Sources', R.refs, function (x) { return '<div>' + _esc(x.doc + ' ' + x.section) + ': "' + _esc(x.quote) + '"</div>'; }) + '</div></div>';
     }
     function tireVolumes(keys) {
         var m = M(), v = viewer(); if (!v || !v.showSpreadVolumes) return 0;
@@ -462,8 +464,8 @@
         if (b && !b.ok) out += '<div style="color:var(--color-danger,#8E2A2A);font-size:12px;">' + _esc(b.err) + '</div>';
         if (b && b.ok) {
             if (b.basisIssue) out += '<div style="color:var(--color-danger,#8E2A2A);font-size:12px;">' + _esc(b.basisIssue) + '</div>';
-            out += '<div style="' + MUTED + '">' + _esc(b.method) + '</div><table style="width:100%;border-collapse:collapse;font-size:12px;"><tr style="text-align:left;' + MUTED + '"><th>Exposed part</th><th>Bird</th><th>Energy</th><th>Behind it</th></tr>' +
-                b.zones.map(function (z) { return '<tr style="border-top:1px solid var(--color-border-hair);" data-pra-bird="' + _esc(z.pid) + '"><td>' + pidsLink([z.pid], z.name) + '</td><td>' + val(z.massKg, 'kg') + ' ' + src(z.massKg) + '</td><td>' + val(z.energyJ, 'J') + '</td><td>' + (z.behind.length ? pidsLink([z.pid].concat(z.behind.map(function (x) { return x.pid; })), z.behind.length + ' parts') : '<span style="' + MUTED + '">none</span>') + '<br>' + impactLine(z) + aiBtn('damage.assumption', { kind: 'birdStrike', cadId: cadId(), part: aiPart(z.pid, z.name) }) + aiNotes('damageAssumptions', z.pid) + '</td></tr>'; }).join('') + '</table>' + aiBtn('pra.writeup', { kind: 'birdStrike', label: 'Bird strike', cadId: cadId() }) + aiNotes('praWriteups', 'birdStrike');
+            out += '<div style="' + MUTED + '">' + _esc(b.method) + '</div>' +
+                _fold('bird', 'Exposed parts', b.zones, function (z) { return '<tr style="border-top:1px solid var(--color-border-hair);" data-pra-bird="' + _esc(z.pid) + '"><td>' + pidsLink([z.pid], z.name) + '</td><td>' + val(z.massKg, 'kg') + ' ' + src(z.massKg) + '</td><td>' + val(z.energyJ, 'J') + '</td><td>' + (z.behind.length ? pidsLink([z.pid].concat(z.behind.map(function (x) { return x.pid; })), z.behind.length + ' parts') : '<span style="' + MUTED + '">none</span>') + '<br>' + impactLine(z) + aiBtn('damage.assumption', { kind: 'birdStrike', cadId: cadId(), part: aiPart(z.pid, z.name) }) + aiNotes('damageAssumptions', z.pid) + '</td></tr>'; }, { cols: 4, head: '<tr style="text-align:left;' + MUTED + '"><th>Exposed part</th><th>Bird</th><th>Energy</th><th>Behind it</th></tr>' }) + aiBtn('pra.writeup', { kind: 'birdStrike', label: 'Bird strike', cadId: cadId() }) + aiNotes('praWriteups', 'birdStrike');
         }
         out += birdFlowHtml();
         return out;
@@ -482,7 +484,7 @@
     function genericHtml() {
         var m = M(), c = C(), vols = c.riskVolumes().filter(function (v) { return m.GENERIC_KINDS[v.kind]; });
         return sourceFlowHtml() + '<div style="' + MUTED + '">Or a plain region: a box around the selected parts (select them in the viewer), entered by you.</div><div style="font-size:12px;"><select id="pra-gkind" style="font-size:11.5px;width:auto;display:inline-block;padding:1px 4px;height:auto;min-height:0;">' + Object.keys(m.GENERIC_KINDS).map(function (k) { return '<option value="' + k + '">' + _esc(m.GENERIC_KINDS[k]) + '</option>'; }).join('') + '</select> label <input id="pra-glabel" style="' + INP + 'width:140px;"> margin mm <input id="pra-gmargin" style="' + INP + '" value="0"> <button data-pra-act="generic-add" style="' + BTN + '">Add around selection</button></div>' +
-            vols.map(function (v) { return '<div style="font-size:12px;" data-pra-generic="' + _esc(v.id) + '"><a href="#" data-pra-vol="' + _esc(v.id) + '">' + _esc(v.label) + '</a> <span style="' + MUTED + '">' + _esc(m.GENERIC_KINDS[v.kind]) + ', ' + _esc(v.source) + '</span>' + aiBtn('pra.writeup', { volumeId: v.id, label: v.label }) + aiNotes('praWriteups', v.id) + aiPartList('damage.assumption', (function () { try { return c.partsInVolume(v.id, cadId()).map(function (q) { return String(q.pid); }); } catch (_) { return []; } })(), function (pp) { return { volumeId: v.id, label: v.label, part: pp }; }) + '</div>'; }).join('');
+            _fold('generic', 'Plain regions', vols, function (v) { return '<div style="font-size:12px;" data-pra-generic="' + _esc(v.id) + '"><a href="#" data-pra-vol="' + _esc(v.id) + '">' + _esc(v.label) + '</a> <span style="' + MUTED + '">' + _esc(m.GENERIC_KINDS[v.kind]) + ', ' + _esc(v.source) + '</span>' + aiBtn('pra.writeup', { volumeId: v.id, label: v.label }) + aiNotes('praWriteups', v.id) + aiPartList('damage.assumption', (function () { try { return c.partsInVolume(v.id, cadId()).map(function (q) { return String(q.pid); }); } catch (_) { return []; } })(), function (pp) { return { volumeId: v.id, label: v.label, part: pp }; }) + '</div>'; });
     }
     // ---- per-function risk view
     function funcHtml() {
@@ -491,13 +493,13 @@
         if (!r.functions.length) return '<div style="' + MUTED + '">No functions in the system records.</div>';
         var nmLine = r.nonMonotone ? '<div data-pra-nonmono style="font-size:12px;font-weight:600;">Fault tree logic: non-monotone tree: worst case over subsets used (' + r.nonMonotone.trees.map(_esc).join('; ') + ')</div>' : '';
         return nmLine + '<div style="' + MUTED + '">Each function, the equipment that performs it, its zone and every particular risk or zonal hazard it is exposed to. Source record in brackets.</div>' +
-            r.functions.map(function (f) {
+            _fold('funcs', 'Functions', r.functions, function (f) {
                 return '<div style="border-top:1px solid var(--color-border-hair);padding:4px 0;font-size:12px;" data-pra-func="' + _esc(f.funcId) + '"><b>' + _esc(f.funcId) + ' ' + _esc(f.name) + '</b> · worst ' + sev(f.worst) + aiBtn('function.risk', { systemId: (f.elements[0] || {}).sysId, funcId: f.funcId, cadId: cadId() }) +
                     '<div>' + f.elements.map(function (e) { return _esc(e.name) + (e.zone ? ' in ' + _esc(e.zone) : ' (no zone)') + (e.parts.length ? ' ' + pidsLink(e.parts, e.parts.length + ' part' + (e.parts.length === 1 ? '' : 's')) : ''); }).join('; ') + '</div>' +
                     (f.missing ? '<div style="color:var(--color-danger,#8E2A2A);">' + _esc(f.missing) + '</div>' : '') +
-                    f.exposures.map(function (x) { return '<div style="padding-left:10px;">' + _esc(x.sysId) + ': ' + _esc(x.label) + ' · ' + sev(x.worst) + ' <span style="' + MUTED + '">[' + _esc(x.src) + ']</span>' + (x.pids ? ' ' + pidsLink(x.pids, 'show') : '') + '</div>'; }).join('') +
-                    f.independence.map(function (x) { return '<div style="padding-left:10px;color:' + (x.severity === 'violation' ? 'var(--color-danger,#8E2A2A)' : 'inherit') + ';">' + _esc(x.text) + ' <span style="' + MUTED + '">[' + _esc(x.src) + ']</span></div>'; }).join('') + aiNotes('functionRiskNotes', ((f.elements[0] || {}).sysId || '') + '/' + f.funcId) + '</div>';
-            }).join('');
+                    _fold('exp|' + f.funcId, 'Exposed to', f.exposures, function (x) { return '<div style="padding-left:10px;">' + _esc(x.sysId) + ': ' + _esc(x.label) + ' · ' + sev(x.worst) + ' <span style="' + MUTED + '">[' + _esc(x.src) + ']</span>' + (x.pids ? ' ' + pidsLink(x.pids, 'show') : '') + '</div>'; }) +
+                    _fold('ind|' + f.funcId, 'Independence', f.independence, function (x) { return '<div style="padding-left:10px;color:' + (x.severity === 'violation' ? 'var(--color-danger,#8E2A2A)' : 'inherit') + ';">' + _esc(x.text) + ' <span style="' + MUTED + '">[' + _esc(x.src) + ']</span></div>'; }) + aiNotes('functionRiskNotes', ((f.elements[0] || {}).sysId || '') + '/' + f.funcId) + '</div>';
+            });
     }
     function render() { _regTris();   // the open viewer's triangles for every ray method (skin, bird, face clusters)
         var el = document.getElementById('cad-pra'); if (!el) return;

@@ -209,7 +209,7 @@ const SETUP = () => {
             check('the rotor burst Impact names the Sys Lab functions it reaches', /Sys Lab functions reached: [1-9]/.test(imp1), imp1.slice(0, 600));
             await page.evaluate(() => document.getElementById('cad-impact').scrollIntoView()); await shoot(page, 'sl_04_impact_with_syslab_functions');
             await page.evaluate(() => document.getElementById('cad-syslab').scrollIntoView()); await shoot(page, 'sl_05_exchange_panel_mapped');
-            const vt = await page.evaluate(() => document.querySelector('[data-zx-vols]') ? document.querySelector('[data-zx-vols]').innerText : '');
+            const vt = await page.evaluate(() => { const v = document.querySelector('[data-zx-vols]'); if (!v) return ''; v.querySelectorAll('details.sl-fold').forEach(d => { d.open = true; }); for (let a = v.closest('details.sl-fold'); a; a = a.parentElement && a.parentElement.closest('details.sl-fold')) a.open = true; return v.innerText; });   // 14 Nov 2026: lists fold (fold.js)
             check('the panel lists, per risk, the Sys Lab functions reached', /Lift rotor 1 hub or blade liberation/.test(vt), vt.slice(0, 300));
         }
         check('no page errors', !errors.length, errors.slice(0, 3).join(' | '));
