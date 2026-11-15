@@ -1814,7 +1814,10 @@ function switchTab(tabId) {
         // 10 Nov 2026 (the PASA Autopilot): the PASA page is the Autopilot; interdependence, common resources and CoFFE are
         // answered inside it, so those old pages open the PASA. The MAC model and MF&MS are pages of their own beside the
         // fault trees (pasa_autopilot.js draws the bar that joins them); the resource list is its own page again.
-        if (tabId === 'interdep' || tabId === 'coffe' || tabId === 'cockpit') { switchTab('pasa'); return; }
+        // 15 Nov 2026 (apx_autopilots.js): with the new Autopilots switched on (our team only), the Interdependence page is
+        // the Interdependence Autopilot, a page of its own again; everyone else still lands on the PASA.
+        const _apxOn = (function () { try { return !!(window.SLApxAuto && window.SLApxAuto.enabled && window.SLApxAuto.enabled()); } catch (_) { return false; } })();
+        if ((tabId === 'interdep' && !_apxOn) || tabId === 'coffe' || tabId === 'cockpit') { switchTab('pasa'); return; }
         // Phase 68 — FMEA is per-system now; there is no top-level FMEA tab. Any legacy
         // navigation to it (search jump, command palette, restored last-tab) lands on the
         // System Directory with a hint, so the user opens a System Folder to reach its FMEA.

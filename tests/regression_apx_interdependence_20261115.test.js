@@ -1,0 +1,207 @@
+/* regression_apx_interdependence_20261115.test.js: the Interdependence Autopilot (step 2 of 5 of the new Autopilots).
+ *
+ * Waqas, 15 Nov 2026: the Autopilot asks the questions and the PASA only shows the results; "only shows the parts of the
+ * table that are relevant to the failure condition and carries them over to the PASA, systems not applicable dont get
+ * shown"; the tables are "exactly" ARP4761A Tables Q.4-1, Q.4-2 and B3; a system the project says feeds the failure
+ * condition is "Block until the link is fixed"; one signature "Once, when sending"; "FYI this will be upgrading the
+ * current MAC/CoFFE and Interdependence interface and replacing them, so we have to absolutely nail this"; it is tested
+ * on the live site behind a switch only our team sees, saving in its own place.
+ * Rebuild: apx_autopilots.js (SLApxAuto 0.2) on apx_engine.js; support_modules.js lets the Interdependence tab open when
+ * the switch is on.
+ *   1  index.html: apx_engine.js, then apx_autopilots.js, both before pasa_autopilot.js
+ *   2  wording: American English, no em dashes, "AC" for aircraft (never "AP"), black table headers
+ *   3  switch off: the Interdependence tab still lands on the PASA and no Autopilot is drawn; nothing is written
+ *   4  switch on (K350 demo): the Autopilot draws, today's header text is hidden, the tables are not folded away
+ *   5  FC-07: what the project's data says is ticked and locked; unticking it is refused with the reason, and it stays
+ *   6  ticking a function adds exactly that column to Table Q.4-1; unticking removes it; unticked ones are never shown
+ *   7  a new function is created in its system once (a second identical name ticks the same one); a new system with its
+ *      function lands in the architecture; a new resource lands in the resources and in Table Q.4-2
+ *   8  sending needs a name and a finished table; once sent, every shown answer carries the name and the date
+ *   9  a change after sending says so ("changed since it was sent") until it is sent again
+ *  10  today's interdependence tables are not touched by any of it; the switch back shows today's page
+ *  11  no page errors
+ * MUTATION PROOFS (SL_APXI_MUTATE): nolock (a project-fed system can be unticked), leak (every function is shown in the
+ *   table), nosign (sending with no name), unfinished (sending an unfinished table), noswitch (the Autopilot shows with
+ *   the switch off), nostamp (answers are sent without the name), oldwrite (today's table is written to). Each must
+ *   turn this red.
+ * Run: node tests/regression_apx_interdependence_20261115.test.js
+ */
+'use strict';
+const fs = require('fs'), path = require('path'), http = require('http');
+let pass = 0, fail = 0;
+const check = (n, c, d) => { if (c) { pass++; console.log('  PASS  ' + n); } else { fail++; console.log('  FAIL  ' + n + (d ? ' (' + String(d).slice(0, 900) + ')' : '')); } };
+const SITE = path.join(__dirname, '..', 'site');
+const MUT = process.env.SL_APXI_MUTATE || '';
+const rd = f => fs.readFileSync(path.join(SITE, f), 'utf8');
+function mutate(file, body) {
+    if (file !== 'apx_autopilots.js' || !MUT) return body;
+    const rep = (a, b) => { if (body.indexOf(a) < 0) throw new Error('mutation site missing: ' + a.slice(0, 80)); body = body.split(a).join(b); };
+    if (MUT === 'nolock') rep("if (c.on && c.locked) { ui.blocked = colId; return; }", "");
+    if (MUT === 'leak') rep("function picked(fc) { return allCols().filter(function (c) { return cellOf(fc, c).on; }); }", "function picked(fc) { return allCols(); }");
+    if (MUT === 'nosign') rep("if (!name) return { ok: false, why: 'Type your name to sign before sending.' };", "");
+    if (MUT === 'unfinished') rep("var l = left(fc); if (l.length) return { ok: false, why: l[0] };", "");
+    if (MUT === 'noswitch') rep("function enabled() { var l = ls(); try { return !!(l && l.getItem(KEY) === '1'); } catch (_) { return false; } }", "function enabled() { return true; }");
+    if (MUT === 'nostamp') rep("src: x.src, by: name, at: at };", "src: x.src };");
+    if (MUT === 'oldwrite') rep("        touched(fc.key);\n    }\n    function setRole", "        try { var p0 = pc(); p0.interdep = p0.interdep || {}; p0.interdep.cells = p0.interdep.cells || {}; p0.interdep.cells[fc.key + '\\u00A7' + colId] = { state: 'asserted' }; } catch (_) {}\n        touched(fc.key);\n    }\n    function setRole");
+    return body;
+}
+
+(async () => {
+    // ---- 1, 2: the files ------------------------------------------------------------------------------------------------
+    const idx = rd('index.html'), src = rd('apx_autopilots.js');
+    const iE = idx.indexOf('src="apx_engine.js'), iA = idx.indexOf('src="apx_autopilots.js'), iP = idx.indexOf('src="pasa_autopilot.js');
+    check('1 index.html loads the engine, then the Autopilots, then the PASA Autopilot', iE > 0 && iA > iE && iP > iA, [iE, iA, iP].join(','));
+    check('2 no em dashes in the Autopilot', src.indexOf(String.fromCharCode(0x2014)) === -1);
+    check('2 American English', !/\b(colour|behaviour|analyse[sd]?|centre|organis|summaris|recognis|minimis|licence|labelled|cancelled)\b/i.test(src));
+    check('2 the abbreviation is AC Aircraft, never AP', src.indexOf("['AC', 'Aircraft']") !== -1 && !/\['AP',/.test(src) && !/>AP (Function|FC|Systems)/.test(src));
+    check('2 the switch is read from one place', (src.match(/getItem\(KEY\)/g) || []).length === 1);
+
+    // ---- the browser ----------------------------------------------------------------------------------------------------
+    let pw; try { pw = require('playwright'); } catch (_) { console.log('  SKIP  browser checks (playwright is not installed)'); done(); return; }
+    const TYPES = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.wasm': 'application/wasm' };
+    const srv = http.createServer((q, r) => {
+        let p = decodeURIComponent(q.url.split('?')[0]); if (p.endsWith('/')) p += 'index.html';
+        const f = path.join(SITE, path.normalize(p)); let b;
+        try { if (fs.statSync(f).isDirectory()) throw 0; b = fs.readFileSync(f); } catch (_) { r.writeHead(404); return r.end(); }
+        const base = path.basename(f); if (base === 'apx_autopilots.js') b = Buffer.from(mutate(base, b.toString('utf8')));
+        r.writeHead(200, { 'Content-Type': TYPES[path.extname(f)] || 'application/octet-stream', 'Cache-Control': 'no-store' }); r.end(b);
+    });
+    await new Promise(r => srv.listen(0, '127.0.0.1', r));
+    const URL0 = 'http://127.0.0.1:' + srv.address().port + '/index.html';
+    const br = await pw.chromium.launch(), errs = [], tick = ms => new Promise(r => setTimeout(r, ms));
+    async function boot(q) {
+        const pg = await (await br.newContext({ viewport: { width: 1400, height: 1000 } })).newPage();
+        pg.on('pageerror', e => errs.push(String(e).slice(0, 300))); pg.on('dialog', d => d.dismiss().catch(() => {}));
+        await pg.goto(URL0 + q); await tick(5000);
+        await pg.evaluate(() => { document.documentElement.classList.remove('sl-auth-gate-blocked'); const g = document.getElementById('sl-auth-gate'); if (g) g.remove(); if (window.__slDismissBootSplash) window.__slDismissBootSplash(); });
+        await pg.addStyleTag({ content: '#signup-modal{display:none!important} .modal-overlay{display:none!important}' });
+        await pg.evaluate(async () => { await loadSampleProject(); }); await tick(4000);
+        return pg;
+    }
+    try {
+        // ---- 3: switch off -----------------------------------------------------------------------------------------------
+        let pg = await boot('?apx=0');
+        const off = await pg.evaluate(async () => {
+            switchTab('interdep'); await new Promise(r => setTimeout(r, 1200));
+            const v = document.getElementById('view-interdep'), shown = v && getComputedStyle(v).display !== 'none' && v.offsetParent !== null;
+            return { enabled: window.SLApxAuto.enabled(), apx: !!document.querySelector('#interdep-host .apx'), shown: !!shown, entry: !!document.querySelector('[data-apx-entry]'), store: !!(typeof projectConfig !== 'undefined' && projectConfig && projectConfig.apx) };
+        });
+        check('3 switch off: the Autopilot is not enabled', off.enabled === false);
+        check('3 switch off: the Interdependence tab does not open and no Autopilot is drawn', !off.apx && !off.shown && !off.entry, JSON.stringify(off));
+        check('3 switch off: nothing is written into the project', off.store === false);
+        await pg.context().close();
+
+        // ---- 4: switch on ------------------------------------------------------------------------------------------------
+        pg = await boot('?apx=1');
+        const on = await pg.evaluate(async () => {
+            switchTab('interdep'); await new Promise(r => setTimeout(r, 1500));
+            const A = window.SLApxAuto, v = document.getElementById('view-interdep');
+            const p = v.querySelector(':scope > p');
+            return { enabled: A.enabled(), apx: !!document.querySelector('#interdep-host .apx'), shown: v.offsetParent !== null, oldText: p ? getComputedStyle(p).display : 'none', fcs: A.model.fcs().length, cols: A.model.allCols().length, k: (A.model.fcs().find(f => f.fcId === 'FC-07') || {}).key };
+        });
+        check('4 switch on: the Autopilot draws on the Interdependence tab', on.enabled && on.apx && on.shown, JSON.stringify(on));
+        check('4 it reads the demo: failure conditions and system functions', on.fcs >= 5 && on.cols >= 10, on.fcs + ' / ' + on.cols);
+        check("4 today's header text is hidden while the Autopilot shows", on.oldText === 'none', on.oldText);
+        check('4 the demo has FC-07', !!on.k);
+        const K = on.k;
+        await pg.selectOption('[data-apx-fc]', K); await tick(300);
+        await pg.selectOption('[data-apx-jump]', '1'); await tick(600);
+        const vis = await pg.evaluate(() => {
+            const t = document.querySelector('#interdep-host table.apx-arp'), a = document.querySelector('#interdep-host .apx-abbr');
+            const open = el => { if (!el || el.offsetParent === null) return false; for (let d = el.closest('details'); d; d = d.parentElement && d.parentElement.closest('details')) if (!d.open) return false; return el.getBoundingClientRect().height > 0; };
+            const th = t && t.querySelector('th'), cs = th && getComputedStyle(th);
+            return { table: open(t), abbr: open(a), folded: !!(t && t.closest('.sl-fold')), bg: cs && cs.backgroundColor, fg: cs && cs.color, abbrText: a ? a.innerText.replace(/\s+/g, ' ') : '' };
+        });
+        check('4 the table and its abbreviations are open, not folded away', vis.table && vis.abbr && !vis.folded, JSON.stringify(vis));
+        const dark = c => { const m = /(\d+),\s*(\d+),\s*(\d+)/.exec(c || ''); return m && (+m[1] + +m[2] + +m[3]) < 120; }, light = c => { const m = /(\d+),\s*(\d+),\s*(\d+)/.exec(c || ''); return m && (+m[1] + +m[2] + +m[3]) > 660; };
+        check('2 table headers are black with white text', dark(vis.bg) && light(vis.fg), vis.bg + ' / ' + vis.fg);
+        check('2 the abbreviations list says AC Aircraft and FC Failure Condition', /AC Aircraft/.test(vis.abbrText) && /FC Failure Condition/.test(vis.abbrText), vis.abbrText);
+
+        // ---- 5: locked by the project's own data ---------------------------------------------------------------------------
+        const before = await pg.evaluate(() => JSON.stringify((typeof projectConfig !== 'undefined' && projectConfig && projectConfig.interdep) || null));
+        const lock = await pg.evaluate((K) => {
+            const A = window.SLApxAuto, f = A.model.fcOf(K), p = A.model.picked(f);
+            return { n: p.length, locked: p.filter(c => { const x = A.model.cellOf(f, c); return x.locked && x.src === 'data'; }).map(c => c.colId), free: A.model.allCols().filter(c => !A.model.cellOf(f, c).on).map(c => c.colId) };
+        }, K);
+        check('5 the project data ticks the systems that feed FC-07', lock.locked.length >= 2 && lock.locked.length === lock.n, JSON.stringify(lock).slice(0, 300));
+        const L0 = lock.locked[0];
+        await pg.click('[data-apx-tick="' + L0 + '"]'); await tick(400);
+        const blk = await pg.evaluate(([K, L0]) => {
+            const A = window.SLApxAuto, f = A.model.fcOf(K), n = document.querySelector('#interdep-host .apx-note.bad');
+            return { on: A.model.cellOf(f, A.model.allCols().find(c => c.colId === L0)).on, note: n ? n.innerText : '' };
+        }, [K, L0]);
+        check('5 unticking a project-fed system is refused and it stays ticked', blk.on === true);
+        check('5 the refusal says why and what to fix', /Can't untick/.test(blk.note) && /Fix that link first/.test(blk.note), blk.note);
+
+        // ---- 6: tick, untick, only what is ticked is shown ------------------------------------------------------------------
+        const heads = () => pg.evaluate(() => { const t = document.querySelector('#interdep-host table.apx-arp'); return t ? Array.from(t.querySelectorAll('tr:nth-child(2) th')).slice(3).map(th => th.innerText.replace(/\s+/g, ' ')) : []; });
+        const h0 = await heads();
+        check('6 Table Q.4-1 has one column per ticked function and no other', h0.length === lock.n, h0.length + ' vs ' + lock.n);
+        const F0 = lock.free[0], F0id = F0.replace(/^fn:/, '');
+        await pg.evaluate((F0) => { const b = document.querySelector('[data-apx-tick="' + F0 + '"]'); const d = b.closest('details'); if (d) d.open = true; }, F0);
+        await pg.click('[data-apx-tick="' + F0 + '"]'); await tick(400);
+        const h1 = await heads();
+        check('6 ticking a function adds exactly its column', h1.length === h0.length + 1 && h1.some(t => t.indexOf(F0id) !== -1), JSON.stringify(h1).slice(0, 300));
+        const xs = await pg.evaluate(() => Array.from(document.querySelectorAll('#interdep-host table.apx-arp tr:nth-child(3) td')).slice(3).map(td => td.innerText.trim()));
+        check('6 every shown column carries the X of the book', xs.length === h1.length && xs.every(x => x === 'X'), xs.join(''));
+        await pg.click('[data-apx-tick="' + F0 + '"]'); await tick(400);
+        const h2 = await heads();
+        check('6 unticking removes the column again', h2.length === h0.length && !h2.some(t => t.indexOf(F0id) !== -1));
+
+        // ---- 7: creating what is missing -------------------------------------------------------------------------------------
+        const sys0 = await pg.evaluate(() => String(systemsData[0].id));
+        const nFn = () => pg.evaluate(() => systemsData.reduce((n, s) => n + (s.functions || []).length, 0));
+        const n0 = await nFn();
+        await pg.evaluate((s) => { const d = document.querySelector('details[data-apx-sys="' + s + '"]'); if (d) d.open = true; }, sys0);
+        await pg.fill('[data-apx-newfn="' + sys0 + '"]', 'Dump lift on the ground'); await pg.click('[data-apx-addfn^="' + sys0 + '|"]'); await tick(500);
+        const n1 = await nFn();
+        const made = await pg.evaluate(([K, s]) => { const A = window.SLApxAuto, f = A.model.fcOf(K), sy = systemsData.find(x => String(x.id) === s), r = (sy.functions || []).find(x => x.funcName === 'Dump lift on the ground'); const ids = systemsData.reduce((a, x) => a.concat((x.functions || []).map(y => y.funcId)), []); return { id: r && r.funcId, uniq: r && ids.filter(i => i === r.funcId).length === 1, on: !!(r && A.model.picked(f).some(c => c.funcId === r.funcId)) }; }, [K, sys0]);
+        check('7 a new function is created in its system with its own ID and ticked', n1 === n0 + 1 && !!made.id && made.uniq && made.on, JSON.stringify(made));
+        await pg.evaluate((s) => { const d = document.querySelector('details[data-apx-sys="' + s + '"]'); if (d) d.open = true; }, sys0);
+        await pg.fill('[data-apx-newfn="' + sys0 + '"]', 'Dump lift on the ground'); await pg.click('[data-apx-addfn^="' + sys0 + '|"]'); await tick(500);
+        check('7 the same name again does not make a second function', (await nFn()) === n1);
+        const s0n = await pg.evaluate(() => systemsData.length);
+        await pg.fill('[data-apx-newsys="name"]', 'Lift Dump System'); await pg.fill('[data-apx-newsys="fn"]', 'Spoil lift after touchdown'); await pg.click('[data-apx-addsys]'); await tick(600);
+        const sysMade = await pg.evaluate((K) => { const A = window.SLApxAuto, f = A.model.fcOf(K), s = systemsData.find(x => x.name === 'Lift Dump System'); return { n: systemsData.length, has: !!s, fn: s && (s.functions || []).map(x => x.funcName).join('|'), on: A.model.picked(f).some(c => c.sysName === 'Lift Dump System') }; }, K);
+        check('7 a new system with its function lands in the architecture and is ticked', sysMade.n === s0n + 1 && sysMade.has && sysMade.fn === 'Spoil lift after touchdown' && sysMade.on, JSON.stringify(sysMade));
+        await pg.selectOption('[data-apx-jump]', '3'); await tick(500);
+        const r0 = await pg.evaluate(() => resourcesData.length);
+        await pg.fill('[data-apx-newres]', 'Weight on Wheels Signal'); await pg.click('[data-apx-addres]'); await tick(500);
+        const resMade = await pg.evaluate((K) => { const A = window.SLApxAuto, f = A.model.fcOf(K); const t = document.querySelector('#interdep-host table.apx-arp'); return { n: resourcesData.length, on: A.model.resPicked(f).some(r => r.name === 'Weight on Wheels Signal'), inTable: !!t && /weight on wheels signal/i.test(t.innerText), cap: (document.querySelector('#interdep-host .apx-cap') || {}).innerText || '' }; }, K);
+        check('7 a new resource lands in the resources, ticked, and in Table Q.4-2', resMade.n === r0 + 1 && resMade.on && resMade.inTable && /Table Q\.4-2/.test(resMade.cap), JSON.stringify(resMade));
+
+        // ---- 8: sending ------------------------------------------------------------------------------------------------------
+        const s1 = await pg.evaluate((K) => { const A = window.SLApxAuto, f = A.model.fcOf(K); return { noName: A.act.send(f, '  '), unfinished: A.act.send(f, 'Test Engineer'), left: A.model.left(f) }; }, K);
+        check('8 sending without a name is refused', s1.noName.ok === false && /name/i.test(s1.noName.why || ''), JSON.stringify(s1.noName));
+        check('8 sending an unfinished table is refused with what is left', s1.left.length > 0 && s1.unfinished.ok === false && !!s1.unfinished.why, JSON.stringify(s1).slice(0, 400));
+        const s2 = await pg.evaluate((K) => {
+            const A = window.SLApxAuto, f = () => A.model.fcOf(K);
+            A.model.resPicked(f()).forEach(r => { if (!A.model.resState(f(), r).modes.length) A.act.mode(f(), r.key, 'Total loss', true); });
+            A.model.effectRows(f()).forEach(x => { const st = A.model.resState(f(), x.r); A.model.picked(f()).forEach(c => { if (st.feeds[c.colId] && !A.model.craText(f(), x.r, x.mode, c.colId)) A.act.setCra(f(), x.r.key + '|' + x.mode + '|' + c.colId, 'Function lost'); }); if (!A.model.craText(f(), x.r, x.mode, '')) A.act.setCra(f(), x.r.key + '|' + x.mode + '|', 'The failure condition happens'); });
+            const left = A.model.left(f()), res = A.act.send(f(), 'Test Engineer'), rec = projectConfig.apx.idp[K], cols = A.model.picked(f());
+            return { left, res, status: A.model.status(f()), n: cols.length, stamped: cols.filter(c => rec.cols[c.colId] && rec.cols[c.colId].by === 'Test Engineer' && rec.cols[c.colId].at).length, sent: rec.sent };
+        }, K);
+        check('8 a finished table is sent with one signature', s2.left.length === 0 && s2.res.ok === true && s2.status.k === 'sent' && s2.sent && s2.sent.by === 'Test Engineer', JSON.stringify(s2).slice(0, 400));
+        check('8 the name and date are recorded on every shown answer', s2.n > 0 && s2.stamped === s2.n, s2.stamped + ' of ' + s2.n);
+        await pg.selectOption('[data-apx-jump]', '6'); await tick(500);
+        const fin = await pg.evaluate(() => { const h = document.querySelector('#interdep-host'); return { caps: Array.from(h.querySelectorAll('.apx-cap')).map(c => c.innerText.replace(/\s+/g, ' ')), txt: h.innerText }; });
+        check('8 the last step shows the three tables of the book', fin.caps.length === 3 && /Q\.4-1/.test(fin.caps[0]) && /Q\.4-2/.test(fin.caps[1]) && /Table B3/.test(fin.caps[2]), fin.caps.join(' | '));
+        check('8 it says who signed', /Sent to the PASA\./.test(fin.txt) && /Test Engineer/.test(fin.txt));
+
+        // ---- 9: a change after sending -----------------------------------------------------------------------------------------
+        const ch = await pg.evaluate(([K, F0]) => { const A = window.SLApxAuto, f = A.model.fcOf(K); A.act.tick(f, F0, 'does'); return A.model.status(A.model.fcOf(K)).k; }, [K, F0]);
+        check('9 a change after sending is called out until it is sent again', ch === 'changed', ch);
+
+        // ---- 10: today's tables are left alone ---------------------------------------------------------------------------------
+        const after = await pg.evaluate(() => JSON.stringify((typeof projectConfig !== 'undefined' && projectConfig && projectConfig.interdep) || null));
+        check("10 today's interdependence tables are not touched", after === before, 'before ' + before.length + ' chars, after ' + after.length);
+        await pg.click('[data-apx-view="old"]'); await tick(1200);
+        const old = await pg.evaluate(() => { const v = document.getElementById('view-interdep'), p = v.querySelector(':scope > p'); return { cls: v.classList.contains('apx-on'), p: p ? getComputedStyle(p).display : '', sw: !!document.querySelector('#interdep-host [data-apx-view="new"]'), body: document.querySelector('#interdep-host').innerText.length }; });
+        check("10 the switch back shows today's page, with the way back to the Autopilot", !old.cls && old.p !== 'none' && old.sw && old.body > 200, JSON.stringify(old));
+        check('11 no page errors', errs.length === 0, errs.join(' | '));
+        await pg.context().close();
+    } catch (e) { check('browser run completed', false, e && e.stack ? e.stack : e); }
+    await br.close(); srv.close();
+    done();
+    function done() { console.log('\n' + pass + ' passed, ' + fail + ' failed' + (MUT ? '  [mutation: ' + MUT + ']' : '')); process.exit(fail ? 1 : 0); }
+})();

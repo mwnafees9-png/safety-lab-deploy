@@ -17,6 +17,8 @@ check('the PASA group opens with an entry for the PASA workspace itself', /<a cl
 // 10 Nov 2026: the PASA page is the PASA Autopilot (interdependence, common resources and CoFFE answered in it)
 check('… it says what is on the page in words (no internal codes)', /<span class="asb-lbl">PASA Autopilot<\/span>/.test(grp) && /interdependence, common resources and CoFFE are answered in it/.test(grp));
 check('… and it comes BEFORE Fault Tree Analysis', grp.indexOf('id="snav-pasa"') < grp.indexOf('id="snav-fta"'));
-check('switchTab knows the pasa tab; the old sub-pages (interdep, coffe, cockpit) open the PASA', /'pasa'/.test(sup.slice(sup.indexOf('function switchTab('), sup.indexOf('function switchTab(') + 6000)) && /if \(tabId === 'interdep' \|\| tabId === 'coffe' \|\| tabId === 'cockpit'\) \{ switchTab\('pasa'\); return; \}/.test(sup));
+check('switchTab knows the pasa tab; the old sub-pages (interdep, coffe, cockpit) open the PASA', /'pasa'/.test(sup.slice(sup.indexOf('function switchTab('), sup.indexOf('function switchTab(') + 6000)) && /if \(\(tabId === 'interdep' && !_apxOn\) \|\| tabId === 'coffe' \|\| tabId === 'cockpit'\) \{ switchTab\('pasa'\); return; \}/.test(sup));
+// 15 Nov 2026: the Interdependence tab opens only while the new Autopilots' team-only switch is on (apx_autopilots.js)
+check('... the Interdependence tab opens only with the Autopilot switch on, read from SLApxAuto.enabled()', /const _apxOn = \(function \(\) \{ try \{ return !!\(window\.SLApxAuto && window\.SLApxAuto\.enabled && window\.SLApxAuto\.enabled\(\)\); \} catch \(_\) \{ return false; \} \}\)\(\);/.test(sup));
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
