@@ -37,7 +37,7 @@
  * ==========================================================================*/
 (function (root) {
     'use strict';
-    var VERSION = '1.0';
+    var VERSION = '1.1';   // 1.1 16 Nov 2026: a field in a row lines up with its label and its button (the site's own bottom margin on fields is taken off inside the Autopilots)
     function g(n) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(n); if (v !== undefined) return v; } } catch (_) {} try { return root[n]; } catch (_) { return undefined; } }
     function arr(v) { return Array.isArray(v) ? v : []; }
     function S(v) { return v == null ? '' : String(v); }
@@ -288,6 +288,7 @@
         + '.apx-sw button.on{background:var(--color-text-primary,#101216);color:var(--color-surface-1,#fff)}.apx-aps{display:grid;margin:0 0 12px;width:100%}.apx-aps button{font-size:15.5px;padding:11px 16px}'
         + '.apx-pills{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}.apx-pill{border:1px solid var(--color-border,rgba(20,23,28,.82));border-radius:999px;padding:4px 12px;background:var(--color-surface-1,#fff);font-size:13px}'
         + '.apx-steps{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:0 0 12px}.apx-prog{flex:1;min-width:160px;height:8px;border-radius:99px;background:var(--color-surface-2,#F6F6F4);overflow:hidden;border:1px solid var(--color-border,rgba(20,23,28,.3))}.apx-prog i{display:block;height:100%;background:#1A6EF2}'
+        + '.apx input,.apx select,.apx textarea{margin:0}'
         + '.apx select{font:inherit;color:inherit;padding:8px 12px;border:1px solid var(--color-border-strong,#14171C);border-radius:9px;background-color:var(--color-surface-1,#fff);max-width:100%}'
         + '.apx select.apx-big{font-size:16px;padding:12px 14px;width:100%;border-width:1.5px;border-radius:12px;font-weight:600}'
         + '.apx input[type=text]{font:inherit;color:inherit;padding:8px 10px;border:1px solid var(--color-border-strong,#14171C);border-radius:9px;background:var(--color-surface-1,#fff);width:100%;box-sizing:border-box}'

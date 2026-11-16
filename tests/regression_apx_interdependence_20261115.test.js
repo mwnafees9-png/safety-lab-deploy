@@ -21,7 +21,7 @@
  *  10  today's interdependence tables are not touched until it is sent; once sent they carry it (apx_bridge.js); the
  *      switch back shows today's page
  *  11  no page errors
- * MUTATION PROOFS (SL_APXI_MUTATE): nolock (a project-fed system can be unticked), leak (every function is shown in the
+ * MUTATION PROOFS (SL_APXI_MUTATE): offline (a field sits off the line of its label and button), nolock (a project-fed system can be unticked), leak (every function is shown in the
  *   table), nosign (sending with no name), unfinished (sending an unfinished table), noswitch (the Autopilot shows with
  *   the switch off), nostamp (answers are sent without the name), oldwrite (today's table is written to). Each must
  *   turn this red.
@@ -37,6 +37,7 @@ const rd = f => fs.readFileSync(path.join(SITE, f), 'utf8');
 function mutate(file, body) {
     if (file !== 'apx_autopilots.js' || !MUT) return body;
     const rep = (a, b) => { if (body.indexOf(a) < 0) throw new Error('mutation site missing: ' + a.slice(0, 80)); body = body.split(a).join(b); };
+    if (MUT === 'offline') rep("        + '.apx input,.apx select,.apx textarea{margin:0}'\n", '');
     if (MUT === 'nolock') rep("if (c.on && c.locked) { ui.blocked = colId; return; }", "");
     if (MUT === 'leak') rep("function picked(fc) { return allCols().filter(function (c) { return cellOf(fc, c).on; }); }", "function picked(fc) { return allCols(); }");
     if (MUT === 'nosign') rep("if (!name) return { ok: false, why: 'Type your name to sign before sending.' };", "");
@@ -118,6 +119,9 @@ function mutate(file, body) {
         check('2 table headers are black with white text', dark(vis.bg) && light(vis.fg), vis.bg + ' / ' + vis.fg);
         check('2 the abbreviations list says AC Aircraft and FC Failure Condition', /AC Aircraft/.test(vis.abbrText) && /FC Failure Condition/.test(vis.abbrText), vis.abbrText);
 
+        // 16 Nov 2026 (Waqas, on the New function row: "these need to be lined up"): a label, its field and its button sit on one line
+        const lined = await pg.evaluate(() => { document.querySelectorAll('#interdep-host details').forEach(d => { d.open = true; }); return Array.from(document.querySelectorAll('#interdep-host .apx-add')).map(row => { const mid = Array.from(row.children).map(c => { const b = c.getBoundingClientRect(); return (b.top + b.bottom) / 2; }); return Math.max.apply(null, mid) - Math.min.apply(null, mid); }); });
+        check('4 in every "New function" and "New system" row the label, the field and the button are lined up', lined.length >= 2 && lined.every(d => d <= 1), JSON.stringify(lined.slice(0, 12)));
         // ---- 5: locked by the project's own data ---------------------------------------------------------------------------
         const before = await pg.evaluate(() => JSON.stringify((typeof projectConfig !== 'undefined' && projectConfig && projectConfig.interdep) || null));
         const lock = await pg.evaluate((K) => {
