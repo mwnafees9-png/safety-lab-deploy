@@ -31,7 +31,7 @@
  * ==========================================================================*/
 (function (root) {
     'use strict';
-    var VERSION = '1.0';
+    var VERSION = '1.1';
     var A = root.SLApxAuto, X = root.SLApx, M = root.SLApxMac, C = root.SLApxCof;
     if (!A || !A.kit || !X || !M || !M.model || !C || !C.model) { if (typeof module !== 'undefined' && module.exports) module.exports = { VERSION: VERSION, missing: true }; return; }
     var K = A.kit, S = K.S, T = K.T, arr = K.arr, safe = K.safe, lc = K.lc, MM = M.model, CM = C.model, AM = A.model;
@@ -49,7 +49,8 @@
         var n = 0, by = r.sent.by, at = r.sent.at;
         K.allCols().forEach(function (c) {
             var x = K.cellOf(fc, c), key = fc.key + SEC + c.colId;
-            if (x.src === 'data') { var old = p.interdep.cells[key]; if (old && old.apx) delete p.interdep.cells[key]; return; }
+            // what today's derivation says (a traced function, a traced failure condition, a resource provider) is left to it
+            if (x.src === 'data' || K.derived(fc, c)) { var old = p.interdep.cells[key]; if (old && old.apx) delete p.interdep.cells[key]; return; }
             p.interdep.cells[key] = x.on ? { state: 'asserted', by: by, at: at, note: 'Interdependence Autopilot: ' + (x.role === 'fails' ? (x.how === 'malfunction' ? 'causes it by doing the wrong thing' : 'causes it by failing') : 'does the job'), apx: true } : { state: 'cleared', by: by, at: at, apx: true };
             n++;
         });
