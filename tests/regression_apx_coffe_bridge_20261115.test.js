@@ -90,6 +90,8 @@ function mutate(file, body) {
         // builds, the MAC, one wrong action that only matters with others and one that causes it alone
         const setup = await pg.evaluate((K) => {
             const A = SLApxAuto, M = SLApxMac, C = SLApxCof, f = A.model.fcOf(K);
+            // the engineer ticks two shared resources and says which functions each feeds (the tool ticks none: apx_autopilots.js 1.2)
+            A.model.resources().slice(0, 2).forEach((r, k) => { A.act.resTick(f, r.key); A.model.picked(f).forEach((c, i) => { if (k === 0 || i < 2) A.act.feed(f, r.key, c.colId); }); });
             M.model.lossBase(f).forEach(c => M.act.setPattern(f, c.colId, '', 'pairs', 'hand', '')); M.act.setEv(f, 'Landing performance analysis LPA-01');
             window.__truth = c => { const non = c.replace(/O/g, '').length; return c[0] === 'F' && non >= 2; };
             let n = 0; for (;;) { const s = M.model.solved(f); if (s.done) break; const c = SLApx.nextQuestion(s.cols, s.m1, { lo: 0, hi: 1, among: s.cases }); M.act.answer(f, c, window.__truth(c)); if (++n > 500) break; }
@@ -164,7 +166,7 @@ function mutate(file, body) {
         check('6 Table Q.4-9 lists every way of the core event against every way of the others, numbered', pr.shape === 'pairs' && pr.n === pr.want && pr.n > 0 && pr.numbered, pr);
         await jump(7);
         const t9 = await pg.evaluate(() => Array.from(document.querySelectorAll('#interdep-host .apx-cap')).map(c => c.innerText.replace(/\s+/g, ' ')));
-        check('6 pairs resting on one resource are pulled out as Table Q.4-10 when there are any', /Table Q\.4-9/.test(t9[0] || '') && (pr.same === 0 || /Table Q\.4-10 - \(PASA\) .* common source failures/.test(t9[1] || '')), { t9, same: pr.same });
+        check('6 pairs resting on one resource are pulled out as Table Q.4-10', /Table Q\.4-9/.test(t9[0] || '') && pr.same > 0 && /Table Q\.4-10 - \(PASA\) .* common source failures/.test(t9[1] || ''), { t9, same: pr.same });
 
         // ---- 7: nothing reaches today's stores until sent ----------------------------------------------------------------------------------
         const snap1 = await pg.evaluate(snapFn);
@@ -179,7 +181,7 @@ function mutate(file, body) {
             const s = M.model.solved(f()); M.model.rules(s).forEach(x => M.act.setWhy(f(), x.c, 'Not enough stopping force left'));
             out.mac = M.act.send(f(), 'Test Engineer'); out.cof = C.act.send(f(), 'Test Engineer');
             const cells = projectConfig.interdep.cells, mine = Object.keys(cells).filter(k => k.indexOf(K + '§') === 0);
-            out.cells = { n: mine.length, asserted: mine.filter(k => cells[k].state === 'asserted').length, cleared: mine.filter(k => cells[k].state === 'cleared').length, by: mine.every(k => cells[k].by === 'Test Engineer' && cells[k].apx === true), cols: A.model.allCols().length, picked: A.model.picked(f()).length, locked: A.model.picked(f()).filter(c => A.model.cellOf(f(), c).src === 'data').length };
+            out.cells = { n: mine.length, asserted: mine.filter(k => cells[k].state === 'asserted').length, cleared: mine.filter(k => cells[k].state === 'cleared').length, by: mine.every(k => cells[k].by === 'Test Engineer' && cells[k].apx === true), cols: A.model.allCols().length, picked: A.model.picked(f()).length, locked: A.model.picked(f()).filter(c => A.model.cellOf(f(), c).src === 'data').length, derived: A.model.allCols().filter(c => A.kit.derived(f(), c)).length };
             const rule = (projectConfig.macModels || []).find(r => r.apx && r.apx.fcKey === K); out.rule = rule ? { id: rule.id, subId: rule.subId, sets: rule.apx.sets, read: macBreachSets(rule), clauses: rule.clauses.length, kind: rule.substantiation.kind, by: rule.substantiation.by } : null;
             out.want = M.model.breaking(M.model.solved(f())).map(c => c.split('').map((x, i) => x === 'O' ? null : (x === 'F' ? s.ds[i].funcId : 'deg:' + s.ds[i].sysId)).filter(Boolean).length);
             out.stillOld = (projectConfig.macModels || []).filter(r => old.indexOf(r.id) !== -1).length; out.archived = ((projectConfig.apx.archive || {}).macModels || []).map(x => x.rule.id);
@@ -191,7 +193,7 @@ function mutate(file, body) {
             return out;
         }, K);
         check('7 all three are sent with one signature each', sent.idp.ok && sent.mac.ok && sent.cof.ok, sent);
-        check('7 today\'s table: every function the project does not derive is asserted or cleared, signed', sent.cells.by && sent.cells.n === sent.cells.cols - sent.cells.locked && sent.cells.asserted === sent.cells.picked - sent.cells.locked && sent.cells.cleared === sent.cells.cols - sent.cells.picked, sent.cells);
+        check('7 today\'s table: every function the project does not derive is asserted or cleared, signed', sent.cells.by && sent.cells.n === sent.cells.cols - sent.cells.derived && sent.cells.asserted === sent.cells.picked - sent.cells.locked && sent.cells.cleared === sent.cells.n - sent.cells.asserted && sent.cells.cleared > 0, sent.cells);
         check('7 one MAC rule for the failure condition, carrying its exact breach sets', sent.rule && sent.rule.id === 'apx-mac-' + K && sent.rule.sets.length === sent.want.length && sent.rule.by === 'Test Engineer' && sent.rule.kind === 'assumption', sent.rule);
         check('8 today\'s reader (macBreachSets) returns the sent sets as they are, partial losses included', JSON.stringify(sent.rule.read) === JSON.stringify(sent.rule.sets) && sent.rule.sets.some(s => s.some(t => /^deg:/.test(t))) && sent.rule.sets.every(s => s.some(t => !/^deg:/.test(t))), sent.rule.sets);
         check('8 the earlier rule of this function is kept on file, not deleted, and no longer read', sent.oldRuleIds.length >= 1 && sent.stillOld === 0 && sent.oldRuleIds.every(id => sent.archived.indexOf(id) !== -1), { old: sent.oldRuleIds, archived: sent.archived, still: sent.stillOld });

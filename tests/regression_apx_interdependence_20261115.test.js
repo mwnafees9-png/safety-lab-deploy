@@ -14,6 +14,8 @@
  *   4  switch on (K350 demo): the Autopilot draws, today's header text is hidden, the tables are not folded away
  *   5  FC-07: what the project's data says is ticked and locked; unticking it is refused with the reason, and it stays
  *   6  ticking a function adds exactly that column to Table Q.4-1; unticking removes it; unticked ones are never shown
+ *   7  (v1.2) the step ASKS for each system and its function and whether it is a resource system; a resource system is a
+ *      row of Table Q.4-2 and never a column of Table Q.4-1; no resource and no feed is ticked by the tool
  *   7  a new function is created in its system once (a second identical name ticks the same one); a new system with its
  *      function lands in the architecture; a new resource lands in the resources and in Table Q.4-2
  *   8  sending needs a name and a finished table; once sent, every shown answer carries the name and the date
@@ -21,7 +23,7 @@
  *  10  today's interdependence tables are not touched until it is sent; once sent they carry it (apx_bridge.js); the
  *      switch back shows today's page
  *  11  no page errors
- * MUTATION PROOFS (SL_APXI_MUTATE): offline (a field sits off the line of its label and button), nolock (a project-fed system can be unticked), leak (every function is shown in the
+ * MUTATION PROOFS (SL_APXI_MUTATE): rescol (a resource provider is a column again), preticked (the tool ticks a resource from the register), nokind (a system is added without asking its kind), offline (a field sits off the line of its label and button), nolock (a project-fed system can be unticked), leak (every function is shown in the
  *   table), nosign (sending with no name), unfinished (sending an unfinished table), noswitch (the Autopilot shows with
  *   the switch off), nostamp (answers are sent without the name), oldwrite (today's table is written to). Each must
  *   turn this red.
@@ -38,6 +40,9 @@ function mutate(file, body) {
     if (file !== 'apx_autopilots.js' || !MUT) return body;
     const rep = (a, b) => { if (body.indexOf(a) < 0) throw new Error('mutation site missing: ' + a.slice(0, 80)); body = body.split(a).join(b); };
     if (MUT === 'offline') rep("        + '.apx input,.apx select,.apx textarea{margin:0}'\n", '');
+    if (MUT === 'rescol') rep("if (d && d.kind === 'resource') d = null;", '');
+    if (MUT === 'preticked') rep("return { on: !!(me && me.on === true), fromData: false,", "return { on: me && typeof me.on === 'boolean' ? me.on : hint.length > 0, fromData: false,");
+    if (MUT === 'nokind') rep("            if (!kind) { toast('Say whether it '", "            if (!kind) kind = 'fn'; if (false) { toast('Say whether it '");
     if (MUT === 'nolock') rep("if (c.on && c.locked) { ui.blocked = colId; return; }", "");
     if (MUT === 'leak') rep("function picked(fc) { return allCols().filter(function (c) { return cellOf(fc, c).on; }); }", "function picked(fc) { return allCols(); }");
     if (MUT === 'nosign') rep("if (!name) return { ok: false, why: 'Type your name to sign before sending.' };", "");
@@ -166,14 +171,38 @@ function mutate(file, body) {
         await pg.fill('[data-apx-newfn="' + sys0 + '"]', 'Dump lift on the ground'); await pg.click('[data-apx-addfn^="' + sys0 + '|"]'); await tick(500);
         check('7 the same name again does not make a second function', (await nFn()) === n1);
         const s0n = await pg.evaluate(() => systemsData.length);
-        await pg.fill('[data-apx-newsys="name"]', 'Lift Dump System'); await pg.fill('[data-apx-newsys="fn"]', 'Spoil lift after touchdown'); await pg.click('[data-apx-addsys]'); await tick(600);
+        // 16 Nov 2026 (Waqas: "ask them to add systems, and their functions as part of the PASA"; "ask them if the system is a resource system")
+        const ask = await pg.evaluate((K) => { const A = window.SLApxAuto, f = A.model.fcOf(K), h = document.querySelector('#interdep-host'), first = h.querySelector('.apx-card').children[2]; return { askFirst: !!first && first.classList.contains('apx-ask'), q: (h.querySelector('.apx-askq') || {}).innerText, txt: h.innerText, resCols: A.model.picked(f).filter(c => { const sy = systemsData.find(x => String(x.id) === c.sysId); return sy && sy.role === 'resource'; }).length, resSys: systemsData.filter(x => x.role === 'resource').map(x => x.name), listed: Array.from(h.querySelectorAll('details.apx-fold > summary')).map(x => x.innerText) }; }, K);
+        check('7 the step asks for a system and its function first, and whether it is a resource system', ask.askFirst && /Add a system and its function/.test(ask.q) && /Is it a resource system\?/.test(ask.txt), JSON.stringify({ a: ask.askFirst, q: ask.q }));
+        check('7 a resource system is never a column of Table Q.4-1, and is not offered as one', ask.resSys.length >= 1 && ask.resCols === 0 && ask.resSys.every(n => !ask.listed.some(t => t.indexOf(n) === 0)) && /Resource systems are not listed here/.test(ask.txt), JSON.stringify({ res: ask.resSys, cols: ask.resCols }));
+        // the project's data saying "this function provides a resource used for the aircraft function" no longer makes it a column
+        const rk = await pg.evaluate((K) => { const A = window.SLApxAuto, f = A.model.fcOf(K), c = A.model.allCols().find(x => !A.model.cellOf(f, x).on), real = window._idpDerivedFn; window._idpDerivedFn = function (fc, funcId) { return String(funcId) === c.funcId ? { kind: 'resource', why: 'provides a resource consumed for this function' } : real(fc, funcId); }; const seen = A.kit.derived(f, c), x = A.model.cellOf(f, c); window._idpDerivedFn = real; return { seen: seen && seen.kind, on: x.on, locked: x.locked }; }, K);
+        check('7 a function the data only knows as a resource provider is not ticked and not locked as a column', rk.seen === 'resource' && rk.on === false && rk.locked === false, JSON.stringify(rk));
+        await pg.fill('[data-apx-newsys="name"]', 'Lift Dump System'); await pg.fill('[data-apx-newsys="fn"]', 'Spoil lift after touchdown'); await pg.click('[data-apx-addsys]'); await tick(500);
+        const noKind = await pg.evaluate(() => ({ n: systemsData.length, kept: document.querySelector('[data-apx-newsys="name"]').value }));
+        check('7 nothing is added until the engineer says which kind of system it is; what was typed is kept', noKind.n === s0n && noKind.kept === 'Lift Dump System', JSON.stringify(noKind));
+        await pg.click('[data-apx-kind$="|fn"]'); await tick(300); await pg.click('[data-apx-addsys]'); await tick(600);
         const sysMade = await pg.evaluate((K) => { const A = window.SLApxAuto, f = A.model.fcOf(K), s = systemsData.find(x => x.name === 'Lift Dump System'); return { n: systemsData.length, has: !!s, fn: s && (s.functions || []).map(x => x.funcName).join('|'), on: A.model.picked(f).some(c => c.sysName === 'Lift Dump System') }; }, K);
         check('7 a new system with its function lands in the architecture and is ticked', sysMade.n === s0n + 1 && sysMade.has && sysMade.fn === 'Spoil lift after touchdown' && sysMade.on, JSON.stringify(sysMade));
         await pg.selectOption('[data-apx-jump]', '3'); await tick(500);
         const r0 = await pg.evaluate(() => resourcesData.length);
-        await pg.fill('[data-apx-newres]', 'Weight on Wheels Signal'); await pg.click('[data-apx-addres]'); await tick(500);
+        const res0 = await pg.evaluate((K) => { const A = window.SLApxAuto, f = A.model.fcOf(K); return { picked: A.model.resPicked(f).length, hint: /resource register says/.test(document.querySelector('#interdep-host').innerText), n: A.model.resources().length }; }, K);
+        check('7 no shared resource is ticked by the tool; what the register says is a hint in words', res0.picked === 0 && res0.n > 0 && res0.hint, JSON.stringify(res0));
+        // a resource system added from the systems step: its function supplies a resource; it is a row here, not a column there
+        await pg.selectOption('[data-apx-jump]', '1'); await tick(400);
+        const colsBefore = await pg.evaluate((K) => window.SLApxAuto.model.picked(window.SLApxAuto.model.fcOf(K)).length, K);
+        await pg.fill('[data-apx-newsys="name"]', 'Brake Hydraulic Supply System'); await pg.fill('[data-apx-newsys="fn"]', 'Supply brake hydraulic pressure'); await pg.click('[data-apx-kind$="|res"]'); await tick(300);
+        await pg.fill('[data-apx-newsys="res"]', 'Brake Hydraulic System B'); await pg.click('[data-apx-addsys]'); await tick(600);
+        const rs = await pg.evaluate((K) => { const A = window.SLApxAuto, f = A.model.fcOf(K), sy = systemsData.find(x => x.name === 'Brake Hydraulic Supply System'), r = resourcesData.find(x => x.name === 'Brake Hydraulic System B'); return { role: sy && sy.role, fn: sy && sy.functions.map(x => x.funcName).join('|'), cols: A.model.picked(f).length, prov: r && (r.providedBy || []).map(String).indexOf(String(sy.id)) !== -1, provFn: r && r.providedByFn === sy.functions[0].funcId, on: A.model.resPicked(f).some(x => x.name === 'Brake Hydraulic System B'), feeds: r ? Object.values(A.model.resState(f, A.model.resources().find(x => x.name === 'Brake Hydraulic System B')).feeds).filter(Boolean).length : -1 }; }, K);
+        check('7 a system added as a resource system: the architecture has it as a resource system with its function', rs.role === 'resource' && rs.fn === 'Supply brake hydraulic pressure', JSON.stringify(rs));
+        check('7 ...it adds no column to Table Q.4-1; what it supplies is a ticked resource, provided by that system and function', rs.cols === colsBefore && rs.prov && rs.provFn && rs.on, JSON.stringify(rs));
+        check('7 ...and which function it feeds is left for the engineer: nothing is filled in', rs.feeds === 0, JSON.stringify(rs));
+        await pg.selectOption('[data-apx-jump]', '3'); await tick(400);
+        await pg.fill('[data-apx-newres="name"]', 'Weight on Wheels Signal'); await pg.fill('[data-apx-newres="sys"]', 'Avionics & Display'); await pg.fill('[data-apx-newres="fn"]', 'Detect weight on wheels'); await pg.click('[data-apx-addres]'); await tick(500);
+        const prov = await pg.evaluate(() => { const sy = systemsData.find(x => x.name === 'Avionics & Display'), r = resourcesData.find(x => x.name === 'Weight on Wheels Signal'), f = sy.functions.find(x => x.funcName === 'Detect weight on wheels'); return { role: sy.role, fn: !!f, prov: (r.providedBy || []).map(String).indexOf(String(sy.id)) !== -1, provFn: !!f && r.providedByFn === f.funcId, th: Array.from(document.querySelectorAll('#interdep-host table.apx-arp th.l')).map(x => x.innerText.replace(/\s+/g, ' ')).join(' | ') }; });
+        check('7 a resource is added with who provides it: an existing function system becomes "both", its function is created, and Table Q.4-2 names the provider', prov.role === 'both' && prov.fn && prov.prov && prov.provFn && /weight on wheels signal.*avionics & display: detect weight on wheels/i.test(prov.th), JSON.stringify(prov));
         const resMade = await pg.evaluate((K) => { const A = window.SLApxAuto, f = A.model.fcOf(K); const t = document.querySelector('#interdep-host table.apx-arp'); return { n: resourcesData.length, on: A.model.resPicked(f).some(r => r.name === 'Weight on Wheels Signal'), inTable: !!t && /weight on wheels signal/i.test(t.innerText), cap: (document.querySelector('#interdep-host .apx-cap') || {}).innerText || '' }; }, K);
-        check('7 a new resource lands in the resources, ticked, and in Table Q.4-2', resMade.n === r0 + 1 && resMade.on && resMade.inTable && /Table Q\.4-2/.test(resMade.cap), JSON.stringify(resMade));
+        check('7 a new resource lands in the resources, ticked, and in Table Q.4-2', resMade.n === r0 + 2 && resMade.on && resMade.inTable && /Table Q\.4-2/.test(resMade.cap), JSON.stringify(resMade));
 
         // ---- 8: sending ------------------------------------------------------------------------------------------------------
         const s1 = await pg.evaluate((K) => { const A = window.SLApxAuto, f = A.model.fcOf(K); return { noName: A.act.send(f, '  '), unfinished: A.act.send(f, 'Test Engineer'), left: A.model.left(f) }; }, K);

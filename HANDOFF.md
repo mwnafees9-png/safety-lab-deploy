@@ -1,4 +1,22 @@
-## 15 Nov 2026 (latest): THE LANDING PAGE AND THE AUTOPILOTS PAGE NOW SELL AUTOREQ, GENERATED FAULT TREES, MULTI-SYSTEM MULTI-FUNCTION TREES, SELF-REBALANCING TREES AND ALL TWELVE AUTOPILOTS.
+## 16 Nov 2026 (latest): THE INTERDEPENDENCE AUTOPILOT ASKS FOR EACH SYSTEM AND ITS FUNCTION AND WHETHER IT IS A RESOURCE SYSTEM. A RESOURCE SYSTEM IS A ROW OF TABLE Q.4-2, NEVER A COLUMN OF TABLE Q.4-1. THE TOOL TICKS NO RESOURCE. Behind the team switch (?apx=1).
+
+**Why (Waqas, on a Table Q.4-1 that showed the electrical and hydraulic systems as columns).** "where are we identifying resources here, 4 over to the right are all resources"; "how would you know which bus feeds the function without reviewing architectecture, fault trees are built from interdepenedence and common resource assessments not the other way round"; "they will be creating SFHA functions as part of the PASA flow, identifying resources and their functions"; "ask them to add systems, and their functions as part of the PASA"; "ask them if the system is a resource system". Also, on the New function row: "these need to be lined up".
+
+**What was wrong.** v1.0 took today's derivation "this system provides a resource used for the aircraft function" as a locked column of Table Q.4-1, and pre-ticked resources and their feeds from the resource register. The register only says a system uses a resource; it does not say which bus feeds which function. That was a guess shown as a fact.
+
+**What (apx_autopilots.js 1.2, apx_bridge.js 1.1).**
+- Steps 2 and 3 open with the ask: "Add a system and its function", then "Is it a resource system?" (a switch, no default: nothing is added until it is answered; what was typed is kept). "It does this job" adds the system (the architecture's role 'function') with its function, ticked as a column. "It is a resource system" asks what it supplies, makes the system role 'resource' (an existing function system becomes 'both'), adds the function, creates the resource with providedBy and the new field providedByFn, and ticks the resource: no column.
+- The lists of what the project already holds come after ("Already in the project: tick what applies"). A system whose role is 'resource' is not offered as a column; it is named as being in the resources step.
+- A derivation of kind 'resource' no longer ticks or locks a column. Kinds 'implements' and 'sfha' still do (declared traces).
+- Step 4 opens with "Add a shared resource and who provides it" (resource, providing system, that system's function; created if missing). Nothing is pre-ticked and no feed is filled in. The register's system-level "uses it" is a hint in words. Table Q.4-2's row names the provider under the resource.
+- The bridge leaves every cell today's derivation covers to that derivation (it no longer writes a clear over a derived resource provider).
+- Fields line up with their labels and buttons (the site's bottom margin on fields is off inside the Autopilots).
+
+**Tests.** regression_apx_interdependence_20261115: 47 checks, mutations rescol, preticked, nokind, offline added (all red). regression_apx_coffe_bridge_20261115 updated (the engineer ticks the resources; 45). apx_mac 46, pasa_autopilot 45, fold_menus 24, durability 129.
+
+**Not built yet (said to Waqas).** The AI reading the architecture document or SDD to propose systems, functions and resources in the Interdependence steps, and an "Assumed until compared with the SDD" status for the resource answers. Today these steps are by hand only (plus the existing AI draft of system suggestions).
+
+## 15 Nov 2026: THE LANDING PAGE AND THE AUTOPILOTS PAGE NOW SELL AUTOREQ, GENERATED FAULT TREES, MULTI-SYSTEM MULTI-FUNCTION TREES, SELF-REBALANCING TREES AND ALL TWELVE AUTOPILOTS.
 
 **Why (Waqas).** "on the landing page for safety lab start advertising auto req and auto rebalancing fault trees and the auto pilots please"; "infact add auto generation of the fault trees and multi system multi function trees"; on the wording of the generated-trees card: "Agree on card 2"; on listing the three Autopilots still behind the team switch: "they all go on the page".
 
