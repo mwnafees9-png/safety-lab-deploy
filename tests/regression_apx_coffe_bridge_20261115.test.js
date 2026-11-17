@@ -61,7 +61,9 @@ function mutate(file, body) {
 (async () => {
     const cof = rd('apx_coffe.js'), brg = rd('apx_bridge.js');
     check('1 no em dashes, American English', [cof, brg].every(s => s.indexOf(String.fromCharCode(0x2014)) === -1 && !/\b(colour|behaviour|analysed|analysing|centre\b|organis|summaris|recognis|minimis|licence|labelled|cancelled)/i.test(s)));
-    check('1 the table captions are the book\'s', ['Table Q.4-3 - (PASA)', 'Table Q.4-4 - (PASA)', 'Table Q.4-5 - (PASA)', 'Table Q.4-6 - (PASA)<br>CoFFE table', 'Table Q.4-7 - (PASA)<br>CoFFE table summary', 'Table Q.4-8 - (PASA)<br>CoFFE table result', 'Figure Q.4-1 - (PASA)', 'Table Q.4-9 - (PASA)<br>Potential failures combinations (FT cut set)'].every(t => cof.indexOf(t) !== -1));
+    const bookNo = /Table\s+Q\.4|Figure\s+Q\.4|Table\s+B3|ARP4761A\s+(Table|Figure)|- \(PASA\)/;
+    const strs = s => (s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').match(/'(?:[^'\\\n]|\\.)*'/g) || []).filter(x => bookNo.test(x));
+    check('1 the table captions are plain names, and no string in the Autopilots or the bridge carries a table or figure number from the book', ['apx-cap">CoFFE table', 'apx-cap">CoFFE table summary', 'apx-cap">CoFFE table result: ', 'apx-cap">The gate under ', 'apx-cap">Potential failure combinations (fault tree cut sets)'].every(t => cof.indexOf(t) !== -1) && ['apx_autopilots.js', 'apx_mac.js', 'apx_coffe.js', 'apx_bridge.js'].every(f => strs(rd(f)).length === 0), ['apx_autopilots.js', 'apx_mac.js', 'apx_coffe.js', 'apx_bridge.js'].map(f => strs(rd(f)).slice(0, 2)));
     check('1 the result abbreviations are the book\'s: F failed, D degraded, O operational', /Failed \(total loss of function\)/.test(cof) && /Degraded \(partial loss of function\)/.test(cof) && /Operational \(no loss of function\)/.test(cof));
 
     let pw; try { pw = require('playwright'); } catch (_) { console.log('  SKIP  browser checks (playwright is not installed)'); return done(); }
@@ -135,7 +137,7 @@ function mutate(file, body) {
         check('4 ...and its severity is still blank: mitigated or not is the system engineer\'s call', own.sev === '' && own.fcSev === 'Hazardous', own);
         await jump(4);
         const t46 = await pg.evaluate(() => { const h = document.querySelector('#interdep-host'), t = h.querySelector('table.apx-arp'); return { cap: (h.querySelector('.apx-cap') || {}).innerText.replace(/\s+/g, ' '), rows: t.querySelectorAll('tr').length - 1, first: t.querySelectorAll('tr')[1].innerText.replace(/\s+/g, ' '), pager: (h.querySelector('.apx-pager b') || {}).innerText, head: t.querySelectorAll('tr')[0].innerText.replace(/\s+/g, ' ') }; });
-        check('3 Table Q.4-6 on the page: the book\'s order (case 1 is all failed), 27 cases a page, the result column named', /Table Q\.4-6 - \(PASA\) CoFFE table/.test(t46.cap) && t46.rows === 27 && /^1 F F F F Loss of deceleration capability on landing/.test(t46.first) && t46.pager === 'Cases 1 to 27 of 81' && /STOPPING CAPABILITY RESULT/i.test(t46.head), t46);
+        check('3 the CoFFE table on the page: the book\'s order (case 1 is all failed), 27 cases a page, the result column named', /^CoFFE table$/.test(t46.cap.trim()) && t46.rows === 27 && /^1 F F F F Loss of deceleration capability on landing/.test(t46.first) && t46.pager === 'Cases 1 to 27 of 81' && /STOPPING CAPABILITY RESULT/i.test(t46.head), t46);
         await pg.click('#interdep-host [data-apx-x="page|1"]'); await tick(300); await pg.click('#interdep-host [data-apx-x="page|1"]'); await tick(300);
         const t46c = await pg.evaluate(() => { const rows = document.querySelectorAll('#interdep-host table.apx-arp tr'); return { pager: document.querySelector('#interdep-host .apx-pager b').innerText, last: rows[27].innerText.replace(/\s+/g, ' ') }; });
         check('3 the last page ends at case 81, all operational, the best outcome: nothing is cut', t46c.pager === 'Cases 55 to 81 of 81' && /^81 O O O O No overrun/.test(t46c.last), t46c);
@@ -163,7 +165,7 @@ function mutate(file, body) {
         check('5 one independence principle per combination, in the book\'s words', g.ip.length === 3 && g.ip.every(t => /^The complete loss of .* function and the partial loss of .* function do not result from a single failure or event$/.test(t)), g.ip);
         await jump(6);
         const fig = await pg.evaluate(() => { const h = document.querySelector('#interdep-host'), t = h.querySelector('.apx-tree'); return { cap: Array.from(h.querySelectorAll('.apx-cap')).map(c => c.innerText.replace(/\s+/g, ' '))[0], txt: t ? t.innerText : '', visible: !!t && t.offsetParent !== null && !t.querySelector('details:not([open])') && !t.closest('.sl-fold'), math: h.innerText }; });
-        check('5 the gate is drawn open on the page: the failure condition, OR, its .CoFFE gate, AND', /Figure Q\.4-1/.test(fig.cap) && fig.visible && /FC-07\.CoFFE/.test(fig.txt) && /\bOR\b/.test(fig.txt) && /\bAND\b/.test(fig.txt) && /Math check:/.test(fig.math) && /2\.997E-10/.test(fig.math), fig.txt.slice(0, 300));
+        check('5 the gate is drawn open on the page: the failure condition, OR, its .CoFFE gate, AND', /^The gate under FC-07/.test(fig.cap) && fig.visible && /FC-07\.CoFFE/.test(fig.txt) && /\bOR\b/.test(fig.txt) && /\bAND\b/.test(fig.txt) && /Math check:/.test(fig.math) && /2\.997E-10/.test(fig.math), fig.txt.slice(0, 300));
 
         // ---- 6: the pairs ----------------------------------------------------------------------------------------------------------------
         const pr = await pg.evaluate((K) => {
@@ -176,7 +178,7 @@ function mutate(file, body) {
         check('6 Table Q.4-9 lists every way of the core event against every way of the others, numbered', pr.shape === 'pairs' && pr.n === pr.want && pr.n > 0 && pr.numbered, pr);
         await jump(7);
         const t9 = await pg.evaluate(() => Array.from(document.querySelectorAll('#interdep-host .apx-cap')).map(c => c.innerText.replace(/\s+/g, ' ')));
-        check('6 pairs resting on one resource are pulled out as Table Q.4-10', /Table Q\.4-9/.test(t9[0] || '') && pr.same > 0 && /Table Q\.4-10 - \(PASA\) .* common source failures/.test(t9[1] || ''), { t9, same: pr.same });
+        check('6 pairs resting on one resource are pulled out as their own table, named after the resource', /^Potential failure combinations/.test(t9[0] || '') && pr.same > 0 && /^.+ common source failures/.test(t9[1] || '') && !t9.some(c => /Q\.4|\(PASA\)/.test(c)), { t9, same: pr.same });
 
         // ---- 7: nothing reaches today's stores until sent ----------------------------------------------------------------------------------
         const snap1 = await pg.evaluate(snapFn);
@@ -219,10 +221,11 @@ function mutate(file, body) {
             const tabs = arr0.filter(b => b && b.k === 'table' && /^apx-/.test(b.name || ''));
             const by = n => tabs.find(t => t.name === 'apx-' + n + '-FC-07');
             const q41 = by('q41'), q46 = by('q46'), q48 = by('q48'), q49 = by('q49'), mac = by('mac'), bud = by('bud');
-            return { names: tabs.map(t => t.name.replace('-FC-07', '').replace(/^apx-/, '')), heads: arr0.filter(b => b && b.k === 'h').map(b => b.text), q41: q41 && { keys: Object.keys(q41.rows[0]), xs: Object.values(q41.rows[0]).filter(v => v === 'X').length, title: q41.title }, q46: q46 && { n: q46.rows.length, first: Object.values(q46.rows[0]).join(' '), last: Object.values(q46.rows[80]).join(' ') }, q48: q48 && q48.rows.length, q49: q49 && q49.rows.length, mac: mac && mac.rows.map(r => r.Why), bud: bud && bud.lead, picked: A.model.picked(f).length, ax: !!ax };
+            return { names: tabs.map(t => t.name.replace('-FC-07', '').replace(/^apx-/, '')), heads: arr0.filter(b => b && b.k === 'h').map(b => b.text), q41: q41 && { keys: Object.keys(q41.rows[0]), xs: Object.values(q41.rows[0]).filter(v => v === 'X').length, title: q41.title }, q46: q46 && { n: q46.rows.length, first: Object.values(q46.rows[0]).join(' '), last: Object.values(q46.rows[80]).join(' ') }, q48: q48 && q48.rows.length, q49: q49 && q49.rows.length, mac: mac && mac.rows.map(r => r.Why), bud: bud && bud.lead, picked: A.model.picked(f).length, ax: !!ax, titles: tabs.map(t => t.title) };
         }, K);
         check('10 the PASA appendix carries the tables of the book, in order', pasa.ax && ['q41', 'q42', 'b3', 'build', 'mac', 'links', 'q43', 'q44', 'q46', 'q47', 'q48', 'bud', 'ind', 'q49'].every((n, i, a) => pasa.names.indexOf(n) !== -1 && (i === 0 || pasa.names.indexOf(n) > pasa.names.indexOf(a[i - 1]))), pasa.names);
-        check('10 Table Q.4-1 there: AC function, AC FC ID, AC FC description, then one X per ticked function and no other column', pasa.q41 && pasa.q41.keys.slice(0, 3).join('|') === 'AC Function|AC FC ID|AC FC Description' && pasa.q41.keys.length === 3 + pasa.picked && pasa.q41.xs === pasa.picked && /Table Q\.4-1/.test(pasa.q41.title), pasa.q41);
+        check('10 Table Q.4-1 there: AC function, AC FC ID, AC FC description, then one X per ticked function and no other column', pasa.q41 && pasa.q41.keys.slice(0, 3).join('|') === 'AC Function|AC FC ID|AC FC Description' && pasa.q41.keys.length === 3 + pasa.picked && pasa.q41.xs === pasa.picked && /^Interdependence table for FC-07$/.test(pasa.q41.title), pasa.q41);
+        check('10 no report table title carries a number from the book: the report numbers its own tables in sequence', pasa.titles.length >= 10 && !pasa.titles.some(t => /Q\.4|ARP4761A|Table B3|Figure/.test(t)), pasa.titles);
         check('10 Table Q.4-6 there has all 81 cases, first all failed, last all operational', pasa.q46 && pasa.q46.n === 81 && /^1 F F F F Loss of deceleration/.test(pasa.q46.first) && /^81 O O O O No overrun/.test(pasa.q46.last), pasa.q46);
         check('10 the result, the pairs, the MAC rules with their reasons and the budget math are there', pasa.q48 === 3 && pasa.q49 === pr.n && pasa.mac.length > 0 && pasa.mac.every(w => /stopping force/.test(w)) && /2\.997E-10 per flight hour, within the 1\.0E-07 objective/.test(pasa.bud || ''), { q48: pasa.q48, q49: pasa.q49, bud: pasa.bud });
         check('10 the appendix has its MAC and CoFFE parts', pasa.heads.some(h => /Minimum acceptable configuration \(MAC\)/.test(h)) && pasa.heads.some(h => /Combined functional failure effects \(CoFFE\)/.test(h)), pasa.heads);

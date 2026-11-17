@@ -1,4 +1,16 @@
-## 17 Nov 2026 (latest): "CHECK" FOR "TICK"; THE AI PROPOSES SYSTEMS, FUNCTIONS AND RESOURCES IN THE INTERDEPENDENCE STEPS; RESOURCES ARE ASSUMED UNTIL COMPARED; THE PSSA SHOWS WHAT THE AIRCRAFT LEVEL ADDED TO ITS SYSTEM; A SEND CAN BE TAKEN BACK OUT FROM THE PAGE. Behind the team switch (?apx=1).
+## 17 Nov 2026 (latest): NO ARP TABLE NUMBERS ON ANY AUTOPILOT TABLE; THE TWO INTERDEPENDENCE TABLES CARRY THEIR TITLE IN THE TOP ROW. Behind the team switch (?apx=1).
+
+**Why (Waqas).** "for the interdependence table we dont need to show the 4761 A caption and the left hand side column the the title can go in the top row with the white divider vertical" and "all the tables, dont mention the ARP table numbers, mention the reports own sequential numbers".
+
+**What (apx_autopilots.js 1.5, apx_coffe.js 1.3, apx_bridge.js 1.3).**
+- **On the page.** No caption says "Table Q.4-x - (PASA)", "Figure Q.4-1" or "Table B3" any more. Captions are plain names: "CoFFE table", "CoFFE table summary", "CoFFE table result: ...", "The gate under FC-xx", "Potential failure combinations (fault tree cut sets)", "<resource> common source failures", "Common resource analysis for failure condition ...".
+- **The two interdependence tables** have no caption above. The title sits in the top-left header cell (th.apx-ttl: "Interdependence table"; "Common Sources and Resources (Generation and Distribution)"), closed on the right by a white vertical divider. The common resource table lost its left-hand label column: each row starts with "R1. name" and the provider under it.
+- **In the PASA report.** The table titles dropped "(ARP4761A Table ...)". The report's own automatic numbering ("Table A.3: ...") is the only number a reader sees.
+- Block names (apx-q41-..., apx-q46-...) are internal keys and are unchanged, so nothing saved or sent is affected.
+
+**Tests.** apx_interdependence 61 (new: title in the top row, white divider, no left column, no book number on the page), apx_coffe_bridge 54 (new: no string in the four files and no report title carries a book table or figure number), apx_mac 52, apx_engine 43, pasa_autopilot 45, pssa_autopilot 34, generated_requirements 16, pasa_nav_entry 5, durability 129.
+
+## 17 Nov 2026: "CHECK" FOR "TICK"; THE AI PROPOSES SYSTEMS, FUNCTIONS AND RESOURCES IN THE INTERDEPENDENCE STEPS; RESOURCES ARE ASSUMED UNTIL COMPARED; THE PSSA SHOWS WHAT THE AIRCRAFT LEVEL ADDED TO ITS SYSTEM; A SEND CAN BE TAKEN BACK OUT FROM THE PAGE. Behind the team switch (?apx=1).
 
 **Why (Waqas).** Asked which of three open pieces to do first: "all three, and instead of saying tick it, we should be saying check it". The landing page is live and the Autopilots are in testing.
 

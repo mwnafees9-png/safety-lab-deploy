@@ -26,7 +26,7 @@
  * ==========================================================================*/
 (function (root) {
     'use strict';
-    var VERSION = '1.2';   // 1.1 17 Nov 2026: the functional failures are the lines the tool added to each system's FHA; each line's effect on its own is written from the CoFFE table
+    var VERSION = '1.3';   // 1.3 17 Nov 2026: no ARP table or figure numbers on the captions   // 1.1 17 Nov 2026: the functional failures are the lines the tool added to each system's FHA; each line's effect on its own is written from the CoFFE table
     var A = root.SLApxAuto, X = root.SLApx, M = root.SLApxMac;
     if (!A || !A.kit || !X || !M || !M.model) { if (typeof module !== 'undefined' && module.exports) module.exports = { VERSION: VERSION, missing: true }; return; }
     var K = A.kit, E = K.E, S = K.S, T = K.T, arr = K.arr, safe = K.safe, lc = K.lc, MM = M.model, note = M.note, joinAnd = MM.joinAnd;
@@ -279,12 +279,12 @@
     function levelName(fc, sol, lv) { return outcomeName(fc, sol.FL - lv); }
     function tableQ43(fc, edit) {
         var R = ffRows(fc), one = function (cap, rows) { return rows.length ? '<div class="apx-cap">' + cap + '</div><div class="apx-tw"><table data-sl-worksheet="1" class="apx-arp"><tr><th style="width:50%">System Functional Failures</th><th>Associated Sys Failure Condition (SFHA)</th></tr>' + rows.map(function (r) { return '<tr><td class="l">' + E(r.id) + ' - ' + E(r.text) + '</td><td class="l">' + (edit ? M.linkPicker(fc, r.e) : (r.sfha ? E(r.sfha) : 'Not linked yet')) + '</td></tr>'; }).join('') + '</table></div>' : ''; };
-        return one('Table Q.4-3 - (PASA)<br>System functional failures and SFHA failure conditions: Total loss', R.total) + one('Table Q.4-4 - (PASA)<br>System functional failures and SFHA failure conditions: Partial loss', R.partial) + one('Table Q.4-5 - (PASA)<br>System functional failures and SFHA failure condition: malfunction', R.malf) + K.abbr([['FF', 'Functional Failure'], ['SFHA', 'System Functional Hazard Assessment']]);
+        return one('System functional failures and SFHA failure conditions: Total loss', R.total) + one('System functional failures and SFHA failure conditions: Partial loss', R.partial) + one('System functional failures and SFHA failure condition: malfunction', R.malf) + K.abbr([['FF', 'Functional Failure'], ['SFHA', 'System Functional Hazard Assessment']]);
     }
     function tableQ46(fc, sol) {
         var pages = Math.ceil(sol.cases.length / PER) || 1; ui.page = Math.max(0, Math.min(ui.page, pages - 1));
         var slice = sol.cases.slice(ui.page * PER, ui.page * PER + PER), how = ui.how;
-        return '<div class="apx-cap">Table Q.4-6 - (PASA)<br>CoFFE table</div><div class="apx-pager" style="justify-content:center"><button class="apx-btn" data-apx-x="page|-1"' + (ui.page === 0 ? ' disabled' : '') + '>Previous</button><b>Cases ' + (ui.page * PER + 1) + ' to ' + Math.min(sol.cases.length, ui.page * PER + PER) + ' of ' + sol.cases.length + '</b><button class="apx-btn" data-apx-x="page|1"' + (ui.page >= pages - 1 ? ' disabled' : '') + '>Next</button></div>'
+        return '<div class="apx-cap">CoFFE table</div><div class="apx-pager" style="justify-content:center"><button class="apx-btn" data-apx-x="page|-1"' + (ui.page === 0 ? ' disabled' : '') + '>Previous</button><b>Cases ' + (ui.page * PER + 1) + ' to ' + Math.min(sol.cases.length, ui.page * PER + PER) + ' of ' + sol.cases.length + '</b><button class="apx-btn" data-apx-x="page|1"' + (ui.page >= pages - 1 ? ' disabled' : '') + '>Next</button></div>'
             + '<div class="apx-tw"><table data-sl-worksheet="1" class="apx-arp"><tr><th>Case #</th>' + heads(fc, sol.ds) + '<th>' + E(resName(fc)) + '</th>' + (how ? '<th>Decided by</th>' : '') + '</tr>'
             + slice.map(function (c) { var n = sol.cases.indexOf(c) + 1, lv = sol.lvl[c]; return '<tr><td>' + n + '</td>' + c.split('').map(function (s, i) { return cellTd(sol.ds[i], s); }).join('') + '<td>' + E(lv == null ? '' : levelName(fc, sol, lv)) + '</td>' + (how ? '<td>' + (lv == null ? '' : sol.src[c] === 'you' ? 'You' : 'Logic') + '</td>' : '') + '</tr>'; }).join('') + '</table></div>'
             + legend(fc, sol.ds) + '<p style="text-align:center"><label style="cursor:pointer"><input type="checkbox" data-apx-xc="how"' + (how ? ' checked' : '') + '> Show who decided each case (not printed in the PASA)</label></p>';
@@ -292,11 +292,11 @@
     function tableQ47(fc, sol) {
         var rows = summaryRows(fc, sol), tr = '';
         for (var lv = sol.FL; lv >= 0; lv--) { var rs = rows.filter(function (r) { return r.level === lv; }), con = conclusions(fc, rs, lv, sol); rs.forEach(function (r, j) { tr += '<tr>' + r.c.split('').map(function (s, i) { return cellTd(sol.ds[i], s); }).join('') + '<td>' + E(levelName(fc, sol, lv)) + '</td>' + (con[j] && con[j].skip ? '' : '<td class="l"' + (con[j] && con[j].span > 1 ? ' rowspan="' + con[j].span + '"' : '') + '>' + (con[j] ? E(con[j].t) : '') + '</td>') + '</tr>'; }); }
-        return '<div class="apx-cap">Table Q.4-7 - (PASA)<br>CoFFE table summary</div><div class="apx-tw"><table data-sl-worksheet="1" class="apx-arp"><tr>' + heads(fc, sol.ds) + '<th>' + E(resName(fc)) + '</th><th>Conclusion</th></tr>' + tr + '</table></div>';
+        return '<div class="apx-cap">CoFFE table summary</div><div class="apx-tw"><table data-sl-worksheet="1" class="apx-arp"><tr>' + heads(fc, sol.ds) + '<th>' + E(resName(fc)) + '</th><th>Conclusion</th></tr>' + tr + '</table></div>';
     }
     function tableQ48(fc, sol) {
         var rs = fcRows(fc, sol), con = conclusions(fc, rs, sol.FL, sol).filter(function (x) { return x && !x.skip; });
-        return '<div class="apx-cap">Table Q.4-8 - (PASA)<br>CoFFE table result: ' + E(outcomeName(fc, 0)) + '</div><div class="apx-tw"><table data-sl-worksheet="1" class="apx-arp"><tr>' + heads(fc, sol.ds) + '<th>' + E(resName(fc)) + '</th></tr>' + (rs.length ? rs.map(function (r) { return '<tr>' + r.c.split('').map(function (s, i) { return cellTd(sol.ds[i], s); }).join('') + '<td>' + E(outcomeName(fc, 0)) + '</td></tr>'; }).join('') : '<tr><td class="l" colspan="' + (sol.ds.length + 1) + '">No mix of these failures causes it.</td></tr>') + '</table></div>'
+        return '<div class="apx-cap">CoFFE table result: ' + E(outcomeName(fc, 0)) + '</div><div class="apx-tw"><table data-sl-worksheet="1" class="apx-arp"><tr>' + heads(fc, sol.ds) + '<th>' + E(resName(fc)) + '</th></tr>' + (rs.length ? rs.map(function (r) { return '<tr>' + r.c.split('').map(function (s, i) { return cellTd(sol.ds[i], s); }).join('') + '<td>' + E(outcomeName(fc, 0)) + '</td></tr>'; }).join('') : '<tr><td class="l" colspan="' + (sol.ds.length + 1) + '">No mix of these failures causes it.</td></tr>') + '</table></div>'
             + (con.length ? '<p style="margin:12px 0 0">Through the CoFFE analysis it can be concluded that: ' + con.map(function (x) { return '"' + E(x.t.charAt(0).toLowerCase() + x.t.slice(1)) + '"'; }).join('; ') + '.</p>' : '');
     }
     function evNode(fc, sol, e) { var d = colById(sol, e.col); return '<b>' + E(ffId(fc, d.isM ? d.colId : d.id, e.st)) + '</b> ' + E(evWords(d, e.st).replace(/^./, function (x) { return x.toUpperCase(); })); }
@@ -304,7 +304,7 @@
         var g = gate(fc, sol), alone = MM.aloneMalf(fc), li = function (x) { return '<div class="apx-tli">' + x + '</div>'; }, inner = '';
         if (g && g.shape === 'core-any') inner = ' <span class="apx-gate">AND</span><div class="apx-tul">' + g.core.map(function (e) { return li(evNode(fc, sol, e)); }).join('') + li('<b>Any one of these further failures</b><span class="apx-gate">OR</span><div class="apx-tul">' + g.any.map(function (e) { return li(evNode(fc, sol, e)); }).join('') + '</div>') + '</div>';
         else if (g) inner = ' <span class="apx-gate">OR</span><div class="apx-tul">' + g.sets.map(function (set) { return li(set.length > 1 ? ' <span class="apx-gate">AND</span><div class="apx-tul">' + set.map(function (e) { return li(evNode(fc, sol, e)); }).join('') + '</div>' : evNode(fc, sol, set[0])); }).join('') + '</div>';
-        return '<div class="apx-cap">Figure Q.4-1 - (PASA)<br>The gate under ' + E(fc.fcId) + '</div><div class="apx-tree"><div class="apx-tul"><div class="apx-tli"><b>' + E(fc.fcId) + '</b> ' + E(fc.desc) + (fc.phases ? ' (' + E(fc.phases) + ')' : '') + ' <span class="apx-gate">OR</span><div class="apx-tul">'
+        return '<div class="apx-cap">The gate under ' + E(fc.fcId) + '</div><div class="apx-tree"><div class="apx-tul"><div class="apx-tli"><b>' + E(fc.fcId) + '</b> ' + E(fc.desc) + (fc.phases ? ' (' + E(fc.phases) + ')' : '') + ' <span class="apx-gate">OR</span><div class="apx-tul">'
             + (g ? li('<b>' + E(fc.fcId) + '.CoFFE</b> Combined loss resulting in ' + E(lc(outcomeName(fc, 0))) + inner) : '') + alone.map(function (m) { return li('<b>' + E(ffId(fc, m.colId, 'M')) + '</b> ' + E(m.sysName) + ' doing the wrong thing, resulting in ' + E(lc(outcomeName(fc, 0)))); }).join('') + '</div></div></div></div>';
     }
     function tablePairs(fc, sol) {
@@ -313,9 +313,9 @@
         var w = P.shape === 'pairs' ? 2 : P.width, hd = ''; for (var i = 1; i <= w; i++) hd += '<th>Failure ' + i + '</th>';
         var row = function (r) { var tds = ''; for (var k = 0; k < w; k++) tds += '<td class="l">' + E(r.parts[k] || '--') + '</td>'; return '<tr><td>' + r.n + '</td>' + tds + '</tr>'; };
         var PP = 30, pages = Math.ceil(P.rows.length / PP) || 1; ui.ppage = Math.max(0, Math.min(ui.ppage || 0, pages - 1));
-        var main = '<div class="apx-cap">Table Q.4-9 - (PASA)<br>Potential failures combinations (FT cut set)</div>' + (pages > 1 ? '<div class="apx-pager" style="justify-content:center"><button class="apx-btn" data-apx-x="ppage|-1"' + (ui.ppage === 0 ? ' disabled' : '') + '>Previous</button><b>Cases ' + (ui.ppage * PP + 1) + ' to ' + Math.min(P.rows.length, ui.ppage * PP + PP) + ' of ' + P.rows.length + '</b><button class="apx-btn" data-apx-x="ppage|1"' + (ui.ppage >= pages - 1 ? ' disabled' : '') + '>Next</button></div>' : '') + '<div class="apx-tw"><table data-sl-worksheet="1" class="apx-arp"><tr><th>Cases</th>' + hd + '</tr>' + P.rows.slice(ui.ppage * PP, ui.ppage * PP + PP).map(row).join('') + '</table></div>';
-        var n = 10, so = 2, same = '';
-        K.resPicked(fc).forEach(function (r) { var rs = P.rows.filter(function (x) { return x.same === r.key; }); if (!rs.length) return; same += '<div class="apx-cap">Table Q.4-' + (n++) + ' - (PASA)<br>' + E(r.name) + ' common source failures</div><div class="apx-tw"><table data-sl-worksheet="1" class="apx-arp"><tr><th>Cases</th>' + hd + '</tr>' + rs.map(row).join('') + '</table></div>' + note('', 'Proposed requirement: no single failure or event results in the loss of all ' + E(lc(r.name)) + ', and it is extremely improbable <b>[PASA-SO-' + String(so++).padStart(2, '0') + ']</b>. ' + E(r.name) + ' should be distributed so that it also meets the independence principles. These go to the PRA, ZSA, CMA and the PSSA of the system that provides it.'); });
+        var main = '<div class="apx-cap">Potential failure combinations (fault tree cut sets)</div>' + (pages > 1 ? '<div class="apx-pager" style="justify-content:center"><button class="apx-btn" data-apx-x="ppage|-1"' + (ui.ppage === 0 ? ' disabled' : '') + '>Previous</button><b>Cases ' + (ui.ppage * PP + 1) + ' to ' + Math.min(P.rows.length, ui.ppage * PP + PP) + ' of ' + P.rows.length + '</b><button class="apx-btn" data-apx-x="ppage|1"' + (ui.ppage >= pages - 1 ? ' disabled' : '') + '>Next</button></div>' : '') + '<div class="apx-tw"><table data-sl-worksheet="1" class="apx-arp"><tr><th>Cases</th>' + hd + '</tr>' + P.rows.slice(ui.ppage * PP, ui.ppage * PP + PP).map(row).join('') + '</table></div>';
+        var so = 2, same = '';
+        K.resPicked(fc).forEach(function (r) { var rs = P.rows.filter(function (x) { return x.same === r.key; }); if (!rs.length) return; same += '<div class="apx-cap">' + E(r.name) + ' common source failures</div><div class="apx-tw"><table data-sl-worksheet="1" class="apx-arp"><tr><th>Cases</th>' + hd + '</tr>' + rs.map(row).join('') + '</table></div>' + note('', 'Proposed requirement: no single failure or event results in the loss of all ' + E(lc(r.name)) + ', and it is extremely improbable <b>[PASA-SO-' + String(so++).padStart(2, '0') + ']</b>. ' + E(r.name) + ' should be distributed so that it also meets the independence principles. These go to the PRA, ZSA, CMA and the PSSA of the system that provides it.'); });
         return { main: main, same: same, rows: P.rows };
     }
 
@@ -381,7 +381,7 @@
         var n = need(fc, 'The full CoFFE table'); if (n) return n;
         if (!named(fc)) return card('The full CoFFE table', 'Name every outcome first.', '');
         var sol = solved(fc); if (sol.error) return card('The full CoFFE table', '', note('bad', E(sol.error)));
-        return card('The full CoFFE table', '', note(sol.done ? 'good' : 'warn', sol.done ? 'All ' + sol.cases.length + ' cases are filled. This is Table Q.4-6 exactly as the PASA will show it.' : 'Some cases are still open. Go back to the questions to finish.')) + K.preview('', tableQ46(fc, sol));
+        return card('The full CoFFE table', '', note(sol.done ? 'good' : 'warn', sol.done ? 'All ' + sol.cases.length + ' cases are filled. This is the CoFFE table exactly as the PASA will show it.' : 'Some cases are still open. Go back to the questions to finish.')) + K.preview('', tableQ46(fc, sol));
     }
     function stepSummary(fc) {
         var n = need(fc, 'Summary and result'); if (n) return n;

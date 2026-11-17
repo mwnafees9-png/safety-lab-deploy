@@ -48,7 +48,7 @@
  * ==========================================================================*/
 (function (root) {
     'use strict';
-    var VERSION = '1.4';   // 1.4 17 Nov 2026: "check" for "tick"; the AI reads a design document or the engineer's words and proposes the systems, functions and resources (a person accepts each); the resources are Assumed until compared with the architecture document; what was sent can be taken back out from the page.   // 1.3 17 Nov 2026: a function that does the job is traced up to the aircraft function when it is checked or added here (and the trace the Autopilot made comes off with the check); a resource's providing function is written where the architecture reads it (providedByFunctions).   // 1.2 16 Nov 2026: the Autopilot ASKS for each system and its function, and whether it is a resource system; a resource system is a row of Table Q.4-2, never a column of Table Q.4-1; no resource is checked by the tool.   // 1.1 16 Nov 2026: a field in a row lines up with its label and its button (the site's own bottom margin on fields is taken off inside the Autopilots)
+    var VERSION = '1.5';   // 1.5 17 Nov 2026: no ARP table numbers on any table; the two interdependence tables carry their title in the top row, with a white vertical divider; the common resource table has no left-hand column.   // 1.4 17 Nov 2026: "check" for "tick"; the AI reads a design document or the engineer's words and proposes the systems, functions and resources (a person accepts each); the resources are Assumed until compared with the architecture document; what was sent can be taken back out from the page.   // 1.3 17 Nov 2026: a function that does the job is traced up to the aircraft function when it is checked or added here (and the trace the Autopilot made comes off with the check); a resource's providing function is written where the architecture reads it (providedByFunctions).   // 1.2 16 Nov 2026: the Autopilot ASKS for each system and its function, and whether it is a resource system; a resource system is a row of Table Q.4-2, never a column of Table Q.4-1; no resource is checked by the tool.   // 1.1 16 Nov 2026: a field in a row lines up with its label and its button (the site's own bottom margin on fields is taken off inside the Autopilots)
     function g(n) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(n); if (v !== undefined) return v; } } catch (_) {} try { return root[n]; } catch (_) { return undefined; } }
     function arr(v) { return Array.isArray(v) ? v : []; }
     function S(v) { return v == null ? '' : String(v); }
@@ -182,8 +182,9 @@
     function tableQ41(fc) {
         var cols = picked(fc);
         if (!cols.length) return '<p>No system is checked for this failure condition yet.</p>';
-        return '<div class="apx-cap">Table Q.4-1 - (PASA)<br>Interdependence table</div><div class="apx-tw"><table data-sl-worksheet="1" class="apx-arp">'
-            + '<tr><th colspan="3"></th><th colspan="' + cols.length + '">AC Systems (Function)</th></tr>'
+        // v1.5 (Waqas, 17 Nov 2026): no caption; the title sits in the top row, a white vertical divider beside it; no ARP table number
+        return '<div class="apx-tw"><table data-sl-worksheet="1" class="apx-arp" data-apx-table="interdependence">'
+            + '<tr><th colspan="3" class="apx-ttl">Interdependence table</th><th colspan="' + cols.length + '">AC Systems (Function)</th></tr>'
             + '<tr><th><span class="apx-sysn">AC Function</span></th><th><span class="apx-sysn">AC FC ID</span></th><th><span class="apx-sysn">AC FC Description</span></th>' + cols.map(colHead).join('') + '</tr>'
             + '<tr><td class="l">' + E(acFnLabel(fc)) + '</td><td class="l">' + E(fc.fcId) + '</td><td class="l">' + E(fc.desc) + '</td>' + cols.map(function () { return '<td>X</td>'; }).join('') + '</tr></table></div>'
             + abbr([['AC', 'Aircraft'], ['FC', 'Failure Condition']]);
@@ -191,11 +192,12 @@
     function tableQ42(fc, clickable) {
         var cols = picked(fc), rs = resPicked(fc);
         if (!cols.length || !rs.length) return '<p>No shared resource is checked for this failure condition yet.</p>';
-        return '<div class="apx-cap">Table Q.4-2 - (PASA)<br>Interdependence (common resource) table</div><div class="apx-tw"><table data-sl-worksheet="1" class="apx-arp' + (clickable ? ' apx-grid' : '') + '">'
-            + '<tr><th class="apx-diag" colspan="2" rowspan="2"></th><th colspan="' + cols.length + '">AC Systems (Function)</th></tr><tr>' + cols.map(colHead).join('') + '</tr>'
+        // v1.5: no caption and no left-hand column; its title is the top-left header cell, a white vertical divider beside it
+        return '<div class="apx-tw"><table data-sl-worksheet="1" class="apx-arp' + (clickable ? ' apx-grid' : '') + '" data-apx-table="resources">'
+            + '<tr><th class="apx-ttl" rowspan="2">Common Sources and Resources (Generation and Distribution)</th><th colspan="' + cols.length + '">AC Systems (Function)</th></tr><tr>' + cols.map(colHead).join('') + '</tr>'
             + rs.map(function (r, k) {
                 var st = resState(fc, r);
-                return '<tr>' + (k === 0 ? '<th rowspan="' + rs.length + '">Common Sources and Resources (Generation and Distribution)</th>' : '') + '<th class="l">R' + (k + 1) + '. ' + E(r.name) + (providerText(r) ? '<span class="apx-prov">' + E(providerText(r)) + '</span>' : '') + '</th>'
+                return '<tr><th class="l">R' + (k + 1) + '. ' + E(r.name) + (providerText(r) ? '<span class="apx-prov">' + E(providerText(r)) + '</span>' : '') + '</th>'
                     + cols.map(function (c) { return '<td' + (clickable ? ' class="apx-cell" data-apx-feed="' + E(r.key + '|' + c.colId) + '" title="Click to change"' : '') + '>' + (st.feeds[c.colId] ? 'x' : '--') + '</td>'; }).join('') + '</tr>';
             }).join('') + '</table></div>' + abbr([['AC', 'Aircraft'], ['R', 'Resource']]);
     }
@@ -212,7 +214,7 @@
                     + '<td class="l">' + E(craText(fc, x.r, x.mode, '')) + '</td></tr>';
             });
         });
-        return '<div class="apx-cap">Table B3 - Common Resource Analysis table for<br>failure condition "' + E(fc.desc) + '"</div><div class="apx-tw"><table data-sl-worksheet="1" class="apx-arp"><tr><th>Common Resource</th><th>Failure Mode</th>'
+        return '<div class="apx-cap">Common resource analysis for<br>failure condition "' + E(fc.desc) + '"</div><div class="apx-tw"><table data-sl-worksheet="1" class="apx-arp"><tr><th>Common Resource</th><th>Failure Mode</th>'
             + cols.map(function (c) { return '<th><span class="apx-sysn">' + E(c.sysName) + '</span>(' + E(c.funcId) + ')</th>'; }).join('') + '<th>AC-Level Effect on FC</th></tr>' + body + '</table></div>'
             + abbr([['AC', 'Aircraft'], ['FC', 'Failure Condition']]);
     }
@@ -378,13 +380,13 @@
         + 'table.apx-arp{border-collapse:collapse;width:100%;font-size:13px;background:var(--color-surface-1,#fff)}table.apx-arp th,table.apx-arp td{border:1px solid #101216;padding:6px 8px;text-align:center;vertical-align:middle}'
         + 'table.apx-arp th{background:#101216;color:#fff;font-weight:700;vertical-align:top;line-height:1.25}table.apx-arp td.l,table.apx-arp th.l{text-align:left}'
         + 'table.apx-arp th .apx-sysn{display:block;margin-bottom:4px;white-space:nowrap}'
-        + 'table.apx-arp th.apx-diag{min-width:230px;background:linear-gradient(to top right,#101216 calc(50% - 1px),#fff 50%,#101216 calc(50% + 1px))}'
+        + 'table.apx-arp th.apx-ttl{vertical-align:middle;border-right:3px solid #fff;font-size:13.5px;min-width:210px}'
         + 'table.apx-grid td.apx-cell{cursor:pointer;font-weight:700;min-width:70px}table.apx-grid td.apx-cell:hover{background:rgba(26,110,242,.1)}'
         + '.apx-abbr{margin:10px 0 0;font-size:12.5px}.apx-abl{margin:4px 0 0;display:flex;flex-wrap:wrap;gap:4px 18px}.apx-abl b{margin-right:4px}'
         + '.apx-sent{border:2px solid #0B7A3E;border-radius:14px;padding:14px 16px;background:rgba(11,122,62,.07);margin-top:12px}'
         + '#view-interdep.apx-on>p,#view-interdep.apx-on .header-with-export .action-group{display:none}'
         + '@media (max-width:760px){.apx-tick,.apx-eff,.apx-mode,.apx-add{grid-template-columns:1fr}}'
-        + 'body.theme-dark table.apx-arp th{background:#E8EAED;color:#101216;border-color:#E8EAED}body.theme-dark table.apx-arp td{border-color:#E8EAED}body.theme-dark table.apx-arp th.apx-diag{background:linear-gradient(to top right,#E8EAED calc(50% - 1px),#101216 50%,#E8EAED calc(50% + 1px))}';
+        + 'body.theme-dark table.apx-arp th{background:#E8EAED;color:#101216;border-color:#E8EAED}body.theme-dark table.apx-arp td{border-color:#E8EAED}body.theme-dark table.apx-arp th.apx-ttl{border-right-color:#101216}';
     function style() { if (typeof document === 'undefined' || document.getElementById('apx-style')) return; var st = document.createElement('style'); st.id = 'apx-style'; st.textContent = CSS; document.head.appendChild(st); }
 
     var STEPS = ['Failure condition', 'Systems that do the job', 'Systems that could cause it by failing', 'Shared resources', 'How each resource can fail', 'What each failure does', 'Check and send to the PASA'];
