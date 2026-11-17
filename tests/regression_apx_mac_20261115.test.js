@@ -20,6 +20,8 @@
  *   7  the rules are named combinations of assemblies, each needs its reason before sending
  *   8  a build changed after the answers: the answers are set aside and kept, the questions come again, the links stay
  *      and are marked for review
+ *   9  (v1.1) every loss gets its line in its system's FHA by itself: keyed to the function, traced to the aircraft
+ *      failure condition, severity left blank, and saying what it contributes to
  *   9  links: a permanent ID, kept when re-pointed, kept when its target disappears (marked for review), never removed;
  *      a new system failure condition is created once
  *  10  the SDD compare: Assumed, then Backed by the SDD; a difference shows; raised = Disputed; "use the SDD build"
@@ -28,7 +30,7 @@
  *      rest on is dropped
  *  12  today's MAC rule for the function is brought in exactly; sending needs a name, the reasons and the evidence
  *  13  no page errors
- * MUTATION PROOFS (SL_APXM_MUTATE): inferside (one side lost is worked out from both lost), nowhy (sent without the
+ * MUTATION PROOFS (SL_APXM_MUTATE): setsev (the tool copies the aircraft severity onto the system line), notrace (the system line is not traced to the aircraft failure condition), inferside (one side lost is worked out from both lost), nowhy (sent without the
  *   reasons), dellink (a build change deletes the links), autoaccept (the AI's proposal is applied by itself), nostale
  *   (answers survive a build change), reuseid (a removed group's ID is given out again), guessgate (an unreadable gate
  *   is read as OR). Each must turn this red.
@@ -44,6 +46,8 @@ const rd = f => fs.readFileSync(path.join(SITE, f), 'utf8');
 function mutate(file, body) {
     if (file !== 'apx_mac.js' || !MUT) return body;
     const rep = (a, b) => { if (body.indexOf(a) < 0) throw new Error('mutation site missing: ' + a.slice(0, 80)); body = body.split(a).join(b); };
+    if (MUT === 'setsev') rep("phases: fc.row.phases || '', severity: '', acTrace: fc.fcId, apx:", "phases: fc.row.phases || '', severity: fc.sev, acTrace: fc.fcId, apx:");
+    if (MUT === 'notrace') rep("phases: fc.row.phases || '', severity: '', acTrace: fc.fcId, apx:", "phases: fc.row.phases || '', severity: '', acTrace: '', apx:");
     if (MUT === 'inferside') rep("sided: !!p && p.units.length > 1 && (g.pos === 'each' || g.pos === 'mirror'), units: unitNames(g) };", "sided: false, units: unitNames(g) };");
     if (MUT === 'nowhy') rep("if (nw) out.push('Say why for '", "if (false) out.push('Say why for '");
     if (MUT === 'dellink') rep("Object.keys(r.links).forEach(function (k) { if (r.links[k] && !r.links[k].review) r.links[k].review = 'The build changed after this link was made.'; });", "r.links = {};");
@@ -59,7 +63,7 @@ function mutate(file, body) {
     const idx = rd('index.html'), src = rd('apx_mac.js');
     const order = ['apx_engine.js', 'apx_autopilots.js', 'apx_mac.js', 'apx_coffe.js', 'apx_bridge.js', 'pasa_autopilot.js'].map(f => idx.indexOf('src="' + f));
     check('1 index.html loads the engine, the page, the MAC, the CoFFE, the bridge, then the PASA Autopilot', order.every((v, i) => v > 0 && (i === 0 || v > order[i - 1])), order.join(','));
-    check('1 no em dashes, American English', src.indexOf(String.fromCharCode(0x2014)) === -1 && !/\b(colour|behaviour|analyse[sd]?|centre\b|organis|summaris|recognis|minimis|licence|labelled|cancelled)/i.test(src));
+    check('1 no em dashes, American English', src.indexOf(String.fromCharCode(0x2014)) === -1 && !/\b(colour|behaviour|analysed|analysing|centre\b|organis|summaris|recognis|minimis|licence|labelled|cancelled)/i.test(src));
     check('1 the wording never offers "k of n" as a MAC rule', !/k of n/i.test(src.replace(/\/\*[\s\S]*?\*\//, '')));
 
     // ---- 2: the fault tree reader (pure) ------------------------------------------------------------------------------------
@@ -103,10 +107,15 @@ function mutate(file, body) {
         check('3 the MAC Autopilot opens beside the Interdependence one, on the systems ticked there', s3.tab && s3.ap === 'mac' && s3.cols.length === 4, s3);
         check('3 no question before every build is set', s3.ready === false && /built/i.test(s3.refused) && /built/i.test(s3.left[0] || ''), s3);
         await jump(1);
-        const sels = await pg.$$('#interdep-host select[data-apx-xc^="pat|"]');
-        check('3 the build step shows one build to pick per ticked system', sels.length === 4, sels.length);
+        // 17 Nov 2026 (Waqas: "MAC and CoFFE will need a similar interface"): the build step asks first
+        const ask3 = await pg.evaluate(() => { const h = document.querySelector('#interdep-host'); return { q: (h.querySelector('.apx-askq') || {}).innerText, cols: Array.from(h.querySelectorAll('select[data-apx-xc="askcol"] option')).map(o => o.value), cards: h.querySelectorAll('.apx-bld').length, todo: /Still to set:/.test(h.innerText) }; });
+        check('3 the build step opens by asking for an assembly group, for one of the ticked system functions; nothing is laid out before it is added', /Add an assembly group/.test(ask3.q || '') && ask3.cols.length === 4 && ask3.cards === 0 && ask3.todo, ask3);
+        await pg.click('#interdep-host [data-apx-x="askadd"]'); await tick(300);
+        check('3 nothing is added until the engineer says how it is built', (await pg.evaluate((K) => SLApxMac.model.macCols(SLApxAuto.model.fcOf(K)).filter(d => d.set).length, K)) === 0);
         const pats = ['pairs', 'backup', 'lr', 'pairs'];
-        for (let i = 0; i < 4; i++) { const el = (await pg.$$('#interdep-host select[data-apx-xc^="pat|"]'))[i]; await el.selectOption(pats[i]); await tick(250); }
+        for (let i = 0; i < 4; i++) { await pg.selectOption('#interdep-host select[data-apx-xc="askcol"]', ask3.cols[i]); await pg.selectOption('#interdep-host select[data-apx-xc="askpat"]', pats[i]); await pg.click('#interdep-host [data-apx-x="askadd"]'); await tick(300); }
+        const asm3 = await pg.evaluate((K) => { const A = SLApxAuto, M = SLApxMac, f = A.model.fcOf(K), c0 = M.model.lossBase(f)[0], sy = systemsData.find(x => String(x.id) === c0.sysId), g = M.model.groupsOf(c0.colId)[0]; M.act.setUnit(f, c0.colId, g.id, 0, 'name', 'Inboard brake pair'); return { cards: document.querySelectorAll('#interdep-host .apx-bld').length, asm: (sy.assemblies || []).map(a => a.id + '|' + a.name + '|' + a.funcId + '|' + a.apx), want: g.units.map(u => u.id) }; }, K);
+        check('3 the assemblies are written onto their system, with the same permanent IDs and names', asm3.asm.length === 2 && asm3.asm[0].indexOf(asm3.want[0] + '|Inboard brake pair|') === 0 && asm3.asm.every(a => /\|true$/.test(a)), asm3);
         const s3b = await pg.evaluate((K) => { const A = SLApxAuto, M = SLApxMac, f = A.model.fcOf(K), ds = M.model.macCols(f); return { ready: M.model.ready(f), ids: ds.map(d => d.gid), states: ds.map(d => d.states.join('')), units: ds.map(d => d.units.join('/')), sided: ds.map(d => d.sided), src: ds.map(d => d.g.src), pos: ds.map(d => d.pos) }; }, K);
         check('3 picking the builds on the page sets them, by hand', s3b.ready && s3b.src.every(x => x === 'hand'), s3b);
         check('3 each assembly group has its own permanent ID', new Set(s3b.ids).size === 4 && s3b.ids.every(x => /^ASM-\d+$/.test(x)), s3b.ids);
@@ -155,6 +164,19 @@ function mutate(file, body) {
         check('6 with left and right mirroring, one answer covers the mix and its mirror image', sd.wrote.sort().join() === 'AA,BB', sd.wrote);
         const sd2 = await pg.evaluate((K) => { const A = SLApxAuto, M = SLApxMac, f = A.model.fcOf(K), s = M.model.solved(f), i = 2; const both = s.cases.find(c => c[i] === 'F' && c.replace(/O/g, '').length === 1), one = s.cases.find(c => c[i] === 'D' && c.replace(/O/g, '').length === 1); return { both: s.by[both], one: s.by[one], fromBoth: s.by[one].from === both }; }, K);
         check('6 in the Autopilot, the left and right pair\'s "one side lost" was not worked out from "both lost"', sd2.one.level != null && !sd2.fromBoth, sd2);
+
+        // ---- 9a: every loss gets its line in the system's FHA by itself, severity left blank (17 Nov 2026) ------------------
+        const auto = await pg.evaluate((K) => {
+            const A = SLApxAuto, M = SLApxMac, f = A.model.fcOf(K), n0 = systemsData.reduce((n, s) => n + (s.fha || []).length, 0);
+            const made = M.act.ensureSysFcs(f), n1 = systemsData.reduce((n, s) => n + (s.fha || []).length, 0), again = M.act.ensureSysFcs(f), n2 = systemsData.reduce((n, s) => n + (s.fha || []).length, 0);
+            const evs = M.model.allEvents(f), rows = evs.map(e => { const l = M.model.linkOf(f, e.k), r = M.model.sysFcRow(l); return r && { sev: r.severity, fn: r.sysFuncId, tr: r.acTrace, d: r.fcDesc, eff: r.effAc || '', id: l.id, auto: l.auto, by: r.apx && r.apx.by, sys: l.sysId === e.sysId }; });
+            const inRules = M.model.linkEvents(f).map(e => e.k), k0 = inRules[0], r0 = M.model.sysFcRow(M.model.linkOf(f, k0));
+            return { evs: evs.length, made: made.length, n0, n1, n2, again: again.length, rows, r0eff: r0 && r0.effAc, r0sev: r0 && r0.severity, fcSev: f.sev };
+        }, K);
+        check('9 every loss of the builds gets its own line in its system\'s FHA, once (a second pass adds nothing)', auto.evs > 0 && auto.made === auto.evs && auto.n1 === auto.n0 + auto.made && auto.again === 0 && auto.n2 === auto.n1, { evs: auto.evs, made: auto.made, n0: auto.n0, n1: auto.n1 });
+        check('9 each line is keyed to its system function, traced to the aircraft failure condition, and linked with a permanent link', auto.rows.every(r => r && r.fn && /FC-07/.test(r.tr) && /^LNK-\d+$/.test(r.id) && r.auto === true && r.by === 'tool' && r.sys), auto.rows.slice(0, 2));
+        check('9 the tool never sets the severity: it is left blank, not copied from the aircraft failure condition', auto.fcSev === 'Hazardous' && auto.rows.every(r => r.sev === ''), auto.rows.map(r => r.sev));
+        check('9 a line in a rule says what it contributes to, with what', /^Contributes to FC-07 \(.*\) together with: /.test(auto.r0eff || '') || /on its own\.$/.test(auto.r0eff || ''), auto.r0eff);
 
         // ---- 9: links ---------------------------------------------------------------------------------------------------------
         const lk = await pg.evaluate((K) => {

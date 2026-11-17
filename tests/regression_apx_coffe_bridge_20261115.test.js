@@ -25,7 +25,7 @@
  *  11  with the switch on the MAC and CoFFE tabs open the Autopilots; today's MAC page stays one click away; with the
  *      switch off the bridge does nothing
  *  12  no page errors
- * MUTATION PROOFS (SL_APXC_MUTATE): nosug (the MAC's answer is not outlined), badmath (the gate probability is the plain
+ * MUTATION PROOFS (SL_APXC_MUTATE): ownwrong (a line's own effect is read from a case with other failures in it), nosug (the MAC's answer is not outlined), badmath (the gate probability is the plain
  *   product), cutrows (the full table drops cases), nofcfilter (a sent rule speaks for every condition of its function),
  *   nosets (today's reader ignores the sent sets), delold (the earlier rule is deleted, not kept), early (stores are
  *   written before sending), offruns (the bridge writes with the switch off). Each must turn this red.
@@ -41,6 +41,7 @@ const rd = f => fs.readFileSync(path.join(SITE, f), 'utf8');
 function mutate(file, body) {
     if (!MUT) return body;
     const rep = (a, b) => { if (body.indexOf(a) < 0) throw new Error('mutation site missing in ' + file + ': ' + a.slice(0, 80)); body = body.split(a).join(b); };
+    if (MUT === 'ownwrong' && file === 'apx_coffe.js') rep("var c = sol.ds.map(function (d, j) { return j === i ? e.st : 'O'; }).join(''), lv = sol.lvl[c];", "var c = sol.ds.map(function (d, j) { return j === i ? e.st : 'F'; }).join(''), lv = sol.lvl[c];");
     if (MUT === 'nosug' && file === 'apx_coffe.js') rep("var m = macSays(fc, nq.c, sol), fco", "var m = null, fco");
     if (MUT === 'badmath' && file === 'apx_engine.js') rep("return { p: pc * (1 - q), core: pc, any: 1 - q };", "return { p: pc * g.any.reduce(function (a, e) { return a * P(e); }, 1), core: pc, any: 1 - q };");
     if (MUT === 'cutrows' && file === 'apx_bridge.js') rep("rows: sol.cases.map(function (c, i) { var row = { 'Case #'", "rows: sol.cases.slice(0, 60).map(function (c, i) { var row = { 'Case #'");
@@ -123,6 +124,11 @@ function mutate(file, body) {
             return { asked: n, cases: s.cases.length, done: s.done, wrong, fl: s.FL };
         }, K);
         check('3 every case gets its result with fewer questions than cases, and each matches the truth', full.done && full.cases === 81 && full.asked < full.cases && full.wrong === 0 && full.fl === 2, full);
+        // 17 Nov 2026 (Waqas, on the severity of a line the tool adds: "the aircraft might have sufficient control authority with
+        // thrust reverseers and flaps to mitigate it"): the line says what it does on its own, from the table; the severity stays blank
+        const own = await pg.evaluate((K) => { const A = SLApxAuto, M = SLApxMac, C = SLApxCof, f = A.model.fcOf(K); M.act.ensureSysFcs(f); C.model.ownEffects(f); const s = C.model.solved(f), d0 = s.ds[0], r = M.model.sysFcRow(M.model.linkOf(f, d0.id + '|F')), r2 = M.model.sysFcRow(M.model.linkOf(f, s.ds[1].id + '|F')); return { eff: r && r.effAc, sev: r && r.severity, eff2: r2 && r2.effAc, case1: s.cases.indexOf('FOOO') + 1, case2: s.cases.indexOf('OFOO') + 1, fcSev: f.sev }; }, K);
+        check('4 a system FHA line the tool added says what that failure does on its own, from the CoFFE table, and what it contributes to', new RegExp('^On its own, with the other systems working: low-speed overrun \\(CoFFE case ' + own.case1 + ' of FC-07\\)\\. Contributes to FC-07 \\(.*\\) together with: ').test(own.eff || '') && new RegExp('no overrun \\(CoFFE case ' + own.case2 + ' of FC-07\\)').test(own.eff2 || ''), own);
+        check('4 ...and its severity is still blank: mitigated or not is the system engineer\'s call', own.sev === '' && own.fcSev === 'Hazardous', own);
         await jump(4);
         const t46 = await pg.evaluate(() => { const h = document.querySelector('#interdep-host'), t = h.querySelector('table.apx-arp'); return { cap: (h.querySelector('.apx-cap') || {}).innerText.replace(/\s+/g, ' '), rows: t.querySelectorAll('tr').length - 1, first: t.querySelectorAll('tr')[1].innerText.replace(/\s+/g, ' '), pager: (h.querySelector('.apx-pager b') || {}).innerText, head: t.querySelectorAll('tr')[0].innerText.replace(/\s+/g, ' ') }; });
         check('3 Table Q.4-6 on the page: the book\'s order (case 1 is all failed), 27 cases a page, the result column named', /Table Q\.4-6 - \(PASA\) CoFFE table/.test(t46.cap) && t46.rows === 27 && /^1 F F F F Loss of deceleration capability on landing/.test(t46.first) && t46.pager === 'Cases 1 to 27 of 81' && /STOPPING CAPABILITY RESULT/i.test(t46.head), t46);

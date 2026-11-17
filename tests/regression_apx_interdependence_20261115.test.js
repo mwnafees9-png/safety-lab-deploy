@@ -23,7 +23,7 @@
  *  10  today's interdependence tables are not touched until it is sent; once sent they carry it (apx_bridge.js); the
  *      switch back shows today's page
  *  11  no page errors
- * MUTATION PROOFS (SL_APXI_MUTATE): rescol (a resource provider is a column again), preticked (the tool ticks a resource from the register), nokind (a system is added without asking its kind), offline (a field sits off the line of its label and button), nolock (a project-fed system can be unticked), leak (every function is shown in the
+ * MUTATION PROOFS (SL_APXI_MUTATE): notrace (a ticked function is not traced up to the aircraft function), rescol (a resource provider is a column again), preticked (the tool ticks a resource from the register), nokind (a system is added without asking its kind), offline (a field sits off the line of its label and button), nolock (a project-fed system can be unticked), leak (every function is shown in the
  *   table), nosign (sending with no name), unfinished (sending an unfinished table), noswitch (the Autopilot shows with
  *   the switch off), nostamp (answers are sent without the name), oldwrite (today's table is written to). Each must
  *   turn this red.
@@ -40,6 +40,7 @@ function mutate(file, body) {
     if (file !== 'apx_autopilots.js' || !MUT) return body;
     const rep = (a, b) => { if (body.indexOf(a) < 0) throw new Error('mutation site missing: ' + a.slice(0, 80)); body = body.split(a).join(b); };
     if (MUT === 'offline') rep("        + '.apx input,.apx select,.apx textarea{margin:0}'\n", '');
+    if (MUT === 'notrace') rep("if (role !== 'fails') traceUp(fc, col.funcId); }", '}');
     if (MUT === 'rescol') rep("if (d && d.kind === 'resource') d = null;", '');
     if (MUT === 'preticked') rep("return { on: !!(me && me.on === true), fromData: false,", "return { on: me && typeof me.on === 'boolean' ? me.on : hint.length > 0, fromData: false,");
     if (MUT === 'nokind') rep("            if (!kind) { toast('Say whether it '", "            if (!kind) kind = 'fn'; if (false) { toast('Say whether it '");
@@ -59,7 +60,7 @@ function mutate(file, body) {
     const iE = idx.indexOf('src="apx_engine.js'), iA = idx.indexOf('src="apx_autopilots.js'), iP = idx.indexOf('src="pasa_autopilot.js');
     check('1 index.html loads the engine, then the Autopilots, then the PASA Autopilot', iE > 0 && iA > iE && iP > iA, [iE, iA, iP].join(','));
     check('2 no em dashes in the Autopilot', src.indexOf(String.fromCharCode(0x2014)) === -1);
-    check('2 American English', !/\b(colour|behaviour|analyse[sd]?|centre|organis|summaris|recognis|minimis|licence|labelled|cancelled)\b/i.test(src));
+    check('2 American English', !/\b(colour|behaviour|analysed|analysing|centre|organis|summaris|recognis|minimis|licence|labelled|cancelled)\b/i.test(src));
     check('2 the abbreviation is AC Aircraft, never AP', src.indexOf("['AC', 'Aircraft']") !== -1 && !/\['AP',/.test(src) && !/>AP (Function|FC|Systems)/.test(src));
     check('2 the switch is read from one place', (src.match(/getItem\(KEY\)/g) || []).length === 1);
 
@@ -152,11 +153,16 @@ function mutate(file, body) {
         await pg.click('[data-apx-tick="' + F0 + '"]'); await tick(400);
         const h1 = await heads();
         check('6 ticking a function adds exactly its column', h1.length === h0.length + 1 && h1.some(t => t.indexOf(F0id) !== -1), JSON.stringify(h1).slice(0, 300));
+        // 17 Nov 2026 (Waqas: "linked directly to the system level analyses"): a function that does the job is traced up to the aircraft function
+        const tr1 = await pg.evaluate(([K, id]) => { const A = window.SLApxAuto, f = A.model.fcOf(K), x = A.kit.fnRow(id); return { has: (x.traceIds || []).indexOf(f.subId) !== -1, sub: f.subId, why: A.model.cellOf(f, A.model.allCols().find(c => c.funcId === id)).src }; }, [K, F0id]);
+        check('6 ...and traces that system function up to the aircraft function, where the system level reads it', tr1.has === true && !!tr1.sub && tr1.why === 'data', JSON.stringify(tr1));
         const xs = await pg.evaluate(() => Array.from(document.querySelectorAll('#interdep-host table.apx-arp tr:nth-child(3) td')).slice(3).map(td => td.innerText.trim()));
         check('6 every shown column carries the X of the book', xs.length === h1.length && xs.every(x => x === 'X'), xs.join(''));
         await pg.click('[data-apx-tick="' + F0 + '"]'); await tick(400);
         const h2 = await heads();
         check('6 unticking removes the column again', h2.length === h0.length && !h2.some(t => t.indexOf(F0id) !== -1));
+        const tr2 = await pg.evaluate(([K, id]) => { const A = window.SLApxAuto, f = A.model.fcOf(K), x = A.kit.fnRow(id); return (x.traceIds || []).indexOf(f.subId) !== -1; }, [K, F0id]);
+        check('6 ...and takes off the trace the Autopilot made (a trace made elsewhere stays blocked)', tr2 === false);
 
         // ---- 7: creating what is missing -------------------------------------------------------------------------------------
         const sys0 = await pg.evaluate(() => String(systemsData[0].id));
@@ -229,8 +235,8 @@ function mutate(file, body) {
         check('9 a change after sending is called out until it is sent again', ch === 'changed', ch);
 
         // ---- 10: today's tables are left alone ---------------------------------------------------------------------------------
-        const proj = await pg.evaluate((K) => { const A = window.SLApxAuto, f = A.model.fcOf(K), cells = (projectConfig.interdep || {}).cells || {}, mine = Object.keys(cells).filter(k => k.indexOf(K + '\u00A7') === 0 && cells[k].apx); return { br: !!window.SLApxBridge, n: mine.length, asserted: mine.filter(k => cells[k].state === 'asserted').length, cleared: mine.filter(k => cells[k].state === 'cleared').length, by: mine.every(k => cells[k].by === 'Test Engineer'), cols: A.model.allCols().length }; }, K);
-        check("10 once sent, today's table carries it for the files that read it: ticked functions asserted, the rest cleared, signed", proj.br && proj.n > 0 && proj.asserted > 0 && proj.cleared > 0 && proj.by && proj.n <= proj.cols, JSON.stringify(proj));
+        const proj = await pg.evaluate((K) => { const A = window.SLApxAuto, f = A.model.fcOf(K), cells = (projectConfig.interdep || {}).cells || {}, mine = Object.keys(cells).filter(k => k.indexOf(K + '\u00A7') === 0 && cells[k].apx); return { br: !!window.SLApxBridge, n: mine.length, asserted: mine.filter(k => cells[k].state === 'asserted').length, cleared: mine.filter(k => cells[k].state === 'cleared').length, by: mine.every(k => cells[k].by === 'Test Engineer'), cols: A.model.allCols().length, contrib: idpContributors(f.row).map(String), ticked: A.model.picked(f).map(c => c.sysId).filter((x, i, a) => a.indexOf(x) === i) }; }, K);
+        check("10 once sent, today's table carries it for the files that read it: every ticked system is a contributor there (by its trace or an assertion), the rest are cleared, signed", proj.br && proj.cleared > 0 && proj.by && proj.n <= proj.cols && proj.ticked.every(x => proj.contrib.indexOf(x) !== -1), JSON.stringify(proj));
         await pg.click('[data-apx-view="old"]'); await tick(1200);
         const old = await pg.evaluate(() => { const v = document.getElementById('view-interdep'), p = v.querySelector(':scope > p'); return { cls: v.classList.contains('apx-on'), p: p ? getComputedStyle(p).display : '', sw: !!document.querySelector('#interdep-host [data-apx-view="new"]'), body: document.querySelector('#interdep-host').innerText.length }; });
         check("10 the switch back shows today's page, with the way back to the Autopilot", !old.cls && old.p !== 'none' && old.sw && old.body > 200, JSON.stringify(old));

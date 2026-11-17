@@ -26,7 +26,7 @@
  * ==========================================================================*/
 (function (root) {
     'use strict';
-    var VERSION = '1.0';
+    var VERSION = '1.1';   // 1.1 17 Nov 2026: the functional failures are the lines the tool added to each system's FHA; each line's effect on its own is written from the CoFFE table
     var A = root.SLApxAuto, X = root.SLApx, M = root.SLApxMac;
     if (!A || !A.kit || !X || !M || !M.model) { if (typeof module !== 'undefined' && module.exports) module.exports = { VERSION: VERSION, missing: true }; return; }
     var K = A.kit, E = K.E, S = K.S, T = K.T, arr = K.arr, safe = K.safe, lc = K.lc, MM = M.model, note = M.note, joinAnd = MM.joinAnd;
@@ -186,6 +186,20 @@
             return { key: key, text: t.charAt(0).toUpperCase() + t.slice(1), on: off[key] !== false, single: parts.length < 2 };
         });
     }
+    // v1.1: what each line does ON ITS OWN, from the table the engineer answered: the case with that one failure and
+    // everything else working. Written onto the lines the Autopilot made; the severity stays the system engineer's.
+    function ownEffects(fc) {
+        var sol = named(fc) && ready(fc) ? solved(fc) : null; if (!sol || sol.error) return 0;
+        var n = 0;
+        MM.allEvents(fc).forEach(function (e) {
+            var row = MM.sysFcRow(MM.linkOf(fc, e.k)); if (!row || !row.apx) return;
+            var i = sol.ds.map(function (d) { return e.st === 'M' ? (d.isM && d.colId + '|M' === e.k) : (!d.isM && d.id + '|' + e.st === e.k); }).indexOf(true);
+            if (i === -1) { M.model.setEffect(row, fc.fcId, 'own', ''); return; }
+            var c = sol.ds.map(function (d, j) { return j === i ? e.st : 'O'; }).join(''), lv = sol.lvl[c];
+            M.model.setEffect(row, fc.fcId, 'own', lv == null ? '' : 'On its own, with the other systems working: ' + lc(levelName(fc, sol, lv)) + ' (CoFFE case ' + (sol.cases.indexOf(c) + 1) + ' of ' + fc.fcId + ').'); n++;
+        });
+        return n;
+    }
     function status(fc) { var r = peek(fc.key) || {}; return r.sent ? { k: 'sent', by: r.sent.by, at: r.sent.at } : r.changedSince ? { k: 'changed' } : Object.keys(r.a1 || {}).length || r.sig || r.wasSent ? { k: 'started' } : { k: 'new' }; }
     function left(fc) {
         var out = [];
@@ -223,6 +237,7 @@
         name = T(name); if (!name) return { ok: false, why: 'Type your name to sign before sending.' };
         var l = left(fc); if (l.length) return { ok: false, why: l[0] };
         var r = rec(fc.key); if (!T(r.outcomes[0])) r.outcomes[0] = fc.desc;
+        M.act.ensureSysFcs(fc); ownEffects(fc);
         r.sent = { by: name, at: K.now() }; delete r.changedSince;
         try { if (root.SLApxBridge && root.SLApxBridge.project) root.SLApxBridge.project(fc, 'cof'); } catch (e) { r.bridgeError = e && e.message ? e.message : String(e); }
         K.save();
@@ -320,11 +335,12 @@
     function stateCard(sol, c) { return '<div class="apx-case">' + c.split('').map(function (s, i) { var d = sol.ds[i]; return '<div class="apx-st ' + (X.isPartial(s) ? 'D' : s) + '"><b>' + E(d.name) + '</b><span>' + E(d.isM ? (s === 'M' ? 'Doing the wrong thing' : 'Working') : MM.stLabel(d, s)) + '</span></div>'; }).join('') + '</div>'; }
     function stepLinks(fc) {
         var n = need(fc, 'Which system FHA failure condition matches each one?'); if (n) return n;
+        var madeNow = M.act.ensureSysFcs(fc); ownEffects(fc);
         var alone = MM.aloneMalf(fc), combo = MM.comboMalf(fc);
-        var body = tableQ43(fc, true)
+        var body = note('', '<b>The tool added each of these to its system\'s FHA by itself</b>, keyed to the system function and traced to this failure condition, with the severity left blank for the system engineer. You can point any of them at a different line of that FHA.' + (madeNow.length ? ' ' + madeNow.length + ' line' + (madeNow.length > 1 ? 's were' : ' was') + ' added just now.' : '')) + tableQ43(fc, true)
             + (alone.length ? note('', E(joinAnd(alone.map(function (m) { return ffId(fc, m.colId, 'M'); }))) + ' causes the failure condition on its own, so it stays out of the CoFFE table. It goes to the ' + E(joinAnd(alone.map(function (m) { return m.sysName; }))) + ' PSSA and becomes its own branch in the fault tree.') : '')
             + (combo.length ? note('', E(joinAnd(combo.map(function (m) { return ffId(fc, m.colId, 'M'); }))) + ' only matters together with other failures, so it gets its own column in the CoFFE table.') : '');
-        return card('Which system FHA failure condition matches each one?', 'The failures come from the builds you set in the MAC Autopilot. Pick the matching line from each system\'s own FHA. If it is not there yet, create it. These are the same links the MAC keeps: a link is never removed by the tool.', body);
+        return card('The system failures, and their lines in each system FHA', 'The failures come from the builds you set in the MAC Autopilot. Each one is a line in its system\'s own FHA. These are the same links the MAC keeps: a link is never removed by the tool.', body);
     }
     function stepOutcomes(fc) {
         var n = need(fc, 'What can happen? List the outcomes, worst first.'); if (n) return n;
@@ -370,6 +386,7 @@
     function stepSummary(fc) {
         var n = need(fc, 'Summary and result'); if (n) return n;
         var sol = named(fc) ? solved(fc) : null; if (!sol || sol.error || !sol.done) return card('Summary and result', 'Finish the questions first.', '');
+        ownEffects(fc);
         var sr = shortest(fc, sol), body = '';
         if (sr) body += note(sr.single ? 'bad' : 'good', '<b>Shortest route to ' + E(lc(outcomeName(fc, 0))) + ': ' + sr.order + ' failure' + (sr.order > 1 ? 's together' : ' alone') + '</b> (' + E(sr.routes.join('; or ')) + '). ' + (sr.single ? 'Finding: a single failure causes a ' + E(fc.sev) + ' failure condition. That is not allowed; the design has to change.' : sr.order === 1 ? 'A single failure causes it.' : 'No single failure causes it.'));
         else body += note('good', 'No mix of these failures causes ' + E(lc(outcomeName(fc, 0))) + '.');
@@ -424,10 +441,10 @@
     }
 
     var api = { VERSION: VERSION,
-        model: { cofCols: cofCols, ready: ready, solved: solved, next: next, outcomes: outcomes, outcomeName: outcomeName, named: named, macSays: macSays, disagreements: disagreements, caseText: caseText, codeOf: codeOf, ffId: ffId, ffRows: ffRows, summary: summaryRows, conclusions: conclusions, fcRows: fcRows, shortest: shortest, gate: gate, gateEvents: gateEvents, mathCheck: mathCheck, target: target, pairs: pairs, indepList: indepList, status: status, left: left, peek: peek, oldVerdicts: oldVerdicts, resName: resName, levelName: levelName, fmt: fmt, evWords: evWords, colById: colById },
+        model: { cofCols: cofCols, ready: ready, solved: solved, next: next, outcomes: outcomes, outcomeName: outcomeName, named: named, macSays: macSays, disagreements: disagreements, caseText: caseText, codeOf: codeOf, ffId: ffId, ffRows: ffRows, summary: summaryRows, conclusions: conclusions, fcRows: fcRows, shortest: shortest, gate: gate, gateEvents: gateEvents, mathCheck: mathCheck, target: target, pairs: pairs, indepList: indepList, status: status, ownEffects: ownEffects, left: left, peek: peek, oldVerdicts: oldVerdicts, resName: resName, levelName: levelName, fmt: fmt, evWords: evWords, colById: colById },
         act: { setOutcome: setOutcome, addOutcome: addOutcome, removeOutcome: removeOutcome, setResultName: setResultName, answer: answer, undo: undo, clearAnswers: clearAnswers, setBudget: setBudget, setIndep: setIndep, send: send, convert: convert },
         tables: { q43: tableQ43, q46: tableQ46, q47: tableQ47, q48: tableQ48, gate: gateHtml, pairs: tablePairs }, _ui: ui };
-    A.register('cof', { name: 'CoFFE', steps: ['Failure condition', 'Link each system failure to its system FHA', 'Name the outcomes', 'Answer the quick questions', 'The full CoFFE table', 'Summary and result', 'Fault tree, budgets and independence', 'Common resource pairs and send'], render: render, click: click, change: change, status: status });
+    A.register('cof', { name: 'CoFFE', steps: ['Failure condition', 'The system failures and their FHA lines', 'Name the outcomes', 'Answer the quick questions', 'The full CoFFE table', 'Summary and result', 'Fault tree, budgets and independence', 'Common resource pairs and send'], render: render, click: click, change: change, status: status });
     try { root.SLApxCof = api; } catch (_) {}
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -23,6 +23,19 @@
  *     its fault tree. A link has a permanent ID. The tool never removes one: when what it points to changes it is kept and
  *     marked for review.
  *
+ * v1.1, Waqas, 17 Nov 2026: "MAC and CoFFE will need a similar interface and these should be linked directly to the
+ * system level analyses, functions created for systems and systems added albeit at the aircraft level should be added to
+ * system level analyses automatically"; on the severity of a line made that way: "how will you determine the severity?
+ * total loss of wheel braking may be contributing to loss of ability to stop the aircraft, but the aircraft might have
+ * sufficient control authority with thrust reverseers and flaps to mitigate it" (confirmed: the tool never sets it).
+ *   - The build step opens with the ask: "Add an assembly group", for one of the ticked system functions.
+ *   - Every assembly is mirrored onto its system (system.assemblies, entries marked apx), so the system level starts
+ *     from the same assemblies.
+ *   - Every loss and wrong action of a set build gets its line in that system's FHA by itself (ensureSysFcs): keyed to
+ *     the system function, traced to the aircraft failure condition, SEVERITY LEFT BLANK for the system engineer, and
+ *     linked with a permanent link. The aircraft-level effect of the line is written from the MAC rules ("contributes
+ *     to ... together with ...") and, once the CoFFE is done, from the CoFFE ("on its own: ...", apx_coffe.js).
+ *
  * WHERE THE BUILD LIVES (one per system function, shared by every failure condition that uses it):
  *   projectConfig.apx.build['fn:<funcId>'] = { groups: [ { id: 'ASM-n' (permanent), name ('' = the system as a whole),
  *       pattern, units: [ { id: 'ASM-n.k', name, side: 'LH' | 'RH' | 'C' } ], pos: 'same' | 'mirror' | 'each',
@@ -40,7 +53,7 @@
  * ==========================================================================*/
 (function (root) {
     'use strict';
-    var VERSION = '1.0';
+    var VERSION = '1.1';   // 1.1 17 Nov 2026: the build step asks first; assemblies are written onto their system; every loss gets its line in the system's FHA by itself, severity left blank
     var A = root.SLApxAuto, X = root.SLApx;
     if (!A || !A.kit || !X) { if (typeof module !== 'undefined' && module.exports) module.exports = { VERSION: VERSION, missing: true }; return; }
     var K = A.kit, E = K.E, S = K.S, T = K.T, arr = K.arr, safe = K.safe, lc = K.lc;
@@ -221,10 +234,10 @@
     }
     // Links kept that no longer match a loss in the MAC rules: never removed, shown for review.
     function orphanLinks(fc) { var r = peek(fc.key); if (!r || !r.links) return []; var live = {}; allEvents(fc).forEach(function (e) { live[e.k] = 1; }); return Object.keys(r.links).filter(function (k) { return !live[k]; }).map(function (k) { return { k: k, link: r.links[k] }; }); }
-    function setLink(fc, k, sysId, fcId) {
+    function setLink(fc, k, sysId, fcId, auto) {
         var r = rec(fc.key), l = r.links[k];
         if (!fcId) return;
-        if (!l) l = r.links[k] = { id: 'LNK-' + nextSeq('lnk'), sysId: S(sysId), fcId: S(fcId), by: K.who(), at: K.now(), review: '' };
+        if (!l) l = r.links[k] = { id: 'LNK-' + nextSeq('lnk'), sysId: S(sysId), fcId: S(fcId), by: auto ? 'the tool' : K.who(), at: K.now(), review: '', auto: !!auto };
         else { if (!Array.isArray(l.was)) l.was = []; if (l.fcId !== S(fcId) || l.sysId !== S(sysId)) { l.was.push({ sysId: l.sysId, fcId: l.fcId, until: K.now() }); l.sysId = S(sysId); l.fcId = S(fcId); l.inTree = false; } l.review = ''; l.by = K.who(); l.at = K.now(); }
         touched(fc.key);
     }
@@ -237,20 +250,62 @@
         rec(fc.key).links[k].inTree = true; rec(fc.key).links[k].review = ''; touched(fc.key);
         return { ok: true };
     }
-    function createSysFc(fc, k, sysId, text) {
+    function traceTo(row, fc) { var t = S(row.acTrace).split(/[,;]/).map(function (x) { return x.trim(); }).filter(Boolean); if (t.indexOf(fc.fcId) === -1) { t.push(fc.fcId); row.acTrace = t.join(', '); return true; } return false; }
+    function createSysFc(fc, k, sysId, text, auto) {
         text = T(text); var sy = sysById(sysId); if (!text) return { ok: false, why: 'Describe the failure condition.' }; if (!sy) return { ok: false, why: 'That system is no longer in the project.' };
         if (!Array.isArray(sy.fha)) sy.fha = [];
         var same = sy.fha.filter(function (r) { return r && T(r.fcDesc).toLowerCase() === text.toLowerCase(); })[0];
-        if (same && same.fcId) { setLink(fc, k, sysId, same.fcId); return { ok: true, existed: true, fcId: S(same.fcId) }; }
+        if (same && same.fcId) { traceTo(same, fc); setLink(fc, k, sysId, same.fcId, auto); return { ok: true, existed: true, fcId: S(same.fcId) }; }
         var col = K.allCols().filter(function (c) { return c.sysId === S(sysId) && k.indexOf(c.colId) === 0; })[0];
-        var row = { internalId: Date.now() + Math.floor(Math.random() * 1000), fcId: '', fcDesc: text, subId: col ? col.funcId : '', phases: fc.row.phases || '', severity: '', acTrace: fc.fcId };
+        // the severity is never set here: one loss is a contributor, and what it is worth depends on what else still works
+        var row = { internalId: Date.now() + Math.floor(Math.random() * 100000), fcId: '', fcDesc: text, subId: col ? col.funcId : '', sysFuncId: col ? col.funcId : '', phases: fc.row.phases || '', severity: '', acTrace: fc.fcId, apx: { by: auto ? 'tool' : K.who(), at: K.now(), from: fc.fcId } };
         var N = root.SLNoDupes, clash = N && N.fhaClash ? safe(function () { return N.fhaClash(row, sy.fha); }, null) : null;
-        if (clash && clash.row && clash.row.fcId) { setLink(fc, k, sysId, clash.row.fcId); return { ok: true, existed: true, fcId: S(clash.row.fcId) }; }
+        if (clash && clash.row && clash.row.fcId) { traceTo(clash.row, fc); setLink(fc, k, sysId, clash.row.fcId, auto); return { ok: true, existed: true, fcId: S(clash.row.fcId) }; }
         try { var an = K.fn('_slAutoNumber'); if (an) an('sysFha', row, { SYS: S(sy.id) }); } catch (_) {}
         if (!row.fcId) { var n = 1, ids = {}; K.systems().forEach(function (s2) { arr(s2.fha).forEach(function (r2) { if (r2 && r2.fcId) ids[S(r2.fcId)] = 1; }); }); while (ids['SFC-' + n]) n++; row.fcId = 'SFC-' + n; }
         sy.fha.push(row);
-        setLink(fc, k, sysId, row.fcId);
-        return { ok: true, fcId: S(row.fcId) };
+        setLink(fc, k, sysId, row.fcId, auto);
+        return { ok: true, fcId: S(row.fcId), made: true };
+    }
+    // the words of a loss as a system failure condition
+    function sysFcText(e) {
+        if (e.st === 'M') return 'Malfunction of ' + e.m.sysName + ' function (' + lc(e.m.fnName) + ')';
+        var d = e.d, fnw = lc(d.fnName), units = unitWords(d, e.st).replace(/^.*?: /, ''), what = d.named ? d.name + ' (' + d.sysName + ', ' + fnw + ')' : d.sysName + ' function (' + fnw + ')';
+        if (e.st === 'F') return 'Total loss of ' + what;
+        if (e.st === 'A' || e.st === 'B') return 'Loss of ' + units + ': ' + what;
+        return 'Partial loss of ' + what + ': ' + units + ' lost';
+    }
+    function sysFcRow(l) { var sy = l ? sysById(l.sysId) : null; return sy ? arr(sy.fha).filter(function (r) { return r && S(r.fcId) === S(l.fcId); })[0] || null : null; }
+    // Every loss and wrong action of the builds set so far gets its line in its system's FHA, linked, by itself.
+    // A loss that already has a link is left alone. Returns the lines it made.
+    function ensureSysFcs(fc) {
+        var made = [];
+        if (!ready(fc)) return made;
+        allEvents(fc).forEach(function (e) { if (linkOf(fc, e.k)) return; var r = createSysFc(fc, e.k, e.sysId, sysFcText(e), true); if (r.ok) made.push({ k: e.k, fcId: r.fcId, existed: !!r.existed }); });
+        contributions(fc);
+        if (made.length) K.save();
+        return made;
+    }
+    // What each line contributes to, in words, from the MAC rules. Written onto lines the Autopilot made (row.apx), per
+    // aircraft failure condition, and joined into the line's aircraft-level effect unless a person has rewritten it.
+    function setEffect(row, fcId, part, text) {
+        if (!row || !row.apx) return;
+        if (!row.apx.eff || typeof row.apx.eff !== 'object') row.apx.eff = {};
+        if (!row.apx.eff[fcId]) row.apx.eff[fcId] = {};
+        if (text) row.apx.eff[fcId][part] = text; else delete row.apx.eff[fcId][part];
+        var joined = Object.keys(row.apx.eff).map(function (f) { var x = row.apx.eff[f]; return [x.own, x.with].filter(Boolean).join(' '); }).filter(Boolean).join(' ');
+        if (!T(row.effAc) || row.effAc === row.apx.wrote) { row.effAc = joined; row.apx.wrote = joined; }
+    }
+    function contributions(fc) {
+        var sol = solved(fc); if (!sol || sol.error || !sol.done) return;
+        var br = breaking(sol), by = {};
+        br.forEach(function (c) { for (var i = 0; i < c.length; i++) { if (c[i] === 'O') continue; var k = sol.ds[i].id + '|' + c[i], others = []; for (var j = 0; j < c.length; j++) if (j !== i && c[j] !== 'O') others.push(unitWords(sol.ds[j], c[j]) + ' lost'); (by[k] = by[k] || []).push(others.join(' and ')); } });
+        allEvents(fc).forEach(function (e) {
+            var row = sysFcRow(linkOf(fc, e.k)); if (!row || !row.apx) return;
+            var list = by[e.k], alone = e.st === 'M' && aloneMalf(fc).some(function (m) { return m.colId + '|M' === e.k; });
+            var t = alone ? 'Causes ' + fc.fcId + ' (' + fc.desc + ') on its own.' : !list ? 'Not in any combination that causes ' + fc.fcId + ' (' + fc.desc + ').' : list.some(function (x) { return !x; }) ? 'Causes ' + fc.fcId + ' (' + fc.desc + ') on its own.' : 'Contributes to ' + fc.fcId + ' (' + fc.desc + ') together with: ' + list.join('; or ') + '.';
+            setEffect(row, fc.fcId, 'with', t);
+        });
     }
 
     // ---- the fault tree against the MAC --------------------------------------------------------------------------------------
@@ -305,9 +360,20 @@
     }
 
     // ---- actions ------------------------------------------------------------------------------------------------------------
-    var ui = { way: 'hand', tryOff: {}, told: '', doc: '', busy: '', newFc: {}, sddWay: 'ai', sddDoc: '' };
+    var ui = { way: 'hand', tryOff: {}, told: '', doc: '', busy: '', newFc: {}, sddWay: 'ai', sddDoc: '', ask: { col: '', name: '', pat: '' } };
     function stamp(g, src, ref) { g.src = src || 'hand'; g.ref = T(ref || ''); g.by = K.who(); g.at = K.now(); }
-    function affected(colId) { K.fcs().forEach(function (f) { if (K.picked(f).some(function (c) { return c.colId === colId; })) { sync(f); var r = peek(f.key); if (r && r.sent) touched(f.key); } }); }
+    // Every assembly of every set build of a system's functions, written onto the system (entries marked apx; anything
+    // else on that list is left alone). Same IDs as here.
+    function mirror(colId) {
+        var col = K.colOf(colId); if (!col) return;
+        var sy = sysById(col.sysId); if (!sy) return;
+        var keep = arr(sy.assemblies).filter(function (a) { return a && !a.apx; }), mine = [];
+        K.allCols().filter(function (c) { return c.sysId === col.sysId; }).forEach(function (c) {
+            groupsOf(c.colId).forEach(function (g) { var P = patOf(g); if (!P) return; unitNames(g).forEach(function (n, k) { var u = g.units[k] || {}; mine.push({ id: u.id || (g.id + '.' + (k + 1)), name: n, side: u.side || 'C', groupId: g.id, group: T(g.name), funcId: c.funcId, build: g.pattern, apx: true }); }); });
+        });
+        sy.assemblies = keep.concat(mine);
+    }
+    function affected(colId) { mirror(colId); K.fcs().forEach(function (f) { if (K.picked(f).some(function (c) { return c.colId === colId; })) { sync(f); var r = peek(f.key); if (r && r.sent) touched(f.key); } }); }
     function setPattern(fc, colId, gid, pattern, src, ref) {
         var g = gid ? groupById(colId, gid) : null; if (!g) g = newGroup(colId);
         if (pattern && !PATTERNS[pattern]) return g;
@@ -320,8 +386,8 @@
         return g;
     }
     function setPos(fc, colId, gid, pos) { var g = groupById(colId, gid); if (!g || !POS.some(function (p) { return p[0] === pos; })) return; g.pos = pos; stamp(g, g.src === 'sdd' ? 'hand' : g.src, g.ref); affected(colId); K.save(); }
-    function setGroupName(fc, colId, gid, name) { var g = groupById(colId, gid); if (!g) return; g.name = T(name); K.save(); }
-    function setUnit(fc, colId, gid, k, field, v) { var g = groupById(colId, gid); if (!g || !g.units[k]) return; if (field === 'side') g.units[k].side = ['LH', 'RH', 'C'].indexOf(v) !== -1 ? v : 'C'; else g.units[k].name = T(v); K.save(); }
+    function setGroupName(fc, colId, gid, name) { var g = groupById(colId, gid); if (!g) return; g.name = T(name); mirror(colId); K.save(); }
+    function setUnit(fc, colId, gid, k, field, v) { var g = groupById(colId, gid); if (!g || !g.units[k]) return; if (field === 'side') g.units[k].side = ['LH', 'RH', 'C'].indexOf(v) !== -1 ? v : 'C'; else g.units[k].name = T(v); mirror(colId); K.save(); }
     function addGroup(fc, colId) { var gs = groupsOf(colId); if (!gs.length) newGroup(colId); var g = newGroup(colId); affected(colId); K.save(); return g; }
     function removeGroup(fc, colId, gid) { var b = builds()[colId]; if (!b || b.groups.length < 2) return false; var g = groupById(colId, gid); if (!g) return false; if (!Array.isArray(b.removed)) b.removed = []; b.removed.push({ id: g.id, name: g.name, at: K.now(), by: K.who() }); b.groups = b.groups.filter(function (x) { return x.id !== gid; }); affected(colId); K.save(); return true; }
     function setMirror(fc, v) { var r = rec(fc.key); r.mirror = !!v; sync(fc); touched(fc.key); }
@@ -341,6 +407,7 @@
     function send(fc, name) {
         name = T(name); if (!name) return { ok: false, why: 'Type your name to sign before sending.' };
         var l = left(fc); if (l.length) return { ok: false, why: l[0] };
+        ensureSysFcs(fc);
         var r = rec(fc.key), st = macStatus(fc);
         r.sent = { by: name, at: K.now(), status: st.k, statusText: st.t }; delete r.changedSince;
         try { if (root.SLApxBridge && root.SLApxBridge.project) root.SLApxBridge.project(fc, 'mac'); } catch (e) { r.bridgeError = e && e.message ? e.message : String(e); }
@@ -522,9 +589,20 @@
         if (ui.way === 'doc') ai = dl.length ? '<div class="apx-add" style="grid-template-columns:auto minmax(0,1fr) auto;margin:0 0 12px"><b>Design document</b>' + sel('doc', [['', 'Pick the architecture description or the SDD']].concat(dl.map(function (d) { return [d.name, d.name]; })), ui.doc) + '<button class="apx-btn" data-apx-x="propose|doc"' + (ui.busy ? ' disabled' : '') + '>' + (ui.busy === 'doc' ? 'The AI is reading it...' : 'Read it and propose the builds') + '</button></div>' : note('warn', 'This project has no source document with readable text yet. Add the architecture description or the SDD on the AI inputs page, then come back. Until then, set the build by hand or tell the AI in your words.');
         if (ui.way === 'told') ai = '<div style="margin:0 0 12px"><textarea data-apx-xc="told" rows="3" style="width:100%;box-sizing:border-box;font:inherit;padding:8px 10px;border:1px solid var(--color-border-strong,#14171C);border-radius:9px" placeholder="For example: the flight control system has a left and a right aileron, and roll spoilers on each wing. Each wing\'s surfaces have their own actuators." aria-label="The build in your words">' + E(ui.told) + '</textarea><button class="apx-btn" style="margin-top:6px" data-apx-x="propose|told"' + (ui.busy ? ' disabled' : '') + '>' + (ui.busy === 'told' ? 'The AI is working it out...' : 'Propose the builds from my words') + '</button></div>';
         if (ui.way !== 'hand') ai += '<p style="margin:0 0 12px;font-size:12.5px">The AI proposes; nothing is set until you accept it. A build that came from words or a document is still <b>Assumed</b> until it is compared with the SDD in the last step.</p>';
+        var unset = base.filter(function (c) { return !groupsOf(c.colId).some(function (g) { return patOf(g); }); });
+        if (!ui.ask.col || !base.some(function (c) { return c.colId === ui.ask.col; })) ui.ask.col = (unset[0] || base[0]).colId;
+        var ask = '<div class="apx-ask"><div class="apx-askq">Add an assembly group</div>'
+            + '<div class="apx-askrow">' + sel('askcol', base.map(function (c) { return [c.colId, c.sysName + ': ' + lc(c.fnName) + (groupsOf(c.colId).some(function (g) { return patOf(g); }) ? '' : ' (not set yet)')]; }), ui.ask.col, ' style="width:100%" aria-label="System function"')
+            + '<input type="text" data-apx-xc="askname" value="' + E(ui.ask.name) + '" placeholder="Group name, for example: Ailerons. Leave empty when the system is one group" aria-label="Assembly group name"></div>'
+            + '<div class="apx-askrow one"><b>How is it built?</b>' + sel('askpat', [['', 'Pick how it is built']].concat(Object.keys(PATTERNS).map(function (k) { return [k, PATTERNS[k].label]; })), ui.ask.pat, ' style="width:100%" aria-label="How it is built"') + '</div>'
+            + '<div><button class="apx-btn p" data-apx-x="askadd">Add it</button></div>'
+            + '<p style="margin:6px 0 0;font-size:12.5px">Then name each assembly and its side below, as your design names them. The assemblies are added to that system, so its own analysis starts from the same ones. A system can have several groups, for example ailerons and roll spoilers.</p></div>'
+            + (unset.length ? '<p style="margin:12px 0 0"><b>Still to set:</b> ' + E(joinAnd(unset.map(function (c) { return c.sysName; }))) + '</p>' : '')
+            + (base.length > unset.length ? '<p style="margin:18px 0 8px;font-weight:700">Set so far</p>' : '');
         var rows = base.map(function (c) {
             var gs = groupsOf(c.colId), pr = peekProp(c.colId), h = '';
-            var list = gs.length ? gs : [null];
+            if (!gs.length && !pr) return '';
+            var list = gs.length ? gs : [];
             h += list.map(function (g) {
                 var P = patOf(g), gid = g ? g.id : '', key = c.colId + '|' + gid;
                 var left0 = (list.length > 1 || (g && T(g.name)) ? '<input type="text" data-apx-xc="gname|' + E(key) + '" value="' + E(g ? g.name : '') + '" placeholder="Assembly group, for example: Ailerons" aria-label="Assembly group name">' : '<span style="font-size:12.5px">The system as one group</span>')
@@ -539,11 +617,10 @@
                 return '<div class="apx-grp"><div>' + left0 + '</div><div>' + right + '</div></div>';
             }).join('');
             if (pr) h += note('', '<span class="apx-tag">AI proposes</span>' + pr.groups.map(function (p) { return '<b>' + E(p.name || c.sysName) + ':</b> ' + E(PATTERNS[p.pattern].label) + ' (' + E(p.units.map(function (u, k) { return (u.name || PATTERNS[p.pattern].units[k]) + (u.side !== 'C' ? ' ' + u.side : ''); }).join(', ')) + ')' + (p.quote ? '. From ' + E(pr.doc || 'your words') + (p.where ? ', ' + E(p.where) : '') + ': "' + E(p.quote) + '"' : ''); }).join('<br>') + '<div style="margin-top:8px"><button class="apx-btn p" data-apx-x="accept|' + E(c.colId) + '">Accept</button> <button class="apx-btn" data-apx-x="dismiss|' + E(c.colId) + '">Dismiss</button></div>');
-            h += '<button class="apx-btn" style="margin-top:4px" data-apx-x="addgrp|' + E(c.colId) + '">Split into assembly groups (for example ailerons and roll spoilers)</button>';
             return '<div class="apx-bld' + (gs.length && gs.every(function (g) { return patOf(g); }) ? ' on' : '') + '"><div class="apx-nm">' + E(c.sysName) + ' <span class="apx-tag" style="font-weight:600">' + E(c.funcId) + '</span><span style="font-weight:400"> ' + E(c.fnName) + '</span></div>' + h + '</div>';
         }).join('');
         var ds = macCols(fc), mir = ds.some(function (d) { return d.states.indexOf('A') !== -1; }) ? '<div class="apx-eff" style="margin:14px 0 0;grid-template-columns:minmax(0,1fr) minmax(260px,360px)"><div><b>Do left and right mirror each other across the aircraft?</b><div style="font-size:12.5px">If yes, one answer covers a mix and its mirror image.</div></div><div class="apx-sw" role="group" aria-label="Mirror"><button type="button" class="' + ((peek(fc.key) || {}).mirror !== false ? 'on' : '') + '" data-apx-x="mirror|1">Yes, they mirror</button><button type="button" class="' + ((peek(fc.key) || {}).mirror === false ? 'on' : '') + '" data-apx-x="mirror|0">No, ask both sides</button></div></div>' : '';
-        return card('How is each system built?', 'Set the build for each ticked system, at assembly level. It tells the tool what "partly working" really means. Names and sides come from your design, never from the tool.', ways + ai + rows + mir + statusNote(fc));
+        return card('How is each system built?', 'Add the assembly groups of each ticked system and say how each is built. It tells the tool what "partly working" really means. Names and sides come from your design, never from the tool.', ways + ai + ask + rows + mir + statusNote(fc));
     }
     function stepGame(fc) {
         var n = need(fc, 'Switch it off'); if (n) return n;
@@ -618,6 +695,7 @@
     function stepLinks(fc) {
         var n = need(fc, 'Links down to the system fault trees'); if (n) return n;
         var sol = ready(fc) ? solved(fc) : null; if (!sol || sol.error || !sol.done) return card('Links down to the system fault trees', 'Finish the switch-off questions first.', '');
+        var madeNow = ensureSysFcs(fc);
         var evs = linkEvents(fc), rows = evs.map(function (e) {
             var st = linkState(fc, e), l = st.link;
             var pick = linkPicker(fc, e);
@@ -626,7 +704,7 @@
             return '<tr><td class="l"><b>' + E(e.what) + '</b></td><td class="l">' + pick + '</td><td class="l">' + E(tree) + '</td><td class="l">' + (l ? '<div style="font-size:12px">' + E(l.id) + '</div>' : '') + act + '</td></tr>';
         }).join('');
         var orph = orphanLinks(fc), nrev = evs.filter(function (e) { return linkState(fc, e).review; }).length + orph.length;
-        var body = note('', '<b>There is no MAC below the aircraft level.</b> Each loss in a MAC rule links down to that system\'s own failure condition and its fault tree, which is built from the architecture. Something like "2 of 3 computers" is a gate inside that tree, not a MAC rule. Make each link when you know which failure condition it is.')
+        var body = note('', '<b>There is no MAC below the aircraft level.</b> Each loss in a MAC rule links down to that system\'s own failure condition and its fault tree, which is built from the architecture. Something like "2 of 3 computers" is a gate inside that tree, not a MAC rule.') + note('', '<b>The tool adds each loss to its system\'s FHA by itself</b>, keyed to the system function and traced to this failure condition. The severity is left blank: one loss is a contributor, and what it is worth depends on what else still works, so the system engineer classifies it. You can point a link at a different line of that FHA.' + (madeNow.length ? ' ' + madeNow.length + ' line' + (madeNow.length > 1 ? 's were' : ' was') + ' added just now.' : ''))
             + '<div class="apx-tw"><table data-sl-worksheet="1" class="apx-arp"><tr><th>Loss in the MAC rules</th><th>System failure condition</th><th>Its fault tree</th><th>Link</th></tr>' + (rows || '<tr><td class="l" colspan="4">No loss to link: nothing breaks this MAC.</td></tr>') + '</table></div>'
             + (orph.length ? note('warn', '<b>Links kept from before.</b> ' + orph.map(function (o) { return E(o.link.id) + ' to ' + E(o.link.fcId) + ': its loss is no longer in the MAC rules.'; }).join(' ') + ' The tool does not remove links. They stay on file.') : '')
             + note(nrev ? 'warn' : 'good', '<b>Links are never broken.</b> Each one has a permanent ID. If a build changes, a tree is rebuilt or the MAC is redone, the link stays and is marked for review. The tool never removes one by itself.' + (nrev ? ' ' + nrev + ' link' + (nrev > 1 ? 's need' : ' needs') + ' review now.' : ''));
@@ -679,6 +757,17 @@
         if (action === 'way') { ui.way = arg; return true; }
         if (action === 'sddway') { ui.sddWay = arg; return true; }
         if (action === 'addgrp') { addGroup(fc, arg); return true; }
+        if (action === 'askadd') {
+            var ac = ui.ask.col, ap = ui.ask.pat, an = T(K.val('[data-apx-xc="askname"]') || ui.ask.name);
+            if (!ac) { K.toast('Pick the system function first.', 'warning'); return false; }
+            if (!PATTERNS[ap]) { K.toast('Say how it is built.', 'warning'); return false; }
+            var have = groupsOf(ac), free = have.filter(function (g0) { return !patOf(g0); })[0];
+            if (!an && have.some(function (g0) { return patOf(g0) && !T(g0.name); })) { K.toast('That system already has its one group. Give this one a name to add another.', 'warning'); return false; }
+            if (an && have.some(function (g0) { return T(g0.name).toLowerCase() === an.toLowerCase(); })) { K.toast('That system already has a group with that name.', 'warning'); return false; }
+            var ng = free || newGroup(ac); ng.name = an; setPattern(fc, ac, ng.id, ap, 'hand', '');
+            ui.ask.name = ''; ui.ask.pat = '';
+            return true;
+        }
         if (action === 'delgrp') { a = arg.split('|'); removeGroup(fc, a[0], a[1]); return true; }
         if (action === 'mirror') { setMirror(fc, arg === '1'); return true; }
         if (action === 'accept') { acceptProposal(fc, arg); return true; }
@@ -710,6 +799,9 @@
     }
     function change(action, arg, el, fc) {
         var a, v = el.value;
+        if (action === 'askcol') { ui.ask.col = v; return false; }
+        if (action === 'askpat') { ui.ask.pat = v; return false; }
+        if (action === 'askname') { ui.ask.name = v; return false; }
         if (action === 'doc') { ui.doc = v; return false; }
         if (action === 'sdddoc') { ui.sddDoc = v; return false; }
         if (action === 'told') { ui.told = v; return false; }
@@ -727,8 +819,8 @@
     }
 
     var api = { VERSION: VERSION, PATTERNS: PATTERNS,
-        model: { macCols: macCols, ready: ready, solved: solved, breaking: breaking, rules: rulesOf, ruleWords: ruleWords, caseText: caseText, unitWords: unitWords, stLabel: stLabel, lanes: lanes, malfList: malfList, aloneMalf: aloneMalf, comboMalf: comboMalf, left: left, status: status, macStatus: macStatus, linkEvents: linkEvents, allEvents: allEvents, sysById: sysById, joinAnd: joinAnd, unitsOff: unitsOff, linkOf: linkOf, linkState: linkState, orphanLinks: orphanLinks, treeCheck: treeCheck, cutSets: cutSets, groupsOf: groupsOf, lossBase: lossBase, sysGroups: sysGroups, peek: peek, conversion: conversion, oldRules: oldRules, docs: docs, acTree: acTree, rulesTable: rulesTable },
-        act: { setPattern: setPattern, setPos: setPos, setGroupName: setGroupName, setUnit: setUnit, addGroup: addGroup, removeGroup: removeGroup, setMirror: setMirror, answer: answer, undo: undo, clearAnswers: clearAnswers, setWhy: setWhy, setEv: setEv, setMalf: setMalf, setLink: setLink, linkIntoTree: linkIntoTree, createSysFc: createSysFc, setSdd: setSdd, resolveSdd: resolveSdd, send: send, propose: propose, acceptProposal: acceptProposal, dismissProposal: dismissProposal, readSdd: readSdd, convert: convert, cleanProposal: cleanProposal },
+        model: { macCols: macCols, ready: ready, solved: solved, breaking: breaking, rules: rulesOf, ruleWords: ruleWords, caseText: caseText, unitWords: unitWords, stLabel: stLabel, lanes: lanes, malfList: malfList, aloneMalf: aloneMalf, comboMalf: comboMalf, left: left, status: status, macStatus: macStatus, linkEvents: linkEvents, sysFcText: sysFcText, sysFcRow: sysFcRow, contributions: contributions, setEffect: setEffect, allEvents: allEvents, sysById: sysById, joinAnd: joinAnd, unitsOff: unitsOff, linkOf: linkOf, linkState: linkState, orphanLinks: orphanLinks, treeCheck: treeCheck, cutSets: cutSets, groupsOf: groupsOf, lossBase: lossBase, sysGroups: sysGroups, peek: peek, conversion: conversion, oldRules: oldRules, docs: docs, acTree: acTree, rulesTable: rulesTable },
+        act: { setPattern: setPattern, setPos: setPos, setGroupName: setGroupName, setUnit: setUnit, addGroup: addGroup, removeGroup: removeGroup, setMirror: setMirror, answer: answer, undo: undo, clearAnswers: clearAnswers, setWhy: setWhy, setEv: setEv, setMalf: setMalf, setLink: setLink, linkIntoTree: linkIntoTree, createSysFc: createSysFc, ensureSysFcs: ensureSysFcs, mirror: mirror, setSdd: setSdd, resolveSdd: resolveSdd, send: send, propose: propose, acceptProposal: acceptProposal, dismissProposal: dismissProposal, readSdd: readSdd, convert: convert, cleanProposal: cleanProposal },
         linkPicker: linkPicker, click: click, change: change, style: style, note: note, sel: sel, _ui: ui };
     A.register('mac', { name: 'MAC', steps: ['Failure condition', 'How each system is built', 'Switch it off', 'What the tool worked out', 'Wrong actions that cause it', 'The three lanes', 'Links down to the system fault trees', 'Check the fault tree against the MAC', 'Add the SDD, compare and send'], render: render, click: click, change: change, status: status });
     try { root.SLApxMac = api; } catch (_) {}

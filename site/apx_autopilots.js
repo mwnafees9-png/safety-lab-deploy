@@ -48,7 +48,7 @@
  * ==========================================================================*/
 (function (root) {
     'use strict';
-    var VERSION = '1.2';   // 1.2 16 Nov 2026: the Autopilot ASKS for each system and its function, and whether it is a resource system; a resource system is a row of Table Q.4-2, never a column of Table Q.4-1; no resource is ticked by the tool.   // 1.1 16 Nov 2026: a field in a row lines up with its label and its button (the site's own bottom margin on fields is taken off inside the Autopilots)
+    var VERSION = '1.3';   // 1.3 17 Nov 2026: a function that does the job is traced up to the aircraft function when it is ticked or added here (and the trace the Autopilot made comes off with the tick); a resource's providing function is written where the architecture reads it (providedByFunctions).   // 1.2 16 Nov 2026: the Autopilot ASKS for each system and its function, and whether it is a resource system; a resource system is a row of Table Q.4-2, never a column of Table Q.4-1; no resource is ticked by the tool.   // 1.1 16 Nov 2026: a field in a row lines up with its label and its button (the site's own bottom margin on fields is taken off inside the Autopilots)
     function g(n) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(n); if (v !== undefined) return v; } } catch (_) {} try { return root[n]; } catch (_) { return undefined; } }
     function arr(v) { return Array.isArray(v) ? v : []; }
     function S(v) { return v == null ? '' : String(v); }
@@ -136,7 +136,7 @@
     function isResSys(x) { return !!x && x.role === 'resource'; }
     // who provides a resource, in words: the system and, where it is set, its function
     function providerText(r) {
-        var names = providerNames(r), fid = S(r.row.providedByFn), f = null;
+        var names = providerNames(r), fid = S(r.row.providedByFn || arr(r.row.providedByFunctions)[0] || ''), f = null;
         if (fid) systems().forEach(function (x) { arr(x.functions).forEach(function (y) { if (y && S(y.funcId) === fid) f = y; }); });
         return names.length ? names.join(', ') + (f ? ': ' + lc(T(f.funcName || f.funcId)) : '') : '';
     }
@@ -247,6 +247,25 @@
         s.functions.push(row);
         return { ok: true, funcId: S(row.funcId) };
     }
+    // v1.3 (Waqas, 17 Nov 2026: what is added at the aircraft level "should be added to system level analyses automatically",
+    // "linked directly"): a system function that does the job for this aircraft function is traced up to it, the same
+    // trace its own page writes. The record remembers the traces the Autopilot made, so unticking takes that one off again.
+    function fnRow(funcId) { var hit = null; systems().forEach(function (x) { arr(x.functions).forEach(function (y) { if (y && S(y.funcId) === S(funcId)) hit = y; }); }); return hit; }
+    function traceUp(fc, funcId) {
+        var x = fnRow(funcId); if (!x || !fc.subId) return false;
+        if (!Array.isArray(x.traceIds)) x.traceIds = x.traceId ? [x.traceId] : [];
+        if (x.traceIds.indexOf(fc.subId) !== -1) return false;
+        x.traceIds.push(fc.subId);
+        var r = rec(fc.key); if (!r.madeTrace || typeof r.madeTrace !== 'object') r.madeTrace = {};
+        r.madeTrace['fn:' + funcId] = fc.subId;
+        return true;
+    }
+    function traceDown(fc, colId) {
+        var r = rec(fc.key), sub = r.madeTrace && r.madeTrace[colId]; if (!sub) return false;
+        var x = fnRow(colId.replace(/^fn:/, '')); if (x && Array.isArray(x.traceIds)) x.traceIds = x.traceIds.filter(function (t) { return t !== sub; });
+        delete r.madeTrace[colId];
+        return true;
+    }
     // A resource with who provides it: the system (made a resource system) and that system's function, created if missing.
     function addResourceFull(name, sysName, fnName) {
         var r = addResource(name); if (!r.ok) return r;
@@ -255,7 +274,7 @@
         var s2 = addSystem(sysName, 'res'); if (!s2.ok) return s2;
         if (!Array.isArray(row.providedBy)) row.providedBy = [];
         if (row.providedBy.map(S).indexOf(S(s2.system.id)) === -1) row.providedBy.push(s2.system.id);
-        if (T(fnName)) { var f2 = addFunction(s2.system.id, fnName); if (!f2.ok) return f2; row.providedByFn = f2.funcId; }
+        if (T(fnName)) { var f2 = addFunction(s2.system.id, fnName); if (!f2.ok) return f2; row.providedByFn = f2.funcId; if (!Array.isArray(row.providedByFunctions)) row.providedByFunctions = []; if (row.providedByFunctions.indexOf(f2.funcId) === -1) row.providedByFunctions.push(f2.funcId); }
         r.system = s2.system;
         return r;
     }
@@ -283,9 +302,14 @@
         var col = colOf(colId); if (!col) return;
         var c = cellOf(fc, col), r = rec(fc.key);
         ui.blocked = '';
-        if (c.on && c.locked) { ui.blocked = colId; return; }
+        if (c.on && c.locked) {
+            // a link the Autopilot made itself comes off with the tick; any other link has to be fixed where it lives
+            if (!traceDown(fc, colId)) { ui.blocked = colId; return; }
+            c = cellOf(fc, col);
+            if (c.on && c.locked) { ui.blocked = colId; touched(fc.key); return; }
+        }
         if (c.on) { delete r.cols[colId]; if (c.src === 'earlier') r.off[colId] = true; }
-        else { r.cols[colId] = { role: role === 'fails' ? 'fails' : 'does', how: 'loss' }; delete r.off[colId]; }
+        else { r.cols[colId] = { role: role === 'fails' ? 'fails' : 'does', how: 'loss' }; delete r.off[colId]; if (role !== 'fails') traceUp(fc, col.funcId); }
         touched(fc.key);
     }
     function setRole(fc, colId, role, how) {
@@ -378,7 +402,7 @@
     }
     function tickRow(fc, c, stepRole) {
         var x = cellOf(fc, c), right = '';
-        if (x.src === 'data') right = '<span class="apx-tag">From the project</span>' + E(x.why) + (ui.blocked === c.colId ? '<div class="apx-note bad" style="margin:8px 0 0">Can\'t untick: the project says ' + E(x.detail || x.why) + '. Fix that link first, then it can come off this table.</div>' : '');
+        if (x.src === 'data') right = '<span class="apx-tag">' + (((peek(fc.key) || {}).madeTrace || {})[c.colId] ? 'Linked here' : 'From the project') + '</span>' + E(x.why) + (ui.blocked === c.colId ? '<div class="apx-note bad" style="margin:8px 0 0">Can\'t untick: the project says ' + E(x.detail || x.why) + '. Fix that link first, then it can come off this table.</div>' : '');
         else if (x.src === 'earlier') right = '<span class="apx-tag">Earlier work</span>' + E(x.why);
         else if (x.proposal) right = '<span class="apx-tag">AI suggests</span>' + E(x.proposal.why || 'it feeds this failure condition') + ' <button class="apx-btn" data-apx-prop="' + E(c.colId) + '|1">Accept</button> <button class="apx-btn" data-apx-prop="' + E(c.colId) + '|0">Dismiss</button>';
         if (x.on && stepRole === 'fails') right = '<select data-apx-how="' + E(c.colId) + '" aria-label="How it causes it"><option value="loss"' + (x.how === 'loss' ? ' selected' : '') + '>By not working (loss)</option><option value="malfunction"' + (x.how === 'malfunction' ? ' selected' : '') + '>By doing the wrong thing (malfunction)</option></select> ' + right;
@@ -519,7 +543,7 @@
         else if (d.apxRes) resTick(fc, d.apxRes);
         else if (d.apxFeed) { var fd = d.apxFeed.split('|'); feed(fc, fd[0], fd.slice(1).join('|')); }
         else if (d.apxEff) ui.eff += Number(d.apxEff);
-        else if (d.apxAddfn) { var a = d.apxAddfn.split('|'), r1 = addFunction(a[0], val('[data-apx-newfn="' + a[0] + '"]')); if (!r1.ok) { toast(r1.why, 'warning'); return; } if (r1.existed) toast('That function is already in this system. It is ticked here instead of being added again.'); ui.open[a[0]] = true; var c1 = cellOf(fc, colOf('fn:' + r1.funcId) || { colId: 'fn:' + r1.funcId, funcId: r1.funcId }); if (!c1.on) { rec(fc.key).cols['fn:' + r1.funcId] = { role: a[1] === 'fails' ? 'fails' : 'does', how: 'loss' }; } touched(fc.key); }
+        else if (d.apxAddfn) { var a = d.apxAddfn.split('|'), r1 = addFunction(a[0], val('[data-apx-newfn="' + a[0] + '"]')); if (!r1.ok) { toast(r1.why, 'warning'); return; } if (r1.existed) toast('That function is already in this system. It is ticked here instead of being added again.'); ui.open[a[0]] = true; var c1 = cellOf(fc, colOf('fn:' + r1.funcId) || { colId: 'fn:' + r1.funcId, funcId: r1.funcId }); if (!c1.on) { rec(fc.key).cols['fn:' + r1.funcId] = { role: a[1] === 'fails' ? 'fails' : 'does', how: 'loss' }; if (a[1] !== 'fails') traceUp(fc, r1.funcId); } touched(fc.key); }
         else if (d.apxKind) { var kk = d.apxKind.split('|'); ui.kind[kk[0]] = kk[1]; }
         else if (d.apxAddsys) {
             var nm = T(val('[data-apx-newsys="name"]')), fnm = T(val('[data-apx-newsys="fn"]')), rnm = T(val('[data-apx-newsys="res"]')), known = sysByName(nm), kind = ui.kind[d.apxAddsys] || (known && known.role === 'resource' ? 'res' : '');
@@ -536,7 +560,7 @@
                 var r2 = addSystem(nm, 'fn'); if (!r2.ok) { toast(r2.why, 'warning'); return; }
                 if (r2.existed) toast('A system with that name is already in the project. The function is added to it.');
                 var r3 = addFunction(r2.system.id, fnm); if (!r3.ok) { toast(r3.why, 'warning'); return; }
-                ui.open[S(r2.system.id)] = true; rec(fc.key).cols['fn:' + r3.funcId] = { role: d.apxAddsys === 'fails' ? 'fails' : 'does', how: 'loss' };
+                ui.open[S(r2.system.id)] = true; rec(fc.key).cols['fn:' + r3.funcId] = { role: d.apxAddsys === 'fails' ? 'fails' : 'does', how: 'loss' }; if (d.apxAddsys !== 'fails') traceUp(fc, r3.funcId);
             }
             ui.draft.name = ''; ui.draft.fn = ''; ui.draft.res = ''; delete ui.kind[d.apxAddsys]; touched(fc.key);
         }
@@ -626,7 +650,7 @@
         model: { fcs: fcs, fcOf: fcOf, allCols: allCols, cellOf: cellOf, picked: picked, resources: resources, resState: resState, resPicked: resPicked, effectRows: effectRows, craText: craText, left: left, status: status, MODES: MODES },
         act: { addResourceFull: addResourceFull, tick: tick, setRole: setRole, proposal: proposal, resTick: resTick, feed: feed, mode: mode, setCra: setCra, send: send, addSystem: addSystem, addFunction: addFunction, addResource: addResource },
         tables: { q41: tableQ41, q42: tableQ42, b3: tableB3 }, _ui: ui, _html: html, register: register, setAp: setAp,
-        kit: { derived: derived, isResSys: isResSys, providerText: providerText, g: g, arr: arr, S: S, E: E, T: T, lc: lc, safe: safe, fn: fn, pc: pc, now: now, who: who, save: save, toast: toast, store: store, card: card, preview: preview, abbr: abbr, style: style, fcs: fcs, fcOf: fcOf, curFc: curFc, systems: systems, allCols: allCols, colOf: colOf, cellOf: cellOf, picked: picked, resources: resources, resState: resState, resPicked: resPicked, providerNames: providerNames, acFnName: acFnName, acFnLabel: acFnLabel, fcWord: fcWord, status: status, apStatus: apStatus, peek: peek, ui: ui, draw: function () { draw(); }, val: function (sel) { return val(sel); }, rerender: function () { rerender(); } } };
+        kit: { traceUp: traceUp, fnRow: fnRow, derived: derived, isResSys: isResSys, providerText: providerText, g: g, arr: arr, S: S, E: E, T: T, lc: lc, safe: safe, fn: fn, pc: pc, now: now, who: who, save: save, toast: toast, store: store, card: card, preview: preview, abbr: abbr, style: style, fcs: fcs, fcOf: fcOf, curFc: curFc, systems: systems, allCols: allCols, colOf: colOf, cellOf: cellOf, picked: picked, resources: resources, resState: resState, resPicked: resPicked, providerNames: providerNames, acFnName: acFnName, acFnLabel: acFnLabel, fcWord: fcWord, status: status, apStatus: apStatus, peek: peek, ui: ui, draw: function () { draw(); }, val: function (sel) { return val(sel); }, rerender: function () { rerender(); } } };
     try { root.SLApxAuto = api; } catch (_) {}
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
