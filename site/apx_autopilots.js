@@ -21,7 +21,7 @@
  * analysis); headers are black, short, with a list of abbreviations under each table; everything uses the full width.
  * Rulings from the audit of today's page: a function the project's own data says feeds the failure condition (it
  * traces to that aircraft function, it provides a resource consumed for it, or a system failure condition traces to
- * it) comes ticked and CANNOT be unticked until that link is fixed; what was asserted on today's table comes ticked
+ * it) comes checked and CANNOT be unchecked until that link is fixed; what was asserted on today's table comes checked
  * ("existing work auto-populates"); the AI's proposals are shown to accept, never applied; one sign-off per failure
  * condition when sending to the PASA, recorded on every answer in it.
  *
@@ -32,12 +32,12 @@
  * functions"; "ask them to add systems, and their functions as part of the PASA"; "ask them if the system is a resource
  * system". So: the page asks for each system and its function and whether it is a resource system (the architecture's
  * own system role: function, resource or both). A resource system's function supplies a resource: it is a row of Table
- * Q.4-2 and is never a column of Table Q.4-1. No resource and no feed is ticked by the tool: the resource register only
+ * Q.4-2 and is never a column of Table Q.4-1. No resource and no feed is checked by the tool: the resource register only
  * says a system uses a resource, not which bus feeds which function, so it is shown as a hint in words. A system that
  * only provides a resource for the aircraft function is no longer taken as a contributor here.
  *
  * The record of one failure condition (projectConfig.apx.idp[<governing row internalId>]):
- *   cols:  { 'fn:<funcId>': { role: 'does' | 'fails', how: 'loss' | 'malfunction' } }   what the engineer ticked
+ *   cols:  { 'fn:<funcId>': { role: 'does' | 'fails', how: 'loss' | 'malfunction' } }   what the engineer checked
  *   off:   { 'fn:<funcId>': true }        an earlier assertion or AI proposal the engineer turned down
  *   res:   { <resKey>: { on, feeds: { colId: true|false }, modes: [name] } }
  *   cra:   { '<resKey>|<mode>|<colId>': text, '<resKey>|<mode>|': aircraft-level text }
@@ -48,7 +48,7 @@
  * ==========================================================================*/
 (function (root) {
     'use strict';
-    var VERSION = '1.3';   // 1.3 17 Nov 2026: a function that does the job is traced up to the aircraft function when it is ticked or added here (and the trace the Autopilot made comes off with the tick); a resource's providing function is written where the architecture reads it (providedByFunctions).   // 1.2 16 Nov 2026: the Autopilot ASKS for each system and its function, and whether it is a resource system; a resource system is a row of Table Q.4-2, never a column of Table Q.4-1; no resource is ticked by the tool.   // 1.1 16 Nov 2026: a field in a row lines up with its label and its button (the site's own bottom margin on fields is taken off inside the Autopilots)
+    var VERSION = '1.4';   // 1.4 17 Nov 2026: "check" for "tick"; the AI reads a design document or the engineer's words and proposes the systems, functions and resources (a person accepts each); the resources are Assumed until compared with the architecture document; what was sent can be taken back out from the page.   // 1.3 17 Nov 2026: a function that does the job is traced up to the aircraft function when it is checked or added here (and the trace the Autopilot made comes off with the check); a resource's providing function is written where the architecture reads it (providedByFunctions).   // 1.2 16 Nov 2026: the Autopilot ASKS for each system and its function, and whether it is a resource system; a resource system is a row of Table Q.4-2, never a column of Table Q.4-1; no resource is checked by the tool.   // 1.1 16 Nov 2026: a field in a row lines up with its label and its button (the site's own bottom margin on fields is taken off inside the Autopilots)
     function g(n) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(n); if (v !== undefined) return v; } } catch (_) {} try { return root[n]; } catch (_) { return undefined; } }
     function arr(v) { return Array.isArray(v) ? v : []; }
     function S(v) { return v == null ? '' : String(v); }
@@ -124,7 +124,7 @@
         if (d && d.kind === 'resource') d = null;   // v1.2: providing a resource makes it a row of Table Q.4-2, not a column here
         if (d) return { on: true, locked: true, src: 'data', why: WHY[d.kind] || T(d.why), detail: T(d.why), role: role, how: how };
         if (mine) return { on: true, locked: false, src: 'you', role: role, how: how };
-        if (old && old.state === 'asserted' && !offd) return { on: true, locked: false, src: 'earlier', why: 'ticked on the earlier interdependence table' + (old.by ? ' by ' + T(old.by) : ''), role: 'does', how: 'loss' };
+        if (old && old.state === 'asserted' && !offd) return { on: true, locked: false, src: 'earlier', why: 'checked on the earlier interdependence table' + (old.by ? ' by ' + T(old.by) : ''), role: 'does', how: 'loss' };
         if (old && old.state === 'proposed' && old.dir !== 'clear' && !offd) return { on: false, locked: false, src: null, role: 'does', how: 'loss', proposal: { why: T(old.why || ''), model: T(old.model || '') } };
         return { on: false, locked: false, src: null, role: 'does', how: 'loss' };
     }
@@ -145,7 +145,7 @@
         var x = r.row, f = fn('_resFnConsumers'), viaFn = f ? safe(function () { return f(x); }, null) : null;
         return arr(x.consumedBySystems).map(S).indexOf(col.sysId) !== -1 || !!(viaFn && viaFn.has && (viaFn.has(col.sysId) || viaFn.has(Number(col.sysId))));
     }
-    // v1.2: nothing is ticked by the tool. The register's system-level "uses it" is a hint in words (st.hint), never a tick.
+    // v1.2: nothing is checked by the tool. The register's system-level "uses it" is a hint in words (st.hint), never a check.
     function resState(fc, r) {
         var me = ((peek(fc.key) || {}).res || {})[r.key] || null, cols = picked(fc);
         var hint = cols.filter(function (c) { return dataFeeds(r, c); }).map(function (c) { return c.sysName; }).filter(function (n, k, a) { return a.indexOf(n) === k; });
@@ -169,7 +169,7 @@
     }
     function left(fc) {
         var out = [];
-        if (!picked(fc).length) out.push('No system is ticked yet.');
+        if (!picked(fc).length) out.push('No system is checked yet.');
         resPicked(fc).forEach(function (r) { if (!resState(fc, r).modes.length) out.push('Say how ' + r.name + ' can fail.'); });
         var u = unfinished(fc).length; if (u) out.push(u + ' resource failure' + (u > 1 ? 's are' : ' is') + ' not finished.');
         return out;
@@ -181,7 +181,7 @@
     function colHead(c) { return '<th><span class="apx-sysn">' + E(c.sysName) + '</span>(' + E(c.funcId) + ' - ' + E(c.fnName) + ')</th>'; }
     function tableQ41(fc) {
         var cols = picked(fc);
-        if (!cols.length) return '<p>No system is ticked for this failure condition yet.</p>';
+        if (!cols.length) return '<p>No system is checked for this failure condition yet.</p>';
         return '<div class="apx-cap">Table Q.4-1 - (PASA)<br>Interdependence table</div><div class="apx-tw"><table data-sl-worksheet="1" class="apx-arp">'
             + '<tr><th colspan="3"></th><th colspan="' + cols.length + '">AC Systems (Function)</th></tr>'
             + '<tr><th><span class="apx-sysn">AC Function</span></th><th><span class="apx-sysn">AC FC ID</span></th><th><span class="apx-sysn">AC FC Description</span></th>' + cols.map(colHead).join('') + '</tr>'
@@ -190,7 +190,7 @@
     }
     function tableQ42(fc, clickable) {
         var cols = picked(fc), rs = resPicked(fc);
-        if (!cols.length || !rs.length) return '<p>No shared resource is ticked for this failure condition yet.</p>';
+        if (!cols.length || !rs.length) return '<p>No shared resource is checked for this failure condition yet.</p>';
         return '<div class="apx-cap">Table Q.4-2 - (PASA)<br>Interdependence (common resource) table</div><div class="apx-tw"><table data-sl-worksheet="1" class="apx-arp' + (clickable ? ' apx-grid' : '') + '">'
             + '<tr><th class="apx-diag" colspan="2" rowspan="2"></th><th colspan="' + cols.length + '">AC Systems (Function)</th></tr><tr>' + cols.map(colHead).join('') + '</tr>'
             + rs.map(function (r, k) {
@@ -249,7 +249,7 @@
     }
     // v1.3 (Waqas, 17 Nov 2026: what is added at the aircraft level "should be added to system level analyses automatically",
     // "linked directly"): a system function that does the job for this aircraft function is traced up to it, the same
-    // trace its own page writes. The record remembers the traces the Autopilot made, so unticking takes that one off again.
+    // trace its own page writes. The record remembers the traces the Autopilot made, so unchecking takes that one off again.
     function fnRow(funcId) { var hit = null; systems().forEach(function (x) { arr(x.functions).forEach(function (y) { if (y && S(y.funcId) === S(funcId)) hit = y; }); }); return hit; }
     function traceUp(fc, funcId) {
         var x = fnRow(funcId); if (!x || !fc.subId) return false;
@@ -296,14 +296,14 @@
     function apName(k) { return k === 'idp' ? 'Interdependence' : (EXT[k] && EXT[k].name) || k; }
     function apSteps(k) { return k === 'idp' ? STEPS : (EXT[k] && EXT[k].steps) || []; }
     function apStatus(k, fc) { return k === 'idp' ? status(fc) : (EXT[k] && EXT[k].status ? safe(function () { return EXT[k].status(fc); }, { k: 'new' }) : { k: 'new' }); }
-    function setAp(k) { if (k !== 'idp' && !EXT[k]) k = 'idp'; ui.stepOf[ui.ap] = ui.step; ui.ap = k; ui.step = ui.stepOf[k] || 0; ui.blocked = ''; ui.signMiss = false; ui.sign = null; }
+    function setAp(k) { if (k !== 'idp' && !EXT[k]) k = 'idp'; ui.takeAsk = null; ui.stepOf[ui.ap] = ui.step; ui.ap = k; ui.step = ui.stepOf[k] || 0; ui.blocked = ''; ui.signMiss = false; ui.sign = null; }
     function curFc() { var all = fcs(); if (!all.length) return null; var f = ui.fc && fcOf(ui.fc); if (!f) { f = all[0]; ui.fc = f.key; } return f; }
     function tick(fc, colId, role) {
         var col = colOf(colId); if (!col) return;
         var c = cellOf(fc, col), r = rec(fc.key);
         ui.blocked = '';
         if (c.on && c.locked) {
-            // a link the Autopilot made itself comes off with the tick; any other link has to be fixed where it lives
+            // a link the Autopilot made itself comes off with the check; any other link has to be fixed where it lives
             if (!traceDown(fc, colId)) { ui.blocked = colId; return; }
             c = cellOf(fc, col);
             if (c.on && c.locked) { ui.blocked = colId; touched(fc.key); return; }
@@ -327,11 +327,11 @@
         name = T(name); if (!name) return { ok: false, why: 'Type your name to sign before sending.' };
         var l = left(fc); if (l.length) return { ok: false, why: l[0] };
         var r = rec(fc.key), at = now();
-        // what is sent is what was shown: every ticked column is written down, the data's and the earlier table's too
+        // what is sent is what was shown: every checked column is written down, the data's and the earlier table's too
         picked(fc).forEach(function (c) { var x = cellOf(fc, c); r.cols[c.colId] = { role: x.role, how: x.how, src: x.src, by: name, at: at }; });
         resources().forEach(function (x) { var st = resState(fc, x); if (st.on || (r.res[x.key] && r.res[x.key].on === false)) { r.res[x.key] = { on: st.on, feeds: st.feeds, modes: st.modes }; } });
         effectRows(fc).forEach(function (x) { [''].concat(picked(fc).map(function (c) { return c.colId; })).forEach(function (cid) { var t = craText(fc, x.r, x.mode, cid); if (t) r.cra[x.r.key + '|' + x.mode + '|' + cid] = t; }); });
-        r.sent = { by: name, at: at }; delete r.changedSince;
+        r.sent = { by: name, at: at, resStatus: resStatus(fc).k, resStatusText: resStatus(fc).t }; delete r.changedSince;
         // what was sent goes to the PASA and to the files that read today's table (apx_bridge.js)
         try { if (root.SLApxBridge && root.SLApxBridge.project) root.SLApxBridge.project(fc, 'idp'); } catch (e) { r.bridgeError = e && e.message ? e.message : String(e); }
         save();
@@ -348,6 +348,7 @@
         + '.apx-pills{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}.apx-pill{border:1px solid var(--color-border,rgba(20,23,28,.82));border-radius:999px;padding:4px 12px;background:var(--color-surface-1,#fff);font-size:13px}'
         + '.apx-steps{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:0 0 12px}.apx-prog{flex:1;min-width:160px;height:8px;border-radius:99px;background:var(--color-surface-2,#F6F6F4);overflow:hidden;border:1px solid var(--color-border,rgba(20,23,28,.3))}.apx-prog i{display:block;height:100%;background:#1A6EF2}'
         + '.apx input,.apx select,.apx textarea{margin:0}'
+        + '.apx-urow2{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:8px}@media (max-width:760px){.apx-urow2{grid-template-columns:1fr}}'
         + '.apx-ask{border:2px solid #1A6EF2;border-radius:14px;padding:16px 18px;background:rgba(26,110,242,.05);display:flex;flex-direction:column;gap:10px}.apx-askq{font-size:17px;font-weight:700}'
         + '.apx-askrow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;align-items:center}.apx-askrow.one{grid-template-columns:minmax(200px,340px) minmax(0,1fr)}.apx-kind{display:grid;width:100%}.apx-kind button{padding:10px 14px;font-size:15px}'
         + 'table.apx-arp th.l{min-width:210px}table.apx-arp th .apx-prov{display:block;font-weight:400;text-transform:none;letter-spacing:0;font-size:11.5px;margin-top:2px}@media (max-width:760px){.apx-askrow,.apx-askrow.one{grid-template-columns:1fr}}'
@@ -402,11 +403,11 @@
     }
     function tickRow(fc, c, stepRole) {
         var x = cellOf(fc, c), right = '';
-        if (x.src === 'data') right = '<span class="apx-tag">' + (((peek(fc.key) || {}).madeTrace || {})[c.colId] ? 'Linked here' : 'From the project') + '</span>' + E(x.why) + (ui.blocked === c.colId ? '<div class="apx-note bad" style="margin:8px 0 0">Can\'t untick: the project says ' + E(x.detail || x.why) + '. Fix that link first, then it can come off this table.</div>' : '');
+        if (x.src === 'data') right = '<span class="apx-tag">' + (((peek(fc.key) || {}).madeTrace || {})[c.colId] ? 'Linked here' : 'From the project') + '</span>' + E(x.why) + (ui.blocked === c.colId ? '<div class="apx-note bad" style="margin:8px 0 0">Can\'t uncheck: the project says ' + E(x.detail || x.why) + '. Fix that link first, then it can come off this table.</div>' : '');
         else if (x.src === 'earlier') right = '<span class="apx-tag">Earlier work</span>' + E(x.why);
         else if (x.proposal) right = '<span class="apx-tag">AI suggests</span>' + E(x.proposal.why || 'it feeds this failure condition') + ' <button class="apx-btn" data-apx-prop="' + E(c.colId) + '|1">Accept</button> <button class="apx-btn" data-apx-prop="' + E(c.colId) + '|0">Dismiss</button>';
         if (x.on && stepRole === 'fails') right = '<select data-apx-how="' + E(c.colId) + '" aria-label="How it causes it"><option value="loss"' + (x.how === 'loss' ? ' selected' : '') + '>By not working (loss)</option><option value="malfunction"' + (x.how === 'malfunction' ? ' selected' : '') + '>By doing the wrong thing (malfunction)</option></select> ' + right;
-        return '<div class="apx-tick' + (x.on ? ' on' : '') + '"><button type="button" class="apx-box" data-apx-tick="' + E(c.colId) + '" aria-label="' + (x.on ? 'Untick ' : 'Tick ') + E(c.fnName) + '" aria-pressed="' + (x.on ? 'true' : 'false') + '"></button><span class="apx-nm">' + E(c.fnName) + ' <span class="apx-tag" style="font-weight:600">' + E(c.funcId) + '</span></span><span class="apx-why">' + right + '</span></div>';
+        return '<div class="apx-tick' + (x.on ? ' on' : '') + '"><button type="button" class="apx-box" data-apx-tick="' + E(c.colId) + '" aria-label="' + (x.on ? 'Uncheck ' : 'Check ') + E(c.fnName) + '" aria-pressed="' + (x.on ? 'true' : 'false') + '"></button><span class="apx-nm">' + E(c.fnName) + ' <span class="apx-tag" style="font-weight:600">' + E(c.funcId) + '</span></span><span class="apx-why">' + right + '</span></div>';
     }
     function dl(id, names) { return '<datalist id="' + id + '">' + names.map(function (n) { return '<option value="' + E(n) + '"></option>'; }).join('') + '</datalist>'; }
     // The ask: each system and its function, and whether it is a resource system. Then what the project already holds.
@@ -418,7 +419,7 @@
             + '<div class="apx-askrow"><input type="text" list="apx-dl-sys" data-apx-newsys="name" value="' + E(d.name || '') + '" placeholder="System, for example: Wheel Brake" aria-label="System name"><input type="text" data-apx-newsys="fn" value="' + E(d.fn || '') + '" placeholder="Its function, for example: decelerate wheels on ground" aria-label="System function"></div>'
             + '<div class="apx-askrow one"><div><b>Is it a resource system?</b><div style="font-size:12.5px">A resource system supplies something other systems need, like electrical or hydraulic power. It goes in the shared resources table, not in this one.</div></div>' + sw + '</div>'
             + (k === 'res' ? '<div class="apx-askrow one"><b>What it supplies</b><input type="text" list="apx-dl-res" data-apx-newsys="res" value="' + E(d.res || '') + '" placeholder="The resource, as your design names it, for example: 28 VDC Bus A" aria-label="The resource it supplies"></div>' : '')
-            + '<div><button class="apx-btn p" data-apx-addsys="' + stepRole + '">' + (k === 'res' ? 'Add it as a resource' : 'Add and tick') + '</button></div>'
+            + '<div><button class="apx-btn p" data-apx-addsys="' + stepRole + '">' + (k === 'res' ? 'Add it as a resource' : 'Add and check') + '</button></div>'
             + dl('apx-dl-sys', systems().map(function (x) { return T(x.name || x.id); })) + dl('apx-dl-res', resources().map(function (r) { return r.name; }))
             + '<p style="margin:6px 0 0;font-size:12.5px">A system and its function are added to the architecture with their names, and become the starting point for that system\'s FHA and PSSA. A name already in the project is used, never added twice.</p></div>';
     }
@@ -427,43 +428,49 @@
         systems().forEach(function (s) {
             var all = cols.filter(function (c) { return c.sysId === S(s.id); }), mine = all.filter(function (c) { var x = cellOf(fc, c); return !(x.on && x.role === other); });
             var onN = mine.filter(function (c) { return cellOf(fc, c).on; }).length, sug = mine.some(function (c) { return cellOf(fc, c).proposal; });
-            // a resource system is not offered as a column (it is in step 4), unless one of its functions is already ticked here
+            // a resource system is not offered as a column (it is in step 4), unless one of its functions is already checked here
             if (isResSys(s) && !all.some(function (c) { return cellOf(fc, c).on; })) { resNames.push(T(s.name || s.id)); return; }
             var k = S(s.id), open = ui.open[k] != null ? ui.open[k] : (onN > 0 || sug);
-            lists += '<details class="apx-fold" data-apx-sys="' + E(k) + '"' + (open ? ' open' : '') + '><summary><span>' + E(T(s.name || s.id)) + ' (' + mine.length + ' function' + (mine.length === 1 ? '' : 's') + (onN ? ', ' + onN + ' ticked' : '') + ')</span></summary><div><div class="apx-ticks">'
+            lists += '<details class="apx-fold" data-apx-sys="' + E(k) + '"' + (open ? ' open' : '') + '><summary><span>' + E(T(s.name || s.id)) + ' (' + mine.length + ' function' + (mine.length === 1 ? '' : 's') + (onN ? ', ' + onN + ' checked' : '') + ')</span></summary><div><div class="apx-ticks">'
                 + mine.map(function (c) { return tickRow(fc, c, stepRole); }).join('')
-                + '</div><div class="apx-add" style="grid-template-columns:auto minmax(0,1fr) auto"><b>New function</b><input type="text" data-apx-newfn="' + E(k) + '" placeholder="Its name, for example: decelerate wheels on ground" aria-label="New function of ' + E(T(s.name)) + '"><button class="apx-btn" data-apx-addfn="' + E(k) + '|' + stepRole + '">Create and tick</button></div></div></details>';
+                + '</div><div class="apx-add" style="grid-template-columns:auto minmax(0,1fr) auto"><b>New function</b><input type="text" data-apx-newfn="' + E(k) + '" placeholder="Its name, for example: decelerate wheels on ground" aria-label="New function of ' + E(T(s.name)) + '"><button class="apx-btn" data-apx-addfn="' + E(k) + '|' + stepRole + '">Create and check</button></div></div></details>';
         });
-        if (lists) h += '<p style="margin:18px 0 8px;font-weight:700">Already in the project: tick what applies</p>' + lists;
+        if (lists) h += '<p style="margin:18px 0 8px;font-weight:700">Already in the project: check what applies</p>' + lists;
         if (resNames.length) h += '<p style="margin:10px 0 0;font-size:12.5px">Resource systems are not listed here. They are in the shared resources step: ' + E(resNames.join(', ')) + '.</p>';
         return h;
     }
     function stepDoes(fc) {
-        var ai = fn('idpAiSweep') ? '<p><button class="apx-btn" data-apx-ai="1">AI draft: suggest the systems for this failure condition</button> <span style="font-size:12.5px">Suggestions show here to accept or dismiss. Nothing is ticked for you.</span></p>' : '';
-        return card('Which systems do the job?', 'Add each system that helps ' + E(fcWord(fc)) + ', with the function it performs. Only what you add or tick is shown; nothing else appears anywhere.', sysLists(fc, 'does') + ai) + preview('What the PASA will show', tableQ41(fc));
+        var ai = fn('idpAiSweep') ? '<p><button class="apx-btn" data-apx-ai="1">AI draft: suggest the systems for this failure condition</button> <span style="font-size:12.5px">Suggestions show here to accept or dismiss. Nothing is checked for you.</span></p>' : '';
+        return card('Which systems do the job?', 'Add each system that helps ' + E(fcWord(fc)) + ', with the function it performs. Only what you add or check is shown; nothing else appears anywhere.', waysBar(fc) + sysLists(fc, 'does') + propList(fc, function (it) { return it.t === 'sys' && it.kind === 'does'; }) + ai) + preview('What the PASA will show', tableQ41(fc));
     }
     function stepFails(fc) {
-        return card('Which other systems could cause it by failing?', 'Some systems are not part of the job but still matter. Flaps that don\'t extend mean a faster landing. Engines stuck at high thrust fight the brakes. Add them with their function, and say how.', sysLists(fc, 'fails')) + preview('What the PASA will show', tableQ41(fc));
+        return card('Which other systems could cause it by failing?', 'Some systems are not part of the job but still matter. Flaps that don\'t extend mean a faster landing. Engines stuck at high thrust fight the brakes. Add them with their function, and say how.', waysBar(fc) + sysLists(fc, 'fails') + propList(fc, function (it) { return it.t === 'sys' && it.kind === 'fails'; })) + preview('What the PASA will show', tableQ41(fc));
+    }
+    function cmpHtml(fc, r) {
+        var b = resBasis(fc, r), one = resOne(fc, r);
+        if (b.basis && b.basis.src === 'doc' && !(b.cmp && b.cmp.state === 'differs')) return '<div style="margin-top:6px;font-size:12.5px"><span class="apx-tag">Read from the document</span>' + E(b.basis.doc) + (b.basis.where ? ', ' + E(b.basis.where) : '') + (b.basis.quote ? ': "' + E(b.basis.quote) + '"' : '') + ', accepted by ' + E(b.basis.by) + '</div>';
+        return '<div class="apx-urow2" style="margin-top:6px"><select data-apx-rcmp="' + E(r.key) + '" aria-label="Compared with the architecture document"><option value="">Assumed: not compared with the architecture document yet</option><option value="same"' + (one === 'backed' ? ' selected' : '') + '>Matches the architecture document</option><option value="differs"' + (one === 'differs' ? ' selected' : '') + '>Differs from it</option></select><input type="text" data-apx-rcmpref="' + E(r.key) + '" value="' + E(b.cmp ? b.cmp.ref : '') + '" placeholder="Document, section or page" aria-label="Reference"></div>';
     }
     function stepRes(fc) {
         var rs = resources(), d = ui.draft;
         var ask = '<div class="apx-ask"><div class="apx-askq">Add a shared resource and who provides it</div>'
             + '<div class="apx-askrow one"><b>The resource</b><input type="text" list="apx-dl-res" data-apx-newres="name" value="' + E(d.rname || '') + '" placeholder="As your design names it, for example: 28 VDC Bus A, or Hydraulic System A" aria-label="Resource name"></div>'
             + '<div class="apx-askrow"><input type="text" list="apx-dl-sys" data-apx-newres="sys" value="' + E(d.rsys || '') + '" placeholder="The system that provides it, for example: Electrical Power" aria-label="Providing system"><input type="text" data-apx-newres="fn" value="' + E(d.rfn || '') + '" placeholder="That system\'s function, for example: distribute electrical power" aria-label="Providing function"></div>'
-            + '<div><button class="apx-btn p" data-apx-addres="1">Add and tick</button></div>'
+            + '<div><button class="apx-btn p" data-apx-addres="1">Add and check</button></div>'
             + dl('apx-dl-sys', systems().map(function (x) { return T(x.name || x.id); })) + dl('apx-dl-res', rs.map(function (r) { return r.name; }))
-            + '<p style="margin:6px 0 0;font-size:12.5px">The providing system becomes a resource system in the architecture, with that function, and that is where its own FHA starts. Which bus or supply feeds which function comes from your review of the architecture; the tool does not tick any of it.</p></div>';
-        var h = ask + (rs.length ? '<p style="margin:18px 0 8px;font-weight:700">Already in the project: tick what applies</p><div class="apx-ticks">' + rs.map(function (r) {
+            + '<p style="margin:6px 0 0;font-size:12.5px">The providing system becomes a resource system in the architecture, with that function, and that is where its own FHA starts. Which bus or supply feeds which function comes from your review of the architecture; the tool does not fill in any of it.</p></div>';
+        var h = waysBar(fc) + ask + propList(fc, function (it) { return it.t === 'res' || it.kind === 'resource'; }) + (rs.length ? '<p style="margin:18px 0 8px;font-weight:700">Already in the project: check what applies</p><div class="apx-ticks">' + rs.map(function (r) {
             var st = resState(fc, r), prov = providerText(r);
-            return '<div class="apx-tick' + (st.on ? ' on' : '') + '"><button type="button" class="apx-box" data-apx-res="' + E(r.key) + '" aria-label="' + (st.on ? 'Untick ' : 'Tick ') + E(r.name) + '" aria-pressed="' + (st.on ? 'true' : 'false') + '"></button><span class="apx-nm">' + E(r.name) + '</span><span class="apx-why">' + (prov ? 'Provided by ' + E(prov) + '. ' : 'No provider set yet: add it above with the same name. ') + (st.hint.length && !st.on ? '<span class="apx-tag">Hint</span>the resource register says ' + E(st.hint.join(', ')) + ' use' + (st.hint.length === 1 ? 's' : '') + ' it, at system level. It does not say which function' : '') + '</span></div>';
+            return '<div class="apx-tick' + (st.on ? ' on' : '') + '"><button type="button" class="apx-box" data-apx-res="' + E(r.key) + '" aria-label="' + (st.on ? 'Uncheck ' : 'Check ') + E(r.name) + '" aria-pressed="' + (st.on ? 'true' : 'false') + '"></button><span class="apx-nm">' + E(r.name) + '</span><span class="apx-why">' + (prov ? 'Provided by ' + E(prov) + '. ' : 'No provider set yet: add it above with the same name. ') + (st.hint.length && !st.on ? '<span class="apx-tag">Hint</span>the resource register says ' + E(st.hint.join(', ')) + ' use' + (st.hint.length === 1 ? 's' : '') + ' it, at system level. It does not say which function' : '') + (st.on ? cmpHtml(fc, r) : '') + '</span></div>';
         }).join('') + '</div>' : '');
         if (resPicked(fc).length && picked(fc).length) h += '<p style="margin:18px 0 8px;font-weight:700">Click a box to say which system function each resource feeds. Nothing is filled in for you. This is the table exactly as the PASA will show it.</p>' + tableQ42(fc, true);
+        if (resPicked(fc).length) { var rst = resStatus(fc); h += '<div class="apx-note ' + (rst.k === 'backed' ? 'good' : 'warn') + '">Resources: <b>' + E(rst.t) + '</b></div>'; }
         return card('Which shared resources feed these systems?', 'Shared resources are things many systems need, like hydraulic power, electrical power or air data. Add each one that matters for this failure condition, as specific as your design is, and say who provides it.', h);
     }
     function stepModes(fc) {
         var rs = resPicked(fc);
-        if (!rs.length) return card('How can each resource fail?', 'Tick a shared resource first.', '');
-        return card('How can each resource fail?', 'Tick each way it can fail. Partial loss means some of it is lost (for example one of three hydraulic systems). Total loss means all of it.',
+        if (!rs.length) return card('How can each resource fail?', 'Check a shared resource first.', '');
+        return card('How can each resource fail?', 'Check each way it can fail. Partial loss means some of it is lost (for example one of three hydraulic systems). Total loss means all of it.',
             '<div class="apx-modes">' + rs.map(function (r) { var st = resState(fc, r); return '<div class="apx-mode"><b>' + E(r.name) + '</b><div class="apx-chips">' + MODES.map(function (m) { var o = st.modes.indexOf(m) !== -1; return '<label class="' + (o ? 'on' : '') + '"><input type="checkbox" data-apx-mode="' + E(r.key + '|' + m) + '"' + (o ? ' checked' : '') + '> ' + m + '</label>'; }).join('') + '</div></div>'; }).join('') + '</div>');
     }
     function effectSelect(key, cur, opts, placeholder) {
@@ -473,7 +480,7 @@
     }
     function stepEffects(fc) {
         var rows = effectRows(fc);
-        if (!rows.length) return card('What does each failure do?', 'Say how each ticked resource can fail first.', '');
+        if (!rows.length) return card('What does each failure do?', 'Say how each checked resource can fail first.', '');
         ui.eff = Math.max(0, Math.min(ui.eff, rows.length - 1));
         var x = rows[ui.eff], st = resState(fc, x.r), cols = picked(fc), k = x.r.key + '|' + x.mode + '|';
         var body = '<div class="apx-pager"><button class="apx-btn" data-apx-eff="-1"' + (ui.eff === 0 ? ' disabled' : '') + '>Previous</button><b>' + (ui.eff + 1) + ' of ' + rows.length + '</b><button class="apx-btn" data-apx-eff="1"' + (ui.eff === rows.length - 1 ? ' disabled' : '') + '>Next failure</button></div><div class="apx-eff">'
@@ -483,14 +490,124 @@
             + '<div style="padding-top:8px"><b>For the whole aircraft</b></div><div style="padding-top:8px">' + effectSelect(k, craText(fc, x.r, x.mode, ''), acEffects(x.r), 'Pick the aircraft-level effect') + '</div></div>';
         return card('If ' + E(x.r.name) + ' has a ' + E(lc(x.mode)) + ', what happens?', 'Pick what happens to each system function it feeds, then what that adds up to for the aircraft.', body) + preview('What the PASA will show', tableB3(fc));
     }
+    // v1.4: where an answer comes from. The systems, functions and resources come from a person's review of the
+    // architecture: by hand, or the AI reads a design document or the engineer's words and proposes them, and a person
+    // accepts each one. Nothing a proposal says is in the tables until it is accepted.
+    function docs() { var api = root.SafetyLabSourceDocs, l = api && api.list ? safe(function () { return api.list(); }, []) : []; return arr(l).filter(function (d) { return d && T(d.name) && T(d.text); }); }
+    function parseJson(text) { try { return JSON.parse(S(text).trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')); } catch (_) {} try { var m = S(text).match(/\{[\s\S]*\}/); if (m) return JSON.parse(m[0]); } catch (_) {} return null; }
+    var AI_IDP = 'You read aircraft design material for a safety engineer working ONE aircraft failure condition (the interdependence and common resource analysis of ARP4761A). Use ONLY what the supplied text says. Return two lists. "systems": each system that performs the aircraft function, or could cause the failure condition by failing, or supplies a shared resource, as {"system","function" (that system\'s function, in the text\'s words),"kind" (exactly one of: does, fails, resource),"how" (for fails: loss or malfunction),"supplies" (for a resource system: the resource, named as the text names it),"quote" (the words this rests on, verbatim),"where" (section or page)}. "resources": each shared resource (electrical power, hydraulic power, data, air and so on), as specific as the text is (a named bus, a named hydraulic system), as {"resource","providedBySystem","providedByFunction","feeds":[{"system","function"}],"quote","where"}; list in "feeds" only what the text says it feeds. If the text does not say something, leave it out; never guess. Reply with JSON only: {"systems":[...],"resources":[...]}.';
+    function cleanProposals(j) {
+        var out = [], n = 0, q = function (x) { return { quote: T(x.quote).slice(0, 400), where: T(x.where).slice(0, 120) }; };
+        arr(j && j.systems).forEach(function (x) {
+            if (!x || !T(x.system) || !T(x['function'])) return;
+            var kind = ['does', 'fails', 'resource'].indexOf(x.kind) !== -1 ? x.kind : null; if (!kind) return;
+            if (kind === 'resource' && !T(x.supplies)) return;
+            out.push(Object.assign({ id: 'p' + (++n), t: 'sys', system: T(x.system).slice(0, 80), fn: T(x['function']).slice(0, 120), kind: kind, how: x.how === 'malfunction' ? 'malfunction' : 'loss', supplies: T(x.supplies).slice(0, 80) }, q(x)));
+        });
+        arr(j && j.resources).forEach(function (x) {
+            if (!x || !T(x.resource)) return;
+            out.push(Object.assign({ id: 'p' + (++n), t: 'res', resource: T(x.resource).slice(0, 80), system: T(x.providedBySystem).slice(0, 80), fn: T(x.providedByFunction).slice(0, 120), feeds: arr(x.feeds).filter(function (f) { return f && T(f.system); }).map(function (f) { return { system: T(f.system).slice(0, 80), fn: T(f['function']).slice(0, 120) }; }) }, q(x)));
+        });
+        return out;
+    }
+    function propose(fc, mode, payload) {
+        var loader = typeof root.slLoadAI === 'function' ? Promise.resolve().then(function () { return root.slLoadAI(); }).catch(function () {}) : Promise.resolve();
+        return loader.then(function () {
+            var P = root.SafetyLabAI; if (!(P && typeof P.complete === 'function')) throw new Error('The AI is not available on this plan or in this session. Add the systems and resources by hand.');
+            var text = mode === 'doc' ? S(payload && payload.text).slice(0, 60000) : S(payload && payload.text).slice(0, 8000);
+            if (!T(text)) throw new Error(mode === 'doc' ? 'Pick a document with readable text first.' : 'Describe the architecture in your own words first.');
+            var ctx = { failureCondition: fc.fcId + ' ' + fc.desc, aircraftFunction: acFnLabel(fc), phases: fc.phases, source: mode === 'doc' ? { document: payload.name, text: text } : { engineerSays: text } };
+            return P.complete({ feature: 'apx.idp.propose', system: AI_IDP, messages: [{ role: 'user', content: JSON.stringify(ctx, null, 1) }], maxTokens: 4000, temperature: 0 }).then(function (r) {
+                var j = parseJson(r && r.text); if (!j) throw new Error('The AI\'s reply could not be read. Nothing was proposed.');
+                var items = cleanProposals(j);
+                rec(fc.key).prop = { items: items, src: mode === 'doc' ? 'doc' : 'told', doc: mode === 'doc' ? T(payload.name) : '', model: (r && r.model) || '', at: now() };
+                try { if (root.AiFidelity && root.AiFidelity.recordProvenance) root.AiFidelity.recordProvenance({ kind: 'draft', feature: 'apx.idp.propose', section: fc.fcId, model: (r && r.model) || '' }); } catch (_) {}
+                save();
+                return { n: items.length };
+            });
+        });
+    }
+    function proposals(fc) { var r = peek(fc.key); return r && r.prop && Array.isArray(r.prop.items) ? r.prop : null; }
+    function basisOf(pr, it) { return { src: pr.src, doc: pr.doc, where: it.where, quote: it.quote, by: who(), at: now() }; }
+    function findCol(fc, sysName, fnName) {
+        var cols = picked(fc), sn = T(sysName).toLowerCase(), fnn = T(fnName).toLowerCase();
+        var same = cols.filter(function (c) { return c.sysName.toLowerCase() === sn; });
+        var exact = same.filter(function (c) { return c.fnName.toLowerCase() === fnn; })[0];
+        return exact || (same.length === 1 ? same[0] : null);
+    }
+    function acceptProposal(fc, id) {
+        var pr = proposals(fc); if (!pr) return { ok: false, why: 'That proposal is gone.' };
+        var it = pr.items.filter(function (x) { return x.id === id; })[0]; if (!it) return { ok: false, why: 'That proposal is gone.' };
+        var r = rec(fc.key), res = null;
+        if (it.t === 'sys' && it.kind !== 'resource') {
+            var a = addSystem(it.system, 'fn'); if (!a.ok) return a;
+            var b = addFunction(a.system.id, it.fn); if (!b.ok) return b;
+            r.cols['fn:' + b.funcId] = { role: it.kind === 'fails' ? 'fails' : 'does', how: it.kind === 'fails' ? it.how : 'loss' };
+            if (it.kind === 'does') traceUp(fc, b.funcId);
+            if (!r.basis || typeof r.basis !== 'object') r.basis = {}; r.basis['fn:' + b.funcId] = basisOf(pr, it);
+        } else {
+            var c = addResourceFull(it.t === 'res' ? it.resource : it.supplies, it.system, it.fn); if (!c.ok) return c;
+            res = resources().filter(function (x) { return x.key === c.key; })[0];
+            if (res) {
+                var me = resRec(fc, res); me.on = true;
+                arr(it.feeds).forEach(function (f) { var col = findCol(fc, f.system, f.fn); if (col) me.feeds[col.colId] = true; });
+                if (!r.rbasis || typeof r.rbasis !== 'object') r.rbasis = {}; r.rbasis[res.key] = basisOf(pr, it);
+            }
+        }
+        pr.items = pr.items.filter(function (x) { return x.id !== id; });
+        touched(fc.key);
+        return { ok: true };
+    }
+    function dismissProposal(fc, id) { var pr = proposals(fc); if (!pr) return; pr.items = pr.items.filter(function (x) { return x.id !== id; }); save(); }
+    function propLine(fc, it, pr) {
+        var from = (pr.src === 'doc' ? 'From ' + E(pr.doc) : 'From your words') + (it.where ? ', ' + E(it.where) : '') + (it.quote ? ': "' + E(it.quote) + '"' : '');
+        var what = it.t === 'res' ? '<b>' + E(it.resource) + '</b>' + (it.system ? ', provided by ' + E(it.system) + (it.fn ? ' (' + E(lc(it.fn)) + ')' : '') : '') + (arr(it.feeds).length ? '. It feeds ' + E(it.feeds.map(function (f) { return f.system + (f.fn ? ' (' + lc(f.fn) + ')' : ''); }).join(', ')) : '')
+            : '<b>' + E(it.system) + '</b>: ' + E(lc(it.fn)) + (it.kind === 'resource' ? '. A resource system that supplies <b>' + E(it.supplies) + '</b>' : it.kind === 'fails' ? '. Causes it by ' + (it.how === 'malfunction' ? 'doing the wrong thing' : 'failing') : '. Does the job');
+        return '<div class="apx-note" data-apx-prop-item="' + E(it.id) + '"><span class="apx-tag">AI proposes</span>' + what + '.<div style="font-size:12.5px;margin-top:4px">' + from + '</div><div style="margin-top:8px"><button class="apx-btn p" data-apx-pacc="' + E(it.id) + '">Accept</button> <button class="apx-btn" data-apx-pdis="' + E(it.id) + '">Dismiss</button></div></div>';
+    }
+    function propList(fc, want) { var pr = proposals(fc); if (!pr) return ''; var items = pr.items.filter(want); return items.length ? '<div style="margin:12px 0 0">' + items.map(function (it) { return propLine(fc, it, pr); }).join('') + '</div>' : ''; }
+    function waysBar(fc) {
+        var dl2 = docs(), w = ui.way || 'hand';
+        var h = '<div class="apx-sw" role="group" aria-label="Where it comes from" style="margin:0 0 12px">' + [['hand', 'Add it by hand'], ['doc', 'The AI reads a design document'], ['told', 'Tell the AI in your words']].map(function (x) { return '<button type="button" class="' + (w === x[0] ? 'on' : '') + '" data-apx-way="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div>';
+        if (w === 'doc') h += dl2.length ? '<div class="apx-add" style="grid-template-columns:auto minmax(0,1fr) auto;margin:0 0 12px"><b>Design document</b><select data-apx-aidoc="1" aria-label="Design document"><option value="">Pick the architecture description or the SDD</option>' + dl2.map(function (d) { return '<option' + (d.name === ui.aidoc ? ' selected' : '') + '>' + E(d.name) + '</option>'; }).join('') + '</select><button class="apx-btn" data-apx-aiprop="doc"' + (ui.busy ? ' disabled' : '') + '>' + (ui.busy === 'doc' ? 'The AI is reading it...' : 'Read it and propose') + '</button></div>' : '<div class="apx-note warn">This project has no source document with readable text yet. Add the architecture description or the SDD on the AI inputs page, then come back. Until then, add by hand or tell the AI in your words.</div>';
+        if (w === 'told') h += '<div style="margin:0 0 12px"><textarea data-apx-told="1" rows="3" style="width:100%;box-sizing:border-box;font:inherit;padding:8px 10px;border:1px solid var(--color-border-strong,#14171C);border-radius:9px" placeholder="For example: wheel brakes, ground spoilers and thrust reversers stop the aircraft. Hydraulic System A feeds the brakes and the spoilers. 28 VDC Bus A feeds the brake control unit." aria-label="The architecture in your words">' + E(ui.told || '') + '</textarea><button class="apx-btn" style="margin-top:6px" data-apx-aiprop="told"' + (ui.busy ? ' disabled' : '') + '>' + (ui.busy === 'told' ? 'The AI is working it out...' : 'Propose from my words') + '</button></div>';
+        if (w !== 'hand') h += '<p style="margin:0 0 12px;font-size:12.5px">The AI proposes systems, their functions and the shared resources, each with the words it rests on. Nothing is added until you accept it. Proposals show in the step they belong to.</p>';
+        return h;
+    }
+    // The resources are Assumed until each is read from, or compared with, the architecture document.
+    function resBasis(fc, r) { var x = peek(fc.key) || {}; return { basis: (x.rbasis || {})[r.key] || null, cmp: (x.rcmp || {})[r.key] || null }; }
+    function resOne(fc, r) { var b = resBasis(fc, r); return b.cmp && b.cmp.state === 'differs' ? 'differs' : (b.cmp && b.cmp.state === 'same') || (b.basis && b.basis.src === 'doc') ? 'backed' : 'assumed'; }
+    function resStatus(fc) {
+        var rs = resPicked(fc); if (!rs.length) return { k: 'none', t: 'No shared resource is checked', word: '' };
+        var st = rs.map(function (r) { return resOne(fc, r); }), nd = st.filter(function (x) { return x === 'differs'; }).length, na = st.filter(function (x) { return x === 'assumed'; }).length;
+        if (nd) return { k: 'differs', t: 'Different from the architecture document on ' + nd + ' resource' + (nd > 1 ? 's' : ''), word: 'Different from the architecture document' };
+        if (na) return { k: 'assumed', t: 'Assumed: ' + na + ' of ' + rs.length + ' resource' + (rs.length > 1 ? 's are' : ' is') + ' not compared with the architecture document yet', word: 'Assumed' };
+        return { k: 'backed', t: 'Backed by the architecture document', word: 'Backed by the architecture document' };
+    }
+    function setCompare(fc, key, state, ref) { var r = rec(fc.key); if (!r.rcmp || typeof r.rcmp !== 'object') r.rcmp = {}; if (!state) delete r.rcmp[key]; else r.rcmp[key] = { state: state === 'differs' ? 'differs' : 'same', ref: T(ref != null ? ref : (r.rcmp[key] || {}).ref), by: who(), at: now() }; touched(fc.key); }
+
+    // v1.4 (Waqas, 17 Nov 2026: "all three"): what was sent can be taken back out of the PASA and of today's tables, from the
+    // page, in two clicks. The answers here stay; the system FHA lines and the links stay.
+    function takeOut(fc, which) {
+        if (!(root.SLApxBridge && root.SLApxBridge.unproject)) return '';
+        if (ui.takeAsk === which) return '<div class="apx-note warn" data-apx-takeask="' + which + '"><b>Take it back out?</b> This takes what was sent for ' + E(fc.fcId) + ' out of the PASA and out of today\'s tables, and puts back what was there before. Your answers here stay, and so do the lines added to the system FHAs and the links. <div style="margin-top:8px"><button class="apx-btn" data-apx-take="' + which + '|yes">Yes, take it out</button> <button class="apx-btn" data-apx-take="' + which + '|no">Keep it</button></div></div>';
+        return '<p style="margin:10px 0 0"><button class="apx-btn" data-apx-take="' + which + '|ask">Take it back out of the PASA</button></p>';
+    }
+    function doTakeOut(fc, which) {
+        var s0 = store(), r = s0[which] && s0[which][fc.key]; if (!r || !r.sent) return false;
+        root.SLApxBridge.unproject(fc, which);
+        r.tookOut = { by: who(), at: now(), was: r.sent }; delete r.sent; delete r.changedSince;
+        save(); return true;
+    }
     function stepSend(fc) {
-        var l = left(fc), st = status(fc), body;
+        var l = left(fc), st = status(fc), body, rs7 = resStatus(fc);
         body = l.length ? '<div class="apx-note warn">' + l.map(E).join('<br>') + '</div>' : '<div class="apx-note good">Everything is answered. These three tables go to the PASA exactly as shown.</div>';
-        if (st.k === 'sent') body += '<div class="apx-sent"><b>Sent to the PASA.</b> Signed by <b>' + E(st.by) + '</b> on ' + E(S(st.at).slice(0, 10)) + '; the name and date are recorded on every answer in it.</div>';
+        if (rs7.k !== 'none') body += '<div class="apx-note ' + (rs7.k === 'backed' ? 'good' : 'warn') + '">Resources: <b>' + E(rs7.t) + '</b></div>';
+        if (st.k === 'sent') body += '<div class="apx-sent"><b>Sent to the PASA.</b> Signed by <b>' + E(st.by) + '</b> on ' + E(S(st.at).slice(0, 10)) + '; the name and date are recorded on every answer in it.</div>' + takeOut(fc, 'idp');
         else body += (st.k === 'changed' ? '<div class="apx-note warn">Something changed since this was sent. Send it again to bring the PASA up to date.</div>' : '')
             + '<div class="apx-eff" style="margin-top:14px"><div><b>Sign with your name</b></div><div><input type="text" data-apx-sign="1" value="' + E(ui.sign != null ? ui.sign : who()) + '" placeholder="One signature covers every answer for this failure condition" aria-label="Sign with your name"></div></div>'
             + (ui.signMiss ? '<div class="apx-note bad">' + E(ui.signMiss) + '</div>' : '')
-            + '<button class="apx-btn p big" style="margin-top:12px" data-apx-send="1"' + (l.length ? ' disabled' : '') + '>Send to the PASA</button>';
+            + '<button class="apx-btn p big" style="margin-top:12px" data-apx-send="1"' + (l.length ? ' disabled' : '') + '>' + (rs7.k === 'assumed' || rs7.k === 'differs' ? 'Send to the PASA, resources marked ' + E(rs7.word) : 'Send to the PASA') + '</button>';
         return card('Check and send to the PASA', 'This is exactly what the PASA will show. Nothing else gets added.', body) + preview('', tableQ41(fc)) + preview('', tableQ42(fc, false)) + preview('', tableB3(fc));
     }
 
@@ -530,12 +647,23 @@
     }
     function val(sel) { var el = _host && _host.querySelector(sel); return el ? el.value : ''; }
     function onClick(e) {
-        var t = e.target && e.target.closest ? e.target.closest('[data-apx-view],[data-apx-ap],[data-apx-x],[data-apx-kind],[data-apx-nav],[data-apx-tick],[data-apx-prop],[data-apx-res],[data-apx-feed],[data-apx-eff],[data-apx-addfn],[data-apx-addsys],[data-apx-addres],[data-apx-send],[data-apx-ai]') : null;
+        var t = e.target && e.target.closest ? e.target.closest('[data-apx-view],[data-apx-ap],[data-apx-x],[data-apx-kind],[data-apx-take],[data-apx-way],[data-apx-aiprop],[data-apx-pacc],[data-apx-pdis],[data-apx-nav],[data-apx-tick],[data-apx-prop],[data-apx-res],[data-apx-feed],[data-apx-eff],[data-apx-addfn],[data-apx-addsys],[data-apx-addres],[data-apx-send],[data-apx-ai]') : null;
         if (!t || !_host || !_host.contains(t)) return;
         var d = t.dataset, fc = curFc();
         if (d.apxView) { ui.old = d.apxView === 'old'; if (ui.old && ui.ap === 'mac' && typeof root.switchTab === 'function') { root.switchTab('mac'); return; } rerender(); return; }
         if (!fc) return;
         if (d.apxAp) { setAp(d.apxAp); draw(); return; }
+        if (d.apxWay) { ui.way = d.apxWay; draw(); return; }
+        if (d.apxAiprop) {
+            var pl = d.apxAiprop === 'doc' ? docs().filter(function (x) { return x.name === ui.aidoc; })[0] : { text: val('[data-apx-told]') || ui.told };
+            if (d.apxAiprop === 'doc' && !pl) { toast('Pick the document first.', 'warning'); return; }
+            ui.told = d.apxAiprop === 'told' ? pl.text : ui.told; ui.busy = d.apxAiprop; draw();
+            propose(fc, d.apxAiprop, pl).then(function (r9) { ui.busy = ''; toast(r9.n ? 'The AI proposed ' + r9.n + ' item' + (r9.n > 1 ? 's' : '') + '. Accept or dismiss each one, in the step it belongs to.' : 'The AI found nothing it could rest a proposal on. Nothing was proposed.', r9.n ? 'info' : 'warning'); draw(); }, function (e9) { ui.busy = ''; toast(e9 && e9.message ? e9.message : String(e9), 'warning'); draw(); });
+            return;
+        }
+        if (d.apxPacc) { var ra = acceptProposal(fc, d.apxPacc); if (!ra.ok) toast(ra.why, 'warning'); draw(); return; }
+        if (d.apxPdis) { dismissProposal(fc, d.apxPdis); draw(); return; }
+        if (d.apxTake) { var tk = d.apxTake.split('|'); if (tk[1] === 'ask') ui.takeAsk = tk[0]; else { if (tk[1] === 'yes' && doTakeOut(fc, tk[0])) toast('Taken back out. The PASA and today\'s tables are as they were before it was sent.'); ui.takeAsk = null; } draw(); return; }
         if (d.apxX != null && EXT[ui.ap] && EXT[ui.ap].click) { var xa = d.apxX.split('|'), xr; try { xr = EXT[ui.ap].click(xa[0], xa.slice(1).join('|'), t, fc); } catch (e) { toast(e && e.message ? e.message : String(e), 'warning'); xr = true; } if (xr && typeof xr.then === 'function') { xr.then(draw, function (e) { toast(e && e.message ? e.message : String(e), 'warning'); draw(); }); return; } if (xr !== false) draw(); return; }
         if (d.apxNav) { ui.step += Number(d.apxNav); ui.blocked = ''; draw(); try { _host.scrollIntoView({ block: 'start' }); } catch (_) {} return; }
         if (d.apxTick) tick(fc, d.apxTick, ui.step === 2 ? 'fails' : 'does');
@@ -543,7 +671,7 @@
         else if (d.apxRes) resTick(fc, d.apxRes);
         else if (d.apxFeed) { var fd = d.apxFeed.split('|'); feed(fc, fd[0], fd.slice(1).join('|')); }
         else if (d.apxEff) ui.eff += Number(d.apxEff);
-        else if (d.apxAddfn) { var a = d.apxAddfn.split('|'), r1 = addFunction(a[0], val('[data-apx-newfn="' + a[0] + '"]')); if (!r1.ok) { toast(r1.why, 'warning'); return; } if (r1.existed) toast('That function is already in this system. It is ticked here instead of being added again.'); ui.open[a[0]] = true; var c1 = cellOf(fc, colOf('fn:' + r1.funcId) || { colId: 'fn:' + r1.funcId, funcId: r1.funcId }); if (!c1.on) { rec(fc.key).cols['fn:' + r1.funcId] = { role: a[1] === 'fails' ? 'fails' : 'does', how: 'loss' }; if (a[1] !== 'fails') traceUp(fc, r1.funcId); } touched(fc.key); }
+        else if (d.apxAddfn) { var a = d.apxAddfn.split('|'), r1 = addFunction(a[0], val('[data-apx-newfn="' + a[0] + '"]')); if (!r1.ok) { toast(r1.why, 'warning'); return; } if (r1.existed) toast('That function is already in this system. It is checked here instead of being added again.'); ui.open[a[0]] = true; var c1 = cellOf(fc, colOf('fn:' + r1.funcId) || { colId: 'fn:' + r1.funcId, funcId: r1.funcId }); if (!c1.on) { rec(fc.key).cols['fn:' + r1.funcId] = { role: a[1] === 'fails' ? 'fails' : 'does', how: 'loss' }; if (a[1] !== 'fails') traceUp(fc, r1.funcId); } touched(fc.key); }
         else if (d.apxKind) { var kk = d.apxKind.split('|'); ui.kind[kk[0]] = kk[1]; }
         else if (d.apxAddsys) {
             var nm = T(val('[data-apx-newsys="name"]')), fnm = T(val('[data-apx-newsys="fn"]')), rnm = T(val('[data-apx-newsys="res"]')), known = sysByName(nm), kind = ui.kind[d.apxAddsys] || (known && known.role === 'resource' ? 'res' : '');
@@ -555,7 +683,7 @@
                 if (!rnm) { toast('Say what it supplies: the resource, as your design names it.', 'warning'); draw(); return; }
                 var r5 = addResourceFull(rnm, nm, fnm); if (!r5.ok) { toast(r5.why, 'warning'); return; }
                 var rr5 = resources().filter(function (x) { return x.key === r5.key; })[0]; if (rr5) resRec(fc, rr5).on = true;
-                toast(nm + ' is a resource system. ' + rnm + ' is ticked in the shared resources step, where you say which function it feeds.');
+                toast(nm + ' is a resource system. ' + rnm + ' is checked in the shared resources step, where you say which function it feeds.');
             } else {
                 var r2 = addSystem(nm, 'fn'); if (!r2.ok) { toast(r2.why, 'warning'); return; }
                 if (r2.existed) toast('A system with that name is already in the project. The function is added to it.');
@@ -564,7 +692,7 @@
             }
             ui.draft.name = ''; ui.draft.fn = ''; ui.draft.res = ''; delete ui.kind[d.apxAddsys]; touched(fc.key);
         }
-        else if (d.apxAddres) { var rn = T(val('[data-apx-newres="name"]')), rsn = T(val('[data-apx-newres="sys"]')), rfn = T(val('[data-apx-newres="fn"]')); ui.draft.rname = rn; ui.draft.rsys = rsn; ui.draft.rfn = rfn; if (!rn) { toast('Give the resource a name.', 'warning'); return; } if (rfn && !rsn) { toast('Name the system that function belongs to.', 'warning'); return; } var r4 = addResourceFull(rn, rsn, rfn); if (!r4.ok) { toast(r4.why, 'warning'); return; } if (r4.existed) toast('That resource is already in the project. It is ticked here' + (rsn ? ', with its provider set.' : '.')); var rr = resources().filter(function (x) { return x.key === r4.key; })[0]; if (rr) { resRec(fc, rr).on = true; touched(fc.key); } ui.draft.rname = ''; ui.draft.rsys = ''; ui.draft.rfn = ''; }
+        else if (d.apxAddres) { var rn = T(val('[data-apx-newres="name"]')), rsn = T(val('[data-apx-newres="sys"]')), rfn = T(val('[data-apx-newres="fn"]')); ui.draft.rname = rn; ui.draft.rsys = rsn; ui.draft.rfn = rfn; if (!rn) { toast('Give the resource a name.', 'warning'); return; } if (rfn && !rsn) { toast('Name the system that function belongs to.', 'warning'); return; } var r4 = addResourceFull(rn, rsn, rfn); if (!r4.ok) { toast(r4.why, 'warning'); return; } if (r4.existed) toast('That resource is already in the project. It is checked here' + (rsn ? ', with its provider set.' : '.')); var rr = resources().filter(function (x) { return x.key === r4.key; })[0]; if (rr) { resRec(fc, rr).on = true; touched(fc.key); } ui.draft.rname = ''; ui.draft.rsys = ''; ui.draft.rfn = ''; }
         else if (d.apxSend) { var res = send(fc, val('[data-apx-sign]')); ui.sign = val('[data-apx-sign]'); ui.signMiss = res.ok ? false : res.why; }
         else if (d.apxAi) { var sweep = fn('idpAiSweep'); if (sweep) { t.disabled = true; t.textContent = 'The AI is reading the architecture...'; Promise.resolve(safe(function () { return sweep({ fcIds: [fc.row.internalId] }); }, null)).then(function () { draw(); }, function () { draw(); }); return; } }
         draw();
@@ -575,6 +703,10 @@
         if (d.apxFc) { ui.fc = t.value; ui.eff = 0; ui.blocked = ''; ui.signMiss = false; ui.sign = null; draw(); return; }
         if (d.apxJump) { ui.step = Number(t.value); ui.blocked = ''; draw(); return; }
         if (d.apxNewsys) { ui.draft[d.apxNewsys] = t.value; return; }
+        if (d.apxAidoc) { ui.aidoc = t.value; return; }
+        if (d.apxTold) { ui.told = t.value; return; }
+        if (d.apxRcmp && fc) { setCompare(fc, d.apxRcmp, t.value, val('[data-apx-rcmpref="' + d.apxRcmp.replace(/"/g, '\\"') + '"]')); draw(); return; }
+        if (d.apxRcmpref && fc) { var cur9 = ((peek(fc.key) || {}).rcmp || {})[d.apxRcmpref]; if (cur9) setCompare(fc, d.apxRcmpref, cur9.state, t.value); return; }
         if (d.apxNewres) { ui.draft['r' + d.apxNewres] = t.value; return; }
         if (!fc) return;
         if (d.apxXc != null && EXT[ui.ap] && EXT[ui.ap].change) { var ca = d.apxXc.split('|'), cr; try { cr = EXT[ui.ap].change(ca[0], ca.slice(1).join('|'), t, fc); } catch (e2) { toast(e2 && e2.message ? e2.message : String(e2), 'warning'); cr = true; } if (cr !== false) draw(); return; }
@@ -647,10 +779,10 @@
     })(80);
 
     var api = { VERSION: VERSION, open: open, enabled: enabled, on: on, off: off, render: render,
-        model: { fcs: fcs, fcOf: fcOf, allCols: allCols, cellOf: cellOf, picked: picked, resources: resources, resState: resState, resPicked: resPicked, effectRows: effectRows, craText: craText, left: left, status: status, MODES: MODES },
-        act: { addResourceFull: addResourceFull, tick: tick, setRole: setRole, proposal: proposal, resTick: resTick, feed: feed, mode: mode, setCra: setCra, send: send, addSystem: addSystem, addFunction: addFunction, addResource: addResource },
+        model: { proposals: proposals, resStatus: resStatus, resBasis: resBasis, fcs: fcs, fcOf: fcOf, allCols: allCols, cellOf: cellOf, picked: picked, resources: resources, resState: resState, resPicked: resPicked, effectRows: effectRows, craText: craText, left: left, status: status, MODES: MODES },
+        act: { propose: propose, acceptProposal: acceptProposal, dismissProposal: dismissProposal, setCompare: setCompare, cleanProposals: cleanProposals, addResourceFull: addResourceFull, tick: tick, setRole: setRole, proposal: proposal, resTick: resTick, feed: feed, mode: mode, setCra: setCra, send: send, addSystem: addSystem, addFunction: addFunction, addResource: addResource },
         tables: { q41: tableQ41, q42: tableQ42, b3: tableB3 }, _ui: ui, _html: html, register: register, setAp: setAp,
-        kit: { traceUp: traceUp, fnRow: fnRow, derived: derived, isResSys: isResSys, providerText: providerText, g: g, arr: arr, S: S, E: E, T: T, lc: lc, safe: safe, fn: fn, pc: pc, now: now, who: who, save: save, toast: toast, store: store, card: card, preview: preview, abbr: abbr, style: style, fcs: fcs, fcOf: fcOf, curFc: curFc, systems: systems, allCols: allCols, colOf: colOf, cellOf: cellOf, picked: picked, resources: resources, resState: resState, resPicked: resPicked, providerNames: providerNames, acFnName: acFnName, acFnLabel: acFnLabel, fcWord: fcWord, status: status, apStatus: apStatus, peek: peek, ui: ui, draw: function () { draw(); }, val: function (sel) { return val(sel); }, rerender: function () { rerender(); } } };
+        kit: { takeOut: takeOut, doTakeOut: doTakeOut, traceUp: traceUp, fnRow: fnRow, derived: derived, isResSys: isResSys, providerText: providerText, g: g, arr: arr, S: S, E: E, T: T, lc: lc, safe: safe, fn: fn, pc: pc, now: now, who: who, save: save, toast: toast, store: store, card: card, preview: preview, abbr: abbr, style: style, fcs: fcs, fcOf: fcOf, curFc: curFc, systems: systems, allCols: allCols, colOf: colOf, cellOf: cellOf, picked: picked, resources: resources, resState: resState, resPicked: resPicked, providerNames: providerNames, acFnName: acFnName, acFnLabel: acFnLabel, fcWord: fcWord, status: status, apStatus: apStatus, peek: peek, ui: ui, draw: function () { draw(); }, val: function (sel) { return val(sel); }, rerender: function () { rerender(); } } };
     try { root.SLApxAuto = api; } catch (_) {}
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

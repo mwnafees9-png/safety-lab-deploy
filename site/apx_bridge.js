@@ -10,7 +10,7 @@
  * (the fault tree lanes, the FCIM, the reports, the PASA Autopilot, the PRA and ZSA Autopilots and more). They are not
  * rewritten: what was sent is written into those stores in the shape they already read, marked apx so it can be told
  * apart and taken back out (unproject).
- *   Interdependence -> projectConfig.interdep.cells: a ticked function is asserted, every other one is cleared (the
+ *   Interdependence -> projectConfig.interdep.cells: a checked function is asserted, every other one is cleared (the
  *       engineer reviewed it and left it out), signed with the sender's name; the common resource analysis text goes
  *       to projectConfig.interdep.cra. What the project's own data derives is left to the derivation.
  *   MAC -> projectConfig.macModels: ONE rule for the failure condition, id apx-mac-<failure condition>, carrying its
@@ -31,7 +31,7 @@
  * ==========================================================================*/
 (function (root) {
     'use strict';
-    var VERSION = '1.1';
+    var VERSION = '1.2';   // 1.2 17 Nov 2026: what was sent can be taken back out one Autopilot at a time; the PSSA shows the assemblies and the lines the aircraft level added to its system
     var A = root.SLApxAuto, X = root.SLApx, M = root.SLApxMac, C = root.SLApxCof;
     if (!A || !A.kit || !X || !M || !M.model || !C || !C.model) { if (typeof module !== 'undefined' && module.exports) module.exports = { VERSION: VERSION, missing: true }; return; }
     var K = A.kit, S = K.S, T = K.T, arr = K.arr, safe = K.safe, lc = K.lc, MM = M.model, CM = C.model, AM = A.model;
@@ -122,16 +122,24 @@
         return out;
     }
     // Takes back out everything a failure condition's Autopilots wrote into today's stores, and puts the retired rule back.
-    function unproject(fc) {
+    // which: 'idp', 'mac' or 'cof'; left out, all three.
+    function unproject(fc, which) {
         var p = pc(); if (!p) return;
-        if (p.interdep && p.interdep.cells) Object.keys(p.interdep.cells).forEach(function (k) { if (k.indexOf(fc.key + SEC) === 0 && p.interdep.cells[k] && p.interdep.cells[k].apx) delete p.interdep.cells[k]; });
-        var ir = p.apx && p.apx.idp && p.apx.idp[fc.key];
-        if (ir && ir.projCra && p.interdep && p.interdep.cra) { Object.keys(ir.projCra).forEach(function (ck) { if (ir.projCra[ck] === null) delete p.interdep.cra[ck]; else p.interdep.cra[ck] = ir.projCra[ck]; }); delete ir.projCra; }
-        if (Array.isArray(p.macModels)) p.macModels = p.macModels.filter(function (r) { return !(r && r.apx && S(r.apx.fcKey) === fc.key); });
-        var ar = p.apx && p.apx.archive;
-        if (ar && Array.isArray(ar.macModels)) { ar.macModels.filter(function (x) { return x.replacedBy === ruleId(fc) && !x.restored; }).forEach(function (x) { if (!p.macModels.some(function (r) { return r && r.id === x.rule.id; })) p.macModels.push(x.rule); x.restored = K.now(); }); }
-        if (p.coffe && p.coffe.verdicts) Object.keys(p.coffe.verdicts).forEach(function (k) { if (k.indexOf(fc.key + SEC) === 0 && p.coffe.verdicts[k] && p.coffe.verdicts[k].apx) delete p.coffe.verdicts[k]; });
-        if (ar && Array.isArray(ar.verdicts)) ar.verdicts.forEach(function (x) { if (x.key.indexOf(fc.key + SEC) === 0 && !x.restored && !p.coffe.verdicts[x.key]) { p.coffe.verdicts[x.key] = x.verdict; x.restored = K.now(); } });
+        var all = !which, ar = p.apx && p.apx.archive;
+        if (all || which === 'idp') {
+            if (p.interdep && p.interdep.cells) Object.keys(p.interdep.cells).forEach(function (k) { if (k.indexOf(fc.key + SEC) === 0 && p.interdep.cells[k] && p.interdep.cells[k].apx) delete p.interdep.cells[k]; });
+            var ir = p.apx && p.apx.idp && p.apx.idp[fc.key];
+            if (ir && ir.projCra && p.interdep && p.interdep.cra) { Object.keys(ir.projCra).forEach(function (ck) { if (ir.projCra[ck] === null) delete p.interdep.cra[ck]; else p.interdep.cra[ck] = ir.projCra[ck]; }); delete ir.projCra; }
+        }
+        if (all || which === 'mac') {
+            if (Array.isArray(p.macModels)) p.macModels = p.macModels.filter(function (r) { return !(r && r.apx && S(r.apx.fcKey) === fc.key); });
+            if (ar && Array.isArray(ar.macModels)) { ar.macModels.filter(function (x) { return x.replacedBy === ruleId(fc) && !x.restored; }).forEach(function (x) { if (!Array.isArray(p.macModels)) p.macModels = []; if (!p.macModels.some(function (r) { return r && r.id === x.rule.id; })) p.macModels.push(x.rule); x.restored = K.now(); }); }
+        }
+        if (all || which === 'cof') {
+            if (p.coffe && p.coffe.verdicts) Object.keys(p.coffe.verdicts).forEach(function (k) { if (k.indexOf(fc.key + SEC) === 0 && p.coffe.verdicts[k] && p.coffe.verdicts[k].apx) delete p.coffe.verdicts[k]; });
+            if (ar && Array.isArray(ar.verdicts) && p.coffe && p.coffe.verdicts) ar.verdicts.forEach(function (x) { if (x.key.indexOf(fc.key + SEC) === 0 && !x.restored && !p.coffe.verdicts[x.key]) { p.coffe.verdicts[x.key] = x.verdict; x.restored = K.now(); } });
+        }
+        try { if (root.SLDataChange && root.SLDataChange.bump) root.SLDataChange.bump(); } catch (_) {}
         K.save();
     }
 
@@ -165,8 +173,8 @@
     }
     function resBlocks(fc) {
         var cols = K.picked(fc), names = uniq(cols.map(colTitle)), rs = K.resPicked(fc), f = fc.fcId, b = [];
-        if (!rs.length) { b.push({ k: 'p', text: 'No shared resource was ticked for ' + f + ' in the Interdependence Autopilot.' }); return b; }
-        b.push({ k: 'table', name: 'apx-q42-' + f, title: 'Interdependence (common resource) table for ' + f + ' (ARP4761A Table Q.4-2)', rows: rs.map(function (r, k) { var st = K.resState(fc, r), row = { 'Common sources and resources': 'R' + (k + 1) + '. ' + r.name }; cols.forEach(function (c, i) { row[names[i]] = st.feeds[c.colId] ? 'x' : '--'; }); return row; }), lead: '{N} shows which shared resource feeds which system function for ' + f + ' (x: it does; --: it does not).' });
+        if (!rs.length) { b.push({ k: 'p', text: 'No shared resource was checked for ' + f + ' in the Interdependence Autopilot.' }); return b; }
+        b.push({ k: 'table', name: 'apx-q42-' + f, title: 'Interdependence (common resource) table for ' + f + ' (ARP4761A Table Q.4-2)', rows: rs.map(function (r, k) { var st = K.resState(fc, r), row = { 'Common sources and resources': 'R' + (k + 1) + '. ' + r.name }; cols.forEach(function (c, i) { row[names[i]] = st.feeds[c.colId] ? 'x' : '--'; }); return row; }), lead: '{N} shows which shared resource feeds which system function for ' + f + ' (x: it does; --: it does not). Status: ' + AM.resStatus(fc).t + '.' });
         var er = AM.effectRows(fc);
         if (er.length) b.push({ k: 'table', name: 'apx-b3-' + f, title: 'Common resource analysis for ' + f + ' (ARP4761A Table B3)', rows: er.map(function (e) { var st = K.resState(fc, e.r), row = { 'Common resource': e.r.name, 'Failure mode': e.mode }; cols.forEach(function (c, i) { row[names[i]] = st.feeds[c.colId] ? (AM.craText(fc, e.r, e.mode, c.colId) || 'Not answered') : '--'; }); row['AC-level effect on FC'] = AM.craText(fc, e.r, e.mode, '') || 'Not answered'; return row; }), lead: '{N} is the common resource analysis: what each failure of a shared resource does to each system function it feeds, and what that adds up to for the aircraft.' });
         return b;
@@ -226,6 +234,31 @@
         if (sentRec('cof', fc)) out.cof = safe(function () { return cofBlocks(fc); }, null);
         return out.idp || out.mac || out.cof || out.changed.length ? out : null;
     }
+    // ---- the PSSA: what the aircraft level added to this system (apx_mac.js: the assemblies, the FHA lines) -----------------
+    function linksTo(sy, fcId) {
+        var p = pc(), out = []; if (!p || !p.apx || !p.apx.mac) return out;
+        K.fcs().forEach(function (fc) { var r = p.apx.mac[fc.key]; if (!r || !r.links) return; Object.keys(r.links).forEach(function (k) { var l = r.links[k]; if (l && S(l.sysId) === S(sy.id) && S(l.fcId) === S(fcId)) out.push({ fc: fc, k: k, link: l }); }); });
+        return out;
+    }
+    function pssa(sy) {
+        if (!A.enabled() || !sy) return null;
+        var b = [], asm = arr(sy.assemblies).filter(function (a) { return a && a.apx; }), nm = T(sy.name || sy.id);
+        var fnName = function (id) { var f = arr(sy.functions).filter(function (x) { return x && S(x.funcId) === S(id); })[0]; return f ? T(f.funcName || id) : S(id); };
+        if (asm.length) b.push({ k: 'table', name: 'apx-asm-' + S(sy.id), title: 'The assemblies of the ' + nm + ', as set at the aircraft level', rows: asm.map(function (a) { return { ID: a.id, Assembly: a.name, Side: a.side === 'LH' ? 'Left' : a.side === 'RH' ? 'Right' : 'Center or not sided', Group: a.group || 'The system as one group', Build: (M.PATTERNS[a.build] || {}).label || a.build, 'System function': fnName(a.funcId) }; }), lead: '{N} lists the assemblies the aircraft-level minimum acceptable configuration (MAC) was answered for. The fault trees of this system start from the same assemblies, under the same IDs.' });
+        var wait = arr(sy.fha).filter(function (r) { return r && r.apx && !T(r.severity); });
+        if (wait.length) b.push({ k: 'table', name: 'apx-wait-' + S(sy.id), title: 'Failure conditions added from the aircraft level, waiting to be classified', rows: wait.map(function (r) { return { ID: S(r.fcId), 'Failure condition': T(r.fcDesc), 'System function': fnName(r.sysFuncId || r.subId), 'Came from': T(r.acTrace), 'What the aircraft-level work says': T(r.effAc) || 'Nothing yet: the MAC or the CoFFE for it is not finished', Severity: 'Not classified yet' }; }), lead: '{N} lists the lines the aircraft-level work added to this system\'s FHA. The tool does not set their severity: one loss is a contributor, and what it is worth depends on what else still works. Each gets its appendix here once the system FHA classifies it Minor or above.' });
+        return b.length ? { front: b } : null;
+    }
+    function pssaFc(sy, gr) {
+        if (!A.enabled() || !sy || !gr) return null;
+        var ls = linksTo(sy, gr.fcId), b = []; if (!ls.length) return null;
+        ls.forEach(function (x) {
+            var e = safe(function () { return MM.allEvents(x.fc).filter(function (y) { return y.k === x.k; })[0]; }, null);
+            var asm = e && e.d && e.d.g ? arr(e.d.g.units).map(function (u, i) { return (u.id || '') + ' ' + (e.d.units[i] || ''); }) : [];
+            b.push({ k: 'p', text: gr.fcId + ' is a loss named at the aircraft level for ' + x.fc.fcId + ' ' + x.fc.desc + ' (link ' + x.link.id + ')' + (e ? ': ' + e.what + '.' : '.') + (asm.length ? ' Its fault tree starts from these assemblies: ' + asm.join(', ') + (e.d.P ? ' (' + lc(e.d.P.label) + ').' : '.') : '') + (x.link.review ? ' The link needs review: ' + x.link.review : '') });
+        });
+        return b;
+    }
     function state(gr) { var fc = fcOfGroup(gr); if (!fc || !A.enabled()) return null; return { key: fc.key, idp: K.apStatus('idp', fc).k, mac: K.apStatus('mac', fc).k, cof: K.apStatus('cof', fc).k }; }
 
     // ---- the old screens: with the switch on, the MAC and CoFFE tabs open the Autopilots ----------------------------------------
@@ -252,7 +285,7 @@
         v.insertBefore(b, v.firstChild);
     }
 
-    var api = { VERSION: VERSION, project: project, unproject: unproject, pasa: pasa, state: state, check: check, ruleId: ruleId, macSets: macSets, blocks: { idp: idpBlocks, res: resBlocks, mac: macBlocks, cof: cofBlocks } };
+    var api = { VERSION: VERSION, project: project, unproject: unproject, pssa: pssa, pssaFc: pssaFc, linksTo: linksTo, pasa: pasa, state: state, check: check, ruleId: ruleId, macSets: macSets, blocks: { idp: idpBlocks, res: resBlocks, mac: macBlocks, cof: cofBlocks } };
     try { root.SLApxBridge = api; } catch (_) {}
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

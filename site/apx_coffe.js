@@ -26,7 +26,7 @@
  * ==========================================================================*/
 (function (root) {
     'use strict';
-    var VERSION = '1.1';   // 1.1 17 Nov 2026: the functional failures are the lines the tool added to each system's FHA; each line's effect on its own is written from the CoFFE table
+    var VERSION = '1.2';   // 1.1 17 Nov 2026: the functional failures are the lines the tool added to each system's FHA; each line's effect on its own is written from the CoFFE table
     var A = root.SLApxAuto, X = root.SLApx, M = root.SLApxMac;
     if (!A || !A.kit || !X || !M || !M.model) { if (typeof module !== 'undefined' && module.exports) module.exports = { VERSION: VERSION, missing: true }; return; }
     var K = A.kit, E = K.E, S = K.S, T = K.T, arr = K.arr, safe = K.safe, lc = K.lc, MM = M.model, note = M.note, joinAnd = MM.joinAnd;
@@ -203,7 +203,7 @@
     function status(fc) { var r = peek(fc.key) || {}; return r.sent ? { k: 'sent', by: r.sent.by, at: r.sent.at } : r.changedSince ? { k: 'changed' } : Object.keys(r.a1 || {}).length || r.sig || r.wasSent ? { k: 'started' } : { k: 'new' }; }
     function left(fc) {
         var out = [];
-        if (!MM.macCols(fc).length) { out.push('No system is ticked for this failure condition. Do the Interdependence Autopilot first.'); return out; }
+        if (!MM.macCols(fc).length) { out.push('No system is checked for this failure condition. Do the Interdependence Autopilot first.'); return out; }
         if (!ready(fc)) { out.push('Set how every system is built in the MAC Autopilot first.'); return out; }
         if (!named(fc)) { out.push('Name every outcome.'); return out; }
         var sol = solved(fc); if (sol.error) { out.push(sol.error); return out; }
@@ -328,7 +328,7 @@
     function style() { M.style(); if (typeof document === 'undefined' || document.getElementById('apx-style-cof')) return; var st = document.createElement('style'); st.id = 'apx-style-cof'; st.textContent = CSS; document.head.appendChild(st); }
     function card(q, help, body) { return K.card(q, help, body); }
     function need(fc, title) {
-        if (!MM.macCols(fc).length) return card(title, 'No system is ticked for this failure condition yet. Do the Interdependence Autopilot first.', '<button class="apx-btn p" data-apx-ap="idp">Open the Interdependence Autopilot</button>');
+        if (!MM.macCols(fc).length) return card(title, 'No system is checked for this failure condition yet. Do the Interdependence Autopilot first.', '<button class="apx-btn p" data-apx-ap="idp">Open the Interdependence Autopilot</button>');
         if (!ready(fc)) return card(title, 'The CoFFE table needs to know how each system is built: that is what "partly working" means. Set the builds in the MAC Autopilot first.', '<button class="apx-btn p" data-apx-ap="mac">Open the MAC Autopilot</button>');
         return null;
     }
@@ -408,7 +408,7 @@
         var sol = named(fc) ? solved(fc) : null, l = left(fc), st = status(fc);
         var T9 = sol && !sol.error && sol.done ? tablePairs(fc, sol) : { main: '', same: '' };
         var body = note('', 'The tool takes the gate, adds the shared resources from your Interdependence answers, and lists every combination of failures that causes the failure condition. The ones where every failure comes from the same resource are pulled out below. Nothing to type here.') + (l.length ? note('warn', l.map(E).join('<br>')) : '');
-        if (st.k === 'sent') body += '<div class="apx-sent"><b>Sent to the PASA.</b> Signed by <b>' + E(st.by) + '</b> on ' + E(S(st.at).slice(0, 10)) + '. The PASA now shows the CoFFE tables for ' + E(fc.fcId) + ', the gate, the budgets and the independence principles.</div>';
+        if (st.k === 'sent') body += '<div class="apx-sent"><b>Sent to the PASA.</b> Signed by <b>' + E(st.by) + '</b> on ' + E(S(st.at).slice(0, 10)) + '. The PASA now shows the CoFFE tables for ' + E(fc.fcId) + ', the gate, the budgets and the independence principles.</div>' + K.takeOut(fc, 'cof');
         else body += (st.k === 'changed' ? note('warn', 'Something changed since this was sent. Send it again to bring the PASA up to date.') : '')
             + '<div class="apx-eff" style="margin-top:14px"><div><b>Sign with your name</b></div><div><input type="text" data-apx-sign="1" value="' + E(K.ui.sign != null ? K.ui.sign : K.who()) + '" placeholder="One signature covers this CoFFE" aria-label="Sign with your name"></div></div>' + (K.ui.signMiss ? note('bad', E(K.ui.signMiss)) : '')
             + '<button class="apx-btn p big" style="margin-top:12px" data-apx-x="send"' + (l.length ? ' disabled' : '') + '>Send to the PASA</button>';

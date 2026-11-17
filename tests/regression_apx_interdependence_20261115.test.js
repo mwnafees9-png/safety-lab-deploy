@@ -22,8 +22,10 @@
  *   9  a change after sending says so ("changed since it was sent") until it is sent again
  *  10  today's interdependence tables are not touched until it is sent; once sent they carry it (apx_bridge.js); the
  *      switch back shows today's page
+ *  12  (v1.4) "check" for "tick"; the AI proposes systems, functions and resources from a document, a person accepts;
+ *      resources are Assumed until compared with the architecture document; what was sent can be taken back out
  *  11  no page errors
- * MUTATION PROOFS (SL_APXI_MUTATE): notrace (a ticked function is not traced up to the aircraft function), rescol (a resource provider is a column again), preticked (the tool ticks a resource from the register), nokind (a system is added without asking its kind), offline (a field sits off the line of its label and button), nolock (a project-fed system can be unticked), leak (every function is shown in the
+ * MUTATION PROOFS (SL_APXI_MUTATE): autoadd (the AI's proposals are added by themselves), noassumed (a hand-added resource is not Assumed), noask (taking out does not ask first), notrace (a ticked function is not traced up to the aircraft function), rescol (a resource provider is a column again), preticked (the tool ticks a resource from the register), nokind (a system is added without asking its kind), offline (a field sits off the line of its label and button), nolock (a project-fed system can be unticked), leak (every function is shown in the
  *   table), nosign (sending with no name), unfinished (sending an unfinished table), noswitch (the Autopilot shows with
  *   the switch off), nostamp (answers are sent without the name), oldwrite (today's table is written to). Each must
  *   turn this red.
@@ -40,6 +42,9 @@ function mutate(file, body) {
     if (file !== 'apx_autopilots.js' || !MUT) return body;
     const rep = (a, b) => { if (body.indexOf(a) < 0) throw new Error('mutation site missing: ' + a.slice(0, 80)); body = body.split(a).join(b); };
     if (MUT === 'offline') rep("        + '.apx input,.apx select,.apx textarea{margin:0}'\n", '');
+    if (MUT === 'autoadd') rep("                save();\n                return { n: items.length };", "                save(); items.slice().forEach(function (it0) { acceptProposal(fc, it0.id); });\n                return { n: items.length };");
+    if (MUT === 'noassumed') rep("(b.basis && b.basis.src === 'doc') ? 'backed' : 'assumed'; }", "(b.basis && b.basis.src === 'doc') ? 'backed' : 'backed'; }");
+    if (MUT === 'noask') rep("if (tk[1] === 'ask') ui.takeAsk = tk[0]; else {", "if (tk[1] === 'ask') { doTakeOut(fc, tk[0]); } else {");
     if (MUT === 'notrace') rep("if (role !== 'fails') traceUp(fc, col.funcId); }", '}');
     if (MUT === 'rescol') rep("if (d && d.kind === 'resource') d = null;", '');
     if (MUT === 'preticked') rep("return { on: !!(me && me.on === true), fromData: false,", "return { on: me && typeof me.on === 'boolean' ? me.on : hint.length > 0, fromData: false,");
@@ -142,7 +147,7 @@ function mutate(file, body) {
             return { on: A.model.cellOf(f, A.model.allCols().find(c => c.colId === L0)).on, note: n ? n.innerText : '' };
         }, [K, L0]);
         check('5 unticking a project-fed system is refused and it stays ticked', blk.on === true);
-        check('5 the refusal says why and what to fix', /Can't untick/.test(blk.note) && /Fix that link first/.test(blk.note), blk.note);
+        check('5 the refusal says why and what to fix', /Can't uncheck/.test(blk.note) && /Fix that link first/.test(blk.note), blk.note);
 
         // ---- 6: tick, untick, only what is ticked is shown ------------------------------------------------------------------
         const heads = () => pg.evaluate(() => { const t = document.querySelector('#interdep-host table.apx-arp'); return t ? Array.from(t.querySelectorAll('tr:nth-child(2) th')).slice(3).map(th => th.innerText.replace(/\s+/g, ' ')) : []; });
@@ -178,7 +183,7 @@ function mutate(file, body) {
         check('7 the same name again does not make a second function', (await nFn()) === n1);
         const s0n = await pg.evaluate(() => systemsData.length);
         // 16 Nov 2026 (Waqas: "ask them to add systems, and their functions as part of the PASA"; "ask them if the system is a resource system")
-        const ask = await pg.evaluate((K) => { const A = window.SLApxAuto, f = A.model.fcOf(K), h = document.querySelector('#interdep-host'), first = h.querySelector('.apx-card').children[2]; return { askFirst: !!first && first.classList.contains('apx-ask'), q: (h.querySelector('.apx-askq') || {}).innerText, txt: h.innerText, resCols: A.model.picked(f).filter(c => { const sy = systemsData.find(x => String(x.id) === c.sysId); return sy && sy.role === 'resource'; }).length, resSys: systemsData.filter(x => x.role === 'resource').map(x => x.name), listed: Array.from(h.querySelectorAll('details.apx-fold > summary')).map(x => x.innerText) }; }, K);
+        const ask = await pg.evaluate((K) => { const A = window.SLApxAuto, f = A.model.fcOf(K), h = document.querySelector('#interdep-host'), askEl = h.querySelector('.apx-ask'), firstList = h.querySelector('details.apx-fold'); return { askFirst: !!askEl && (!firstList || !!(askEl.compareDocumentPosition(firstList) & 4)), q: (h.querySelector('.apx-askq') || {}).innerText, txt: h.innerText, resCols: A.model.picked(f).filter(c => { const sy = systemsData.find(x => String(x.id) === c.sysId); return sy && sy.role === 'resource'; }).length, resSys: systemsData.filter(x => x.role === 'resource').map(x => x.name), listed: Array.from(h.querySelectorAll('details.apx-fold > summary')).map(x => x.innerText) }; }, K);
         check('7 the step asks for a system and its function first, and whether it is a resource system', ask.askFirst && /Add a system and its function/.test(ask.q) && /Is it a resource system\?/.test(ask.txt), JSON.stringify({ a: ask.askFirst, q: ask.q }));
         check('7 a resource system is never a column of Table Q.4-1, and is not offered as one', ask.resSys.length >= 1 && ask.resCols === 0 && ask.resSys.every(n => !ask.listed.some(t => t.indexOf(n) === 0)) && /Resource systems are not listed here/.test(ask.txt), JSON.stringify({ res: ask.resSys, cols: ask.resCols }));
         // the project's data saying "this function provides a resource used for the aircraft function" no longer makes it a column
@@ -237,6 +242,53 @@ function mutate(file, body) {
         // ---- 10: today's tables are left alone ---------------------------------------------------------------------------------
         const proj = await pg.evaluate((K) => { const A = window.SLApxAuto, f = A.model.fcOf(K), cells = (projectConfig.interdep || {}).cells || {}, mine = Object.keys(cells).filter(k => k.indexOf(K + '\u00A7') === 0 && cells[k].apx); return { br: !!window.SLApxBridge, n: mine.length, asserted: mine.filter(k => cells[k].state === 'asserted').length, cleared: mine.filter(k => cells[k].state === 'cleared').length, by: mine.every(k => cells[k].by === 'Test Engineer'), cols: A.model.allCols().length, contrib: idpContributors(f.row).map(String), ticked: A.model.picked(f).map(c => c.sysId).filter((x, i, a) => a.indexOf(x) === i) }; }, K);
         check("10 once sent, today's table carries it for the files that read it: every ticked system is a contributor there (by its trace or an assertion), the rest are cleared, signed", proj.br && proj.cleared > 0 && proj.by && proj.n <= proj.cols && proj.ticked.every(x => proj.contrib.indexOf(x) !== -1), JSON.stringify(proj));
+        // ---- 12: 17 Nov 2026 (Waqas: "all three, and instead of saying tick it, we should be saying check it") -----------------
+        const words = await pg.evaluate(async () => { const A = window.SLApxAuto, out = []; for (let i = 0; i < 7; i++) { A._ui.step = i; A.kit.draw(); document.querySelectorAll('#interdep-host details').forEach(d => { d.open = true; }); const h = document.querySelector('#interdep-host'); const t = h.innerText + ' ' + Array.from(h.querySelectorAll('[aria-label],[placeholder],[title]')).map(e => (e.getAttribute('aria-label') || '') + ' ' + (e.getAttribute('placeholder') || '') + ' ' + (e.getAttribute('title') || '')).join(' '); out.push({ tick: /\btick|untick/i.test(t), check: /\bcheck/i.test(t) }); } return out; });
+        check('12 the page says "check", never "tick", on every step', words.every(w => !w.tick) && words.filter(w => w.check).length >= 4, JSON.stringify(words));
+        // the AI reads a design document and proposes; nothing is added until a person accepts
+        const ai = await pg.evaluate(async (K) => {
+            const A = window.SLApxAuto, f = () => A.model.fcOf(K), out = {};
+            window.slLoadAI = async () => {}; let seen = null;
+            window.SafetyLabSourceDocs = { list: () => [{ name: 'K350 Architecture Description Rev C', text: 'The ground spoilers dump lift after touchdown. Hydraulic System B powers the ground spoilers.' }] };
+            window.SafetyLabAI = { complete: async (o) => { seen = o; return { model: 'test-model', text: JSON.stringify({ systems: [{ system: 'Ground Spoiler System', function: 'Dump lift after touchdown', kind: 'does', quote: 'The ground spoilers dump lift after touchdown.', where: 'section 4.2' }, { system: 'No Function Given', kind: 'does' }, { system: 'Bad Kind', function: 'x', kind: 'maybe' }], resources: [{ resource: 'Hydraulic System B', providedBySystem: 'Hydraulic Power System', providedByFunction: 'Supply hydraulic pressure, system B', feeds: [{ system: 'Ground Spoiler System', function: 'Dump lift after touchdown' }, { system: 'Not A Column' }], quote: 'Hydraulic System B powers the ground spoilers.', where: 'section 6.1' }] }) }; } };
+            const n0 = systemsData.length, c0 = A.model.picked(f()).length, r0 = resourcesData.length;
+            const doc = window.SafetyLabSourceDocs.list()[0]; const r = await A.act.propose(f(), 'doc', doc); out.r = r;
+            out.mid = { sys: systemsData.length - n0, cols: A.model.picked(f()).length - c0, res: resourcesData.length - r0, items: A.model.proposals(f()).items.map(x => x.t + ':' + (x.t === 'res' ? x.resource : x.system)) };
+            A._ui.step = 1; A.kit.draw(); out.shown = /AI proposes/.test(document.querySelector('#interdep-host').innerText) && !!document.querySelector('#interdep-host [data-apx-pacc]');
+            const sysItem = A.model.proposals(f()).items.find(x => x.t === 'sys'), resItem = A.model.proposals(f()).items.find(x => x.t === 'res');
+            out.a1 = A.act.acceptProposal(f(), sysItem.id);
+            const col = A.model.picked(f()).find(c => c.sysName === 'Ground Spoiler System'); out.col = col && { fn: col.fnName, basis: (projectConfig.apx.idp[K].basis || {})[col.colId], traced: (A.kit.fnRow(col.funcId).traceIds || []).indexOf(f().subId) !== -1 };
+            out.a2 = A.act.acceptProposal(f(), resItem.id);
+            const res = A.model.resources().find(x => x.name === 'Hydraulic System B'), st = res && A.model.resState(f(), res); out.res = res && { on: st.on, feeds: Object.keys(st.feeds).filter(k => st.feeds[k]), want: col && col.colId, prov: A.kit.providerText(res), basis: A.model.resBasis(f(), res).basis };
+            out.left = A.model.proposals(f()).items.length; out.feature = seen && seen.feature; out.temp = seen && seen.temperature; out.never = seen && /never guess/.test(seen.system);
+            return out;
+        }, K);
+        check('12 the AI is asked to use only the text, never to guess, at temperature 0; a proposal with no function or an unknown kind is dropped', ai.feature === 'apx.idp.propose' && ai.temp === 0 && ai.never && ai.mid.items.join() === 'sys:Ground Spoiler System,res:Hydraulic System B', JSON.stringify(ai.mid));
+        check('12 its proposals are shown and nothing is added until a person accepts', ai.r.n === 2 && ai.shown && ai.mid.sys === 0 && ai.mid.cols === 0 && ai.mid.res === 0, JSON.stringify(ai.mid));
+        check('12 accepting a system adds it with its function, as a column, traced up, and records the document and the words it rests on', ai.a1.ok && ai.col && ai.col.fn === 'Dump lift after touchdown' && ai.col.traced && ai.col.basis && ai.col.basis.src === 'doc' && /Architecture Description Rev C/.test(ai.col.basis.doc) && /dump lift/.test(ai.col.basis.quote), JSON.stringify(ai.col));
+        check('12 accepting a resource checks it, with its provider, and fills in only the feeds the document names that are columns here', ai.a2.ok && ai.res && ai.res.on && ai.res.feeds.join() === ai.res.want && /Hydraulic Power System: supply hydraulic pressure, system b/i.test(ai.res.prov) && ai.left === 0, JSON.stringify(ai.res));
+        // the resources are Assumed until read from, or compared with, the architecture document
+        const rst = await pg.evaluate((K) => { const A = window.SLApxAuto, f = () => A.model.fcOf(K), out = {}, rs = A.model.resPicked(f()); out.n = rs.length; out.s0 = A.model.resStatus(f()); const hand = rs.filter(r => !(A.model.resBasis(f(), r).basis && A.model.resBasis(f(), r).basis.src === 'doc')); out.hand = hand.length; hand.forEach(r => A.act.setCompare(f(), r.key, 'same', 'Architecture Description 6.1')); out.s1 = A.model.resStatus(f()).k; A.act.setCompare(f(), hand[0].key, 'differs', 'Architecture Description 6.1'); out.s2 = A.model.resStatus(f()).k; A.act.setCompare(f(), hand[0].key, 'same', 'Architecture Description 6.1'); A._ui.step = 3; A.kit.draw(); out.txt = document.querySelector('#interdep-host').innerText; return out; }, K);
+        check('12 a resource added by hand is Assumed until it is compared with the architecture document; one read from the document is not', rst.hand >= 1 && rst.hand < rst.n && rst.s0.k === 'assumed' && new RegExp('Assumed: ' + rst.hand + ' of ' + rst.n + ' ').test(rst.s0.t), JSON.stringify(rst.s0));
+        check('12 compared and matching: Backed by the architecture document; a difference shows as Different', rst.s1 === 'backed' && rst.s2 === 'differs' && /Resources: Backed by the architecture document/.test(rst.txt), JSON.stringify({ s1: rst.s1, s2: rst.s2 }));
+        // what was sent can be taken back out, from the page
+        const tk = await pg.evaluate(async (K) => {
+            const A = window.SLApxAuto, f = () => A.model.fcOf(K), out = {}, wait = ms => new Promise(r => setTimeout(r, ms));
+            A.model.resPicked(f()).forEach(r => { if (!A.model.resState(f(), r).modes.length) A.act.mode(f(), r.key, 'Total loss', true); });
+            A.model.effectRows(f()).forEach(x => { const st = A.model.resState(f(), x.r); A.model.picked(f()).forEach(c => { if (st.feeds[c.colId] && !A.model.craText(f(), x.r, x.mode, c.colId)) A.act.setCra(f(), x.r.key + '|' + x.mode + '|' + c.colId, 'Function lost'); }); if (!A.model.craText(f(), x.r, x.mode, '')) A.act.setCra(f(), x.r.key + '|' + x.mode + '|', 'The failure condition happens'); });
+            out.send = A.act.send(f(), 'Test Engineer'); out.sentAs = projectConfig.apx.idp[K].sent;
+            const mine = () => Object.keys(projectConfig.interdep.cells).filter(k => k.indexOf(K + '§') === 0 && projectConfig.interdep.cells[k].apx).length;
+            out.before = mine(); A._ui.step = 6; A.kit.draw();
+            const b1 = document.querySelector('#interdep-host [data-apx-take$="|ask"]'); out.btn = !!b1; b1.click(); await wait(200);
+            out.asks = !!document.querySelector('#interdep-host [data-apx-takeask]'); out.still = mine();
+            document.querySelector('#interdep-host [data-apx-take$="|yes"]').click(); await wait(300);
+            out.after = mine(); out.status = A.model.status(f()).k; out.kept = A.model.picked(f()).length; out.tookOut = !!projectConfig.apx.idp[K].tookOut;
+            return out;
+        }, K);
+        check('12 the resource status is sent with the Autopilot', tk.send.ok && tk.sentAs.resStatus === 'backed', JSON.stringify(tk.sentAs));
+        check('12 once sent, the page offers to take it back out, and asks before doing it', tk.btn && tk.asks && tk.still === tk.before && tk.before > 0, JSON.stringify(tk));
+        check('12 taking it out removes what was sent from today\'s table; the answers here stay', tk.after === 0 && tk.status === 'started' && tk.kept > 0 && tk.tookOut, JSON.stringify(tk));
+        await pg.evaluate(() => { window.SLApxAuto._ui.step = 6; window.SLApxAuto.kit.draw(); });
         await pg.click('[data-apx-view="old"]'); await tick(1200);
         const old = await pg.evaluate(() => { const v = document.getElementById('view-interdep'), p = v.querySelector(':scope > p'); return { cls: v.classList.contains('apx-on'), p: p ? getComputedStyle(p).display : '', sw: !!document.querySelector('#interdep-host [data-apx-view="new"]'), body: document.querySelector('#interdep-host').innerText.length }; });
         check("10 the switch back shows today's page, with the way back to the Autopilot", !old.cls && old.p !== 'none' && old.sw && old.body > 200, JSON.stringify(old));

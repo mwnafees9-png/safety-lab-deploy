@@ -28,7 +28,7 @@
  * system level analyses automatically"; on the severity of a line made that way: "how will you determine the severity?
  * total loss of wheel braking may be contributing to loss of ability to stop the aircraft, but the aircraft might have
  * sufficient control authority with thrust reverseers and flaps to mitigate it" (confirmed: the tool never sets it).
- *   - The build step opens with the ask: "Add an assembly group", for one of the ticked system functions.
+ *   - The build step opens with the ask: "Add an assembly group", for one of the checked system functions.
  *   - Every assembly is mirrored onto its system (system.assemblies, entries marked apx), so the system level starts
  *     from the same assemblies.
  *   - Every loss and wrong action of a set build gets its line in that system's FHA by itself (ensureSysFcs): keyed to
@@ -41,7 +41,7 @@
  *       pattern, units: [ { id: 'ASM-n.k', name, side: 'LH' | 'RH' | 'C' } ], pos: 'same' | 'mirror' | 'each',
  *       src: 'hand' | 'doc' | 'told' | 'sdd', ref, by, at, sdd: { pattern, units, quote, where, doc, src, by, at }, resolve } ] }
  * THE RECORD OF ONE FAILURE CONDITION (projectConfig.apx.mac[<governing row internalId>]):
- *   sig      the columns the answers were given for; when the build or the ticked systems change, the answers are set
+ *   sig      the columns the answers were given for; when the build or the checked systems change, the answers are set
  *            aside (kept in stale) and the questions are asked again
  *   m1       { case: 0 | 1 }   0 = the aircraft still does the job, 1 = it does not; hist: the cases each answer wrote
  *   why      { case: text }    the reason for each rule;  ev: the evidence for the answers
@@ -53,7 +53,7 @@
  * ==========================================================================*/
 (function (root) {
     'use strict';
-    var VERSION = '1.1';   // 1.1 17 Nov 2026: the build step asks first; assemblies are written onto their system; every loss gets its line in the system's FHA by itself, severity left blank
+    var VERSION = '1.2';   // 1.1 17 Nov 2026: the build step asks first; assemblies are written onto their system; every loss gets its line in the system's FHA by itself, severity left blank
     var A = root.SLApxAuto, X = root.SLApx;
     if (!A || !A.kit || !X) { if (typeof module !== 'undefined' && module.exports) module.exports = { VERSION: VERSION, missing: true }; return; }
     var K = A.kit, E = K.E, S = K.S, T = K.T, arr = K.arr, safe = K.safe, lc = K.lc;
@@ -85,7 +85,7 @@
     function peek(fcKey) { var p = K.pc(); return (p && p.apx && p.apx.mac && p.apx.mac[fcKey]) || null; }
     function touched(fcKey) { var r = rec(fcKey); if (r.sent) { r.changedSince = { at: K.now() }; r.wasSent = r.sent; delete r.sent; } K.save(); }
 
-    // ---- columns: one per assembly group of each ticked system function ---------------------------------------------------
+    // ---- columns: one per assembly group of each checked system function ---------------------------------------------------
     function lossBase(fc) { return K.picked(fc).filter(function (c) { var x = K.cellOf(fc, c); return !(x.role === 'fails' && x.how === 'malfunction'); }); }
     function groupsOf(colId) { var b = peekBuild(colId); return b && Array.isArray(b.groups) ? b.groups : []; }
     function newGroup(colId) {
@@ -178,7 +178,7 @@
     function status(fc) { var r = peek(fc.key) || {}; return r.sent ? { k: 'sent', by: r.sent.by, at: r.sent.at } : r.changedSince ? { k: 'changed' } : (r.m1 && Object.keys(r.m1).length) || r.sig || r.wasSent ? { k: 'started' } : { k: 'new' }; }
     function aloneMalf(fc) { return malfList(fc).filter(function (m) { return m.on && m.mode === 'alone'; }); }
     function comboMalf(fc) { return malfList(fc).filter(function (m) { return m.on && m.mode === 'combo'; }); }
-    // every ticked system function, with whether its wrong action matters (pre-ticked from the Interdependence answer)
+    // every checked system function, with whether its wrong action matters (pre-checked from the Interdependence answer)
     function malfList(fc) {
         var r = peek(fc.key) || {}, mm = r.malf || {};
         return K.picked(fc).map(function (c) {
@@ -188,7 +188,7 @@
     }
     function left(fc) {
         var out = [], ds = macCols(fc);
-        if (!ds.length) { out.push('No system is ticked for this failure condition. Do the Interdependence Autopilot first.'); return out; }
+        if (!ds.length) { out.push('No system is checked for this failure condition. Do the Interdependence Autopilot first.'); return out; }
         var unset = ds.filter(function (d) { return !d.set; }); if (unset.length) { out.push('Set how ' + joinAnd(unset.map(function (d) { return d.name; })) + (unset.length > 1 ? ' are' : ' is') + ' built.'); return out; }
         var sol = solved(fc); if (sol.error) { out.push(sol.error); return out; }
         if (!sol.done) { out.push(sol.open.length + ' switch-off question' + (sol.open.length > 1 ? 's are' : ' is') + ' still open.'); return out; }
@@ -433,7 +433,7 @@
     function parseJson(text) { try { return JSON.parse(S(text).trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')); } catch (_) {} try { var m = S(text).match(/\{[\s\S]*\}/); if (m) return JSON.parse(m[0]); } catch (_) {} return null; }
     var AI_SYSTEM = 'You read aircraft design material for a safety engineer who is setting how each system function is built, at assembly level (not items), for a Minimum Acceptable Configuration. Use ONLY what the supplied text says. For each listed system function return its assembly groups. Each group has: "name" (for example "Ailerons"; leave "" when the function is one group), "pattern" (exactly one of: single, backup, shared, lr, pairs, triple), "units" (the assemblies, in order, each {"name","side"} with side LH, RH or C), "pos" (same: any one lost counts the same; mirror: left and right mirror each other; each: it matters which one is lost), "quote" (the words from the text this rests on, verbatim) and "where" (section or page). Patterns: single = one unit. backup = two, one in use and one standby, losing one loses nothing. shared = two that share the load, losing one is a partial loss. lr = a left and a right unit that share the load. pairs = an inboard and an outboard pair that share the load. triple = three, two needed. If the text does not say how a function is built, return an empty groups list for it; never guess. Reply with JSON only: {"columns":[{"colId":"...","groups":[...]}]}.';
     function propose(fc, mode, payload) {
-        var cols = lossBase(fc); if (!cols.length) return Promise.reject(new Error('No system is ticked for this failure condition.'));
+        var cols = lossBase(fc); if (!cols.length) return Promise.reject(new Error('No system is checked for this failure condition.'));
         var loader = typeof root.slLoadAI === 'function' ? Promise.resolve().then(function () { return root.slLoadAI(); }).catch(function () {}) : Promise.resolve();
         return loader.then(function () {
             var P = root.SafetyLabAI; if (!(P && typeof P.complete === 'function')) throw new Error('The AI is not available on this plan or in this session. Set the build by hand.');
@@ -521,7 +521,7 @@
             Object.keys(lv).forEach(function (sid) { if (Object.keys(lv[sid]).length > 1) { out.ok = false; out.notes.push('The earlier rule has ' + Object.keys(lv[sid]).length + ' degraded levels for one system. The Autopilot has one "partly working" state per assembly, so this rule is not brought in by the tool: answer the questions instead.'); } });
             sets.forEach(function (set) {
                 var c = ds.map(function () { return 'O'; }), bad = null;
-                set.forEach(function (tok) { var m = mapToken(tok, ds); if (m.item) bad = 'It names ' + T(m.item.name || m.item.itemId) + ', an item. That is now a gate in its system\'s own fault tree, not a MAC rule.'; else if (m.unknown) bad = 'It names "' + m.tok + '", which is not one of this failure condition\'s ticked systems.'; else if (m.many) bad = 'It names a system that is split into ' + m.many.length + ' assembly groups here.'; else { var i = ds.indexOf(m.d); if (m.st === 'D' && m.d.states.indexOf('D') === -1) bad = m.d.name + ' has no "partly working" state with the build set here.'; else if (c[i] !== 'F') c[i] = m.st; } });
+                set.forEach(function (tok) { var m = mapToken(tok, ds); if (m.item) bad = 'It names ' + T(m.item.name || m.item.itemId) + ', an item. That is now a gate in its system\'s own fault tree, not a MAC rule.'; else if (m.unknown) bad = 'It names "' + m.tok + '", which is not one of this failure condition\'s checked systems.'; else if (m.many) bad = 'It names a system that is split into ' + m.many.length + ' assembly groups here.'; else { var i = ds.indexOf(m.d); if (m.st === 'D' && m.d.states.indexOf('D') === -1) bad = m.d.name + ' has no "partly working" state with the build set here.'; else if (c[i] !== 'F') c[i] = m.st; } });
                 out.sets.push({ set: set, c: bad ? null : c.join(''), bad: bad });
                 if (bad) { out.ok = false; if (out.notes.indexOf(bad) === -1) out.notes.push(bad); }
             });
@@ -567,7 +567,7 @@
     function statusNote(fc) { var st = macStatus(fc); return note(st.k === 'backed' ? 'good' : 'warn', 'MAC status: <b>' + E(st.t) + '</b>'); }
     function need(fc, title) {
         var ds = macCols(fc);
-        if (!ds.length) return card(title, 'No system is ticked for this failure condition yet. Do the Interdependence Autopilot first: the MAC works on the systems ticked there.', '<button class="apx-btn p" data-apx-ap="idp">Open the Interdependence Autopilot</button>');
+        if (!ds.length) return card(title, 'No system is checked for this failure condition yet. Do the Interdependence Autopilot first: the MAC works on the systems checked there.', '<button class="apx-btn p" data-apx-ap="idp">Open the Interdependence Autopilot</button>');
         return null;
     }
     function unitBlocks(d, off, click) { return d.units.map(function (u, k) { return '<span class="apx-ub ' + (off.indexOf(k) !== -1 ? 'off' : 'on') + '"' + (click ? ' data-apx-x="try|' + E(d.id) + '|' + k + '" role="button" tabindex="0" aria-pressed="' + (off.indexOf(k) !== -1) + '"' : '') + '>' + E(u) + '</span>'; }).join(''); }
@@ -620,7 +620,7 @@
             return '<div class="apx-bld' + (gs.length && gs.every(function (g) { return patOf(g); }) ? ' on' : '') + '"><div class="apx-nm">' + E(c.sysName) + ' <span class="apx-tag" style="font-weight:600">' + E(c.funcId) + '</span><span style="font-weight:400"> ' + E(c.fnName) + '</span></div>' + h + '</div>';
         }).join('');
         var ds = macCols(fc), mir = ds.some(function (d) { return d.states.indexOf('A') !== -1; }) ? '<div class="apx-eff" style="margin:14px 0 0;grid-template-columns:minmax(0,1fr) minmax(260px,360px)"><div><b>Do left and right mirror each other across the aircraft?</b><div style="font-size:12.5px">If yes, one answer covers a mix and its mirror image.</div></div><div class="apx-sw" role="group" aria-label="Mirror"><button type="button" class="' + ((peek(fc.key) || {}).mirror !== false ? 'on' : '') + '" data-apx-x="mirror|1">Yes, they mirror</button><button type="button" class="' + ((peek(fc.key) || {}).mirror === false ? 'on' : '') + '" data-apx-x="mirror|0">No, ask both sides</button></div></div>' : '';
-        return card('How is each system built?', 'Add the assembly groups of each ticked system and say how each is built. It tells the tool what "partly working" really means. Names and sides come from your design, never from the tool.', ways + ai + ask + rows + mir + statusNote(fc));
+        return card('How is each system built?', 'Add the assembly groups of each checked system and say how each is built. It tells the tool what "partly working" really means. Names and sides come from your design, never from the tool.', ways + ai + ask + rows + mir + statusNote(fc));
     }
     function stepGame(fc) {
         var n = need(fc, 'Switch it off'); if (n) return n;
@@ -629,7 +629,7 @@
         var r = peek(fc.key) || {}, asked = arr(r.hist).length, byYou = Object.keys(sol.m1).length, logic = sol.cases.filter(function (c) { return sol.by[c].level != null && sol.by[c].src === 'logic'; }).length, mir = Math.max(0, byYou - asked);
         var body = '<div class="apx-eff" style="margin-bottom:14px"><div><b>Evidence for these answers</b></div><div><input type="text" data-apx-xc="ev" value="' + E(r.ev || '') + '" placeholder="For example: landing performance analysis, ground handling simulation" aria-label="Evidence"></div></div>'
             + '<div class="apx-prog4"><div><b>' + sol.cases.length + '</b>mixes in total</div><div><b>' + asked + '</b>questions you answered</div><div><b>' + (logic + mir) + '</b>filled by logic' + (mir ? ' and mirror' : '') + '</div><div><b>' + sol.open.length + '</b>left</div></div>';
-        if (r.asked === 'again') body += note('warn', 'The build or the ticked systems changed, so the questions are asked again. The earlier answers are kept on file.');
+        if (r.asked === 'again') body += note('warn', 'The build or the checked systems changed, so the questions are asked again. The earlier answers are kept on file.');
         var cv = !byYou ? conversion(fc) : null;
         if (cv && cv.rules.length) body += note(cv.ok ? '' : 'warn', '<b>This aircraft function has ' + cv.rules.length + ' earlier MAC rule' + (cv.rules.length > 1 ? 's' : '') + ' from today\'s MAC page.</b> ' + (cv.ok ? 'The tool can bring ' + (cv.rules.length > 1 ? 'them' : 'it') + ' in exactly, as answers you then check: ' + E(cv.sets.map(function (s) { return caseText(s.c, sol.ds); }).join('; ')) + '. <button class="apx-btn" data-apx-x="convert" style="margin-left:6px">Bring it in</button>' : E(cv.notes.join(' '))));
         if (sol.open.length) {
@@ -667,10 +667,10 @@
     function stepMalf(fc) {
         var n = need(fc, 'Can a system cause it by doing the wrong thing?'); if (n) return n;
         var body = '<div class="apx-ticks">' + malfList(fc).map(function (m) {
-            return '<div class="apx-tick' + (m.on ? ' on' : '') + '"><button type="button" class="apx-box" data-apx-x="malf|' + E(m.colId) + '" aria-label="' + (m.on ? 'Untick ' : 'Tick ') + E(m.sysName) + '" aria-pressed="' + (m.on ? 'true' : 'false') + '"></button><span class="apx-nm">' + E(m.sysName) + ' <span style="font-weight:400">' + E(m.fnName) + '</span></span><span class="apx-why">'
+            return '<div class="apx-tick' + (m.on ? ' on' : '') + '"><button type="button" class="apx-box" data-apx-x="malf|' + E(m.colId) + '" aria-label="' + (m.on ? 'Uncheck ' : 'Check ') + E(m.sysName) + '" aria-pressed="' + (m.on ? 'true' : 'false') + '"></button><span class="apx-nm">' + E(m.sysName) + ' <span style="font-weight:400">' + E(m.fnName) + '</span></span><span class="apx-why">'
                 + (m.on ? sel('malfmode|' + m.colId, [['alone', 'It causes the failure condition all by itself'], ['combo', 'Only together with other failures']], m.mode) + '<div style="font-size:12.5px;margin-top:6px">' + (m.mode === 'alone' ? 'It becomes its own branch in the fault tree and goes to the ' + E(m.sysName) + ' PSSA. It stays out of the CoFFE table.' : 'It gets a "doing the wrong thing" column in the CoFFE table. The MAC cannot answer those cases, so you answer them there.') + '</div>' : (m.fromIdp ? '' : 'Its wrong action does not lead to this failure condition.')) + '</span></div>';
         }).join('') + '</div>';
-        return card('Can a system cause it by doing the wrong thing?', 'For example, an engine stuck at high thrust on landing. Tick each system whose wrong action matters, and say whether it does it alone or only together with other failures.', body);
+        return card('Can a system cause it by doing the wrong thing?', 'For example, an engine stuck at high thrust on landing. Check each system whose wrong action matters, and say whether it does it alone or only together with other failures.', body);
     }
     function lanes(fc) {
         var sol = ready(fc) ? solved(fc) : null; if (!sol || sol.error || !sol.done) return null;
@@ -742,7 +742,7 @@
         body += statusNote(fc);
         var l = left(fc), s2 = status(fc);
         body += l.length ? note('warn', l.map(E).join('<br>')) : '';
-        if (s2.k === 'sent') body += '<div class="apx-sent"><b>Sent to the PASA</b> as: ' + E((peek(fc.key).sent || {}).statusText || '') + '. Signed by <b>' + E(s2.by) + '</b> on ' + E(S(s2.at).slice(0, 10)) + '.</div>';
+        if (s2.k === 'sent') body += '<div class="apx-sent"><b>Sent to the PASA</b> as: ' + E((peek(fc.key).sent || {}).statusText || '') + '. Signed by <b>' + E(s2.by) + '</b> on ' + E(S(s2.at).slice(0, 10)) + '.</div>' + K.takeOut(fc, 'mac');
         else body += (s2.k === 'changed' ? note('warn', 'Something changed since this was sent. Send it again to bring the PASA up to date.') : '')
             + '<div class="apx-eff" style="margin-top:14px"><div><b>Sign with your name</b></div><div><input type="text" data-apx-sign="1" value="' + E(K.ui.sign != null ? K.ui.sign : K.who()) + '" placeholder="One signature covers this MAC" aria-label="Sign with your name"></div></div>'
             + (K.ui.signMiss ? note('bad', E(K.ui.signMiss)) : '')

@@ -33,7 +33,7 @@
 // (AutoReq.applyMerge). Numbers from SLTopBasis and the trees. window.SLPssaAuto.
 (function (root) {
     'use strict';
-    var VERSION = '2.3';   // 2.2 11 Nov 2026: a gate whose inputs are all held tighter than their shares says what they use of its budget
+    var VERSION = '2.4';   // 2.4 17 Nov 2026: the front shows the assemblies and the FHA lines the aircraft-level Autopilots added; an appendix says which aircraft-level loss its failure condition is. //   // 2.2 11 Nov 2026: a gate whose inputs are all held tighter than their shares says what they use of its budget
     function g(n) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(n); if (v !== undefined) return v; } } catch (_) {} try { return root[n]; } catch (_) { return undefined; } }
     function L() { return root.SLPasaAuto && root.SLPasaAuto.lib; }
     function S(v) { return v == null ? '' : String(v); }
@@ -262,6 +262,9 @@
         b.push(P(f.scope === 'part' ? 'This issue covers part of the system only. ' + l.T(f.scopeNote || 'What is left out, and why, is not written yet.') : f.scope === 'all' ? 'It covers every function and failure condition in the system FHA.' : 'Not decided yet: what this PSSA covers.', 'pssa.scope'));
         b.push(H(1, 'The system'));
         b.push(P(f.desc === 'own' && f.descText ? l.T(f.descText) : f.desc === 'project' ? 'The ' + l.T(sy.name || sy.id) + (fns.length ? ' performs ' + l.listJoin(fns.map(function (x) { return l.lc(l.T(x.funcName || x.funcId)); })) + '.' : '.') : 'Not decided yet: the description of the system.', 'pssa.desc'));
+        // 17 Nov 2026: what the aircraft-level Autopilots added to this system (apx_bridge.js): its assemblies, and FHA lines waiting to be classified
+        var AXP = root.SLApxBridge && root.SLApxBridge.pssa ? safe(function () { return root.SLApxBridge.pssa(sy); }, null) : null;
+        if (AXP && AXP.front) AXP.front.forEach(function (x) { b.push(x); });
         b.push(H(1, 'Method'));
         b.push(P(f.method === 'std' ? 'The assessment follows ARP4761A and ARP4754B, with the objectives of ' + l.acRef() + ' (' + l.regulation() + '). Each function of the system with a failure condition rated Minor or above has its own appendix. The 1309 chart in the system FHA decides whether each failure condition is assessed quantitatively or qualitatively; a Minor one is qualitative. Each quantitative one takes the stricter of the budgets the aircraft hands down and its own class objective; the tree goes down to items, and the item assurance levels come from the tree.' : f.method === 'own' && f.methodText ? l.T(f.methodText) : 'Not decided yet: the method.', 'pssa.method'));
         var RT = root.SLReqTrace;
@@ -290,6 +293,8 @@
         b.push(P('This appendix shows how the system is built to keep that from happening, what each item must promise, and what has to be checked so the backups are really there when needed.'));
         b.push(H(3, 'The system FHA entry'));
         b.push({ k: 'table', name: 'sfha-' + f, title: f + ' as the system FHA records it', rows: [{ Item: 'Failure condition', Entry: fcName(gr) }, { Item: 'Flight phases', Entry: l.T(fc.phases || 'Every phase') }, { Item: 'Effect', Entry: l.T(fc.effAc || 'Not recorded') }, { Item: 'Severity', Entry: S(fc.severity) }, { Item: 'Feeds aircraft failure conditions', Entry: acs.length ? acs.map(function (a) { return S(a.fcId) + ' ' + l.T(a.fcDesc || ''); }).join('; ') : 'None traced' }], lead: '{N} is the system FHA entry for the worst case of ' + f + '.' });
+        var AXF = root.SLApxBridge && root.SLApxBridge.pssaFc ? safe(function () { return root.SLApxBridge.pssaFc(sy, gr); }, null) : null;
+        if (AXF) AXF.forEach(function (x) { b.push(x); });
         b.push(H(3, 'What the aircraft hands down'));
         var hd = handedDown(gr), ap = applies(gr);
         if (!hd.length) b.push(P('Nothing is handed down from the aircraft yet: ' + f + ' is not traced to an aircraft failure condition, so its own class objective applies (' + (t.prob != null ? l.sci(t.prob) + ' per flight hour' : 'not set') + ').'));

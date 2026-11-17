@@ -24,8 +24,10 @@
  *  10  the PASA appendix shows the tables of the book as report tables; a change after sending is a finding there
  *  11  with the switch on the MAC and CoFFE tabs open the Autopilots; today's MAC page stays one click away; with the
  *      switch off the bridge does nothing
+ *  13  (17 Nov 2026) the PSSA of a system shows its assemblies and the FHA lines the aircraft level added; one Autopilot
+ *      can be taken back out on its own; the pages say "check"
  *  12  no page errors
- * MUTATION PROOFS (SL_APXC_MUTATE): ownwrong (a line's own effect is read from a case with other failures in it), nosug (the MAC's answer is not outlined), badmath (the gate probability is the plain
+ * MUTATION PROOFS (SL_APXC_MUTATE): takeall (taking one Autopilot out takes all three), guesssev (the PSSA shows a severity for a line nobody classified), ownwrong (a line's own effect is read from a case with other failures in it), nosug (the MAC's answer is not outlined), badmath (the gate probability is the plain
  *   product), cutrows (the full table drops cases), nofcfilter (a sent rule speaks for every condition of its function),
  *   nosets (today's reader ignores the sent sets), delold (the earlier rule is deleted, not kept), early (stores are
  *   written before sending), offruns (the bridge writes with the switch off). Each must turn this red.
@@ -41,6 +43,8 @@ const rd = f => fs.readFileSync(path.join(SITE, f), 'utf8');
 function mutate(file, body) {
     if (!MUT) return body;
     const rep = (a, b) => { if (body.indexOf(a) < 0) throw new Error('mutation site missing in ' + file + ': ' + a.slice(0, 80)); body = body.split(a).join(b); };
+    if (MUT === 'takeall' && file === 'apx_bridge.js') rep("var all = !which, ar = p.apx && p.apx.archive;", "var all = true, ar = p.apx && p.apx.archive;");
+    if (MUT === 'guesssev' && file === 'apx_bridge.js') rep("Severity: 'Not classified yet' }; })", "Severity: 'Hazardous' }; })");
     if (MUT === 'ownwrong' && file === 'apx_coffe.js') rep("var c = sol.ds.map(function (d, j) { return j === i ? e.st : 'O'; }).join(''), lv = sol.lvl[c];", "var c = sol.ds.map(function (d, j) { return j === i ? e.st : 'F'; }).join(''), lv = sol.lvl[c];");
     if (MUT === 'nosug' && file === 'apx_coffe.js') rep("var m = macSays(fc, nq.c, sol), fco", "var m = null, fco");
     if (MUT === 'badmath' && file === 'apx_engine.js') rep("return { p: pc * (1 - q), core: pc, any: 1 - q };", "return { p: pc * g.any.reduce(function (a, e) { return a * P(e); }, 1), core: pc, any: 1 - q };");
@@ -224,6 +228,32 @@ function mutate(file, body) {
         check('10 the appendix has its MAC and CoFFE parts', pasa.heads.some(h => /Minimum acceptable configuration \(MAC\)/.test(h)) && pasa.heads.some(h => /Combined functional failure effects \(CoFFE\)/.test(h)), pasa.heads);
         const chg = await pg.evaluate((K) => { const A = SLApxAuto, C = SLApxCof, B = SLApxBridge, f = A.model.fcOf(K), gr = SLFcTrees.groups('ac').find(g => String(g.gov.internalId) === K); C.act.setResultName(f, 'Stopping Result'); const ax = B.pasa(gr); const blocks = SLPasaAuto.fnSection(f.subId, {}), arr0 = Array.isArray(blocks) ? blocks : (blocks && blocks.blocks) || []; const fin = arr0.filter(b => b && b.k === 'p' && /changed after being sent/.test(b.text || '')).length; const st = C.model.status(f).k; C.act.send(f, 'Test Engineer'); return { changed: ax.changed, cof: ax.cof, fin, st }; }, K);
         check('10 a change after sending takes that part out of the appendix and is a finding there until it is sent again', chg.st === 'changed' && chg.changed.join() === 'CoFFE' && chg.cof === null && chg.fin === 1, chg);
+
+        // ---- 13: 17 Nov 2026 (Waqas: "all three"): the system level reads what the aircraft level added; one part can be taken out ----
+        const sysl = await pg.evaluate((K) => {
+            const A = SLApxAuto, M = SLApxMac, B = SLApxBridge, f = A.model.fcOf(K), c0 = M.model.lossBase(f)[0], sy = systemsData.find(x => String(x.id) === c0.sysId);
+            const front = (B.pssa(sy) || {}).front || [], asm = front.find(b => /^apx-asm-/.test(b.name)), wait = front.find(b => /^apx-wait-/.test(b.name));
+            const l = M.model.linkOf(f, M.model.macCols(f)[0].id + '|F'), para = B.pssaFc(sy, { fcId: l.fcId }) || [];
+            let pssaFront = null; try { window.activeSystemId = sy.id; } catch (_) {}
+            return { asm: asm && asm.rows.map(r => r.ID + '|' + r.Assembly + '|' + r.Build), wait: wait && wait.rows.map(r => r.Severity + '|' + r['Came from'] + '|' + (r['What the aircraft-level work says'] || '').slice(0, 30)), lead: wait && wait.lead, para: para.map(x => x.text), link: l.id, units: M.model.macCols(f)[0].g.units.map(u => u.id) };
+        }, K);
+        check('13 the PSSA of a system lists its assemblies as set at the aircraft level, under the same IDs', sysl.asm && sysl.asm.length === 2 && sysl.asm.every((r, i) => r.indexOf(sysl.units[i] + '|') === 0 && /Inboard and outboard pairs/.test(r)), sysl.asm);
+        check('13 it lists the FHA lines the aircraft level added, not classified, with where each came from and what the aircraft-level work says', sysl.wait && sysl.wait.length >= 2 && sysl.wait.every(r => /^Not classified yet\|FC-07\|/.test(r)) && sysl.wait.some(r => /On its own, with the other/.test(r)) && /does not set their severity/.test(sysl.lead), sysl.wait);
+        check('13 a system failure condition says which aircraft-level loss it is, its link, and the assemblies its fault tree starts from', sysl.para.length === 1 && sysl.para[0].indexOf('(link ' + sysl.link + ')') !== -1 && /FC-07 Loss of deceleration/.test(sysl.para[0]) && sysl.units.every(u => sysl.para[0].indexOf(u) !== -1), sysl.para);
+        const pdoc = await pg.evaluate((K) => { const A = SLApxAuto, M = SLApxMac, f = A.model.fcOf(K), sid = M.model.lossBase(f)[0].sysId; try { activeSystemId = sid; } catch (_) {} const d = SLCcaReport.get('pssa').doc({}); return { now: SLPssaAuto.sysNow() && SLPssaAuto.sysNow().id, sid, names: d.filter(b => b && b.k === 'table' && /^apx-/.test(b.name || '')).map(b => b.name) }; }, K);
+        check('13 the PSSA report of that system (pssa_autopilot.js 2.4) carries both tables', pdoc.now === pdoc.sid && pdoc.names.join() === 'apx-asm-' + pdoc.sid + ',apx-wait-' + pdoc.sid, pdoc);
+        const words = await pg.evaluate(async () => { const A = SLApxAuto, out = []; for (const ap of ['mac', 'cof']) { A.setAp(ap); for (let i = 1; i < 9; i++) { A._ui.step = i; A.kit.draw(); const h = document.querySelector('#interdep-host'); const t = h.innerText + ' ' + Array.from(h.querySelectorAll('[aria-label],[placeholder]')).map(e => (e.getAttribute('aria-label') || '') + ' ' + (e.getAttribute('placeholder') || '')).join(' '); if (/\btick|untick/i.test(t)) out.push(ap + i); } } return out; });
+        check('13 the MAC and CoFFE pages say "check", never "tick"', words.length === 0, words);
+        const part = await pg.evaluate((K) => {
+            const A = SLApxAuto, f = A.model.fcOf(K), old = ((projectConfig.apx.archive || {}).macModels || []).map(x => x.rule.id);
+            const ver = () => Object.keys(projectConfig.coffe.verdicts).filter(k => k.indexOf(K + '§') === 0 && projectConfig.coffe.verdicts[k].apx).length, cells = () => Object.keys(projectConfig.interdep.cells).filter(k => k.indexOf(K + '§') === 0 && projectConfig.interdep.cells[k].apx).length;
+            const v0 = ver(), c0 = cells(); A.setAp('mac'); A._ui.step = 8; A.kit.draw(); const btn = !!document.querySelector('#interdep-host [data-apx-take="mac|ask"]');
+            const done = A.kit.doTakeOut(f, 'mac');
+            const out = { btn, done, rule: (projectConfig.macModels || []).some(r => r.apx && r.apx.fcKey === K), back: old.every(id => (projectConfig.macModels || []).some(r => r.id === id)), old: old.length, v0, v1: ver(), c0, c1: cells(), st: SLApxMac.model.status(f).k, cof: SLApxCof.model.status(f).k };
+            SLApxMac.act.send(f, 'Test Engineer');
+            return out;
+        }, K);
+        check('13 one Autopilot can be taken back out on its own: the MAC rule goes, the earlier rule comes back, the CoFFE and Interdependence stay sent', part.btn && part.done && !part.rule && part.old >= 1 && part.back && part.v1 === part.v0 && part.v0 > 0 && part.c1 === part.c0 && part.st === 'started' && part.cof === 'sent', part);
 
         // ---- 11: the old screens ----------------------------------------------------------------------------------------------------------------
         const nav = await pg.evaluate(async () => {
