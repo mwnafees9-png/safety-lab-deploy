@@ -54,7 +54,7 @@
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <style>
   :root{
-    /* Phase 62.6 — flight recorder identity: paper + ink, brand blue deepened. */
+    /* Phase 62.6: flight recorder identity: paper + ink, brand blue deepened. */
     --navy:#0A1F44; --blue:#0A63CC; --purple:#af52de; --ink:#16181D; --mut:#565B66;
     --bg:#F7F4EC; --card:#ffffff; --line:#CFC9B8; --good:#1F7A33;
     --grad:linear-gradient(135deg,#007aff,#af52de);
@@ -140,24 +140,28 @@
   <div class="calc">
     <div class="inputs">
       <h2>Your program</h2>
-      <div class="row"><label>Number of systems</label><input id="systems" type="number" value="5" min="1" step="1"></div>
+      <div class="row"><label>Number of systems</label><input id="systems" type="number" value="20" min="1" step="1"><div class="hint">A full-size transport aircraft program runs around 20 systems. Put in your own count.</div></div>
       <div class="row"><label>Average system complexity <span class="rangeval" id="cxv">1.0× · typical</span><input id="cx" type="range" min="0.3" max="2" step="0.1" value="1"></label>
         <div class="hint">1.0 = a reference system; sub-1 for small systems (e.g. lighting), &gt;1 for complex (e.g. flight control).</div></div>
       <div class="row"><label>Design churn → iteration factor <span class="rangeval" id="iterv">×3.0 · moderate</span><input id="iter" type="range" min="2" max="6" step="0.5" value="3"></label>
         <div class="hint">Full effort ÷ first-draft. Captures the revision / re-analysis cycles to design freeze, the bulk of real cost.</div></div>
       <div class="row"><label>Fully-loaded engineer rate ($/hr)</label><input id="rate" type="number" value="110" step="5"><div class="hint">≈ $229K/yr loaded. US aerospace-engineer avg ~$114K base + ~1.4× overhead.</div></div>
-      <div class="row"><label>Safety Lab Aero, annual subscription ($)</label><input id="sub" type="number" value="60000" step="5000"></div>
+      <div class="row"><label>Program length to design freeze (years)</label><input id="years" type="number" value="5" min="1" max="15" step="1"></div>
+      <div class="row"><label>Engineer licenses</label><input id="lic" type="number" value="5" min="1" step="1"></div>
+      <div class="row"><label>Price per license per month ($)</label><input id="price" type="number" value="2500" min="0" step="50"><div class="hint">The published Pro+ rate. Enterprise pricing is set per program.</div></div>
     </div>
     <div class="results">
       <h2>Program impact</h2>
-      <div class="res"><span class="k">Full-program baseline effort</span><span class="v" id="oBase">—</span></div>
-      <div class="res"><span class="k">Blended reduction</span><span class="v" id="oBlend">—</span></div>
-      <div class="res"><span class="k">Engineer-hours saved</span><span class="v" id="oHrs">—</span></div>
-      <div class="res"><span class="k">≈ Person-years saved</span><span class="v" id="oPy">—</span></div>
-      <div class="res"><span class="k">Engineering-effort savings</span><span class="v" id="oEffort">—</span></div>
-      <div class="res"><span class="k">Rework avoided (3 late findings)</span><span class="v" id="oRework">—</span></div>
-      <div class="res big"><span class="k">Total value per program</span><span class="v" id="oTotal">—</span></div>
-      <div class="roi"><b id="oRoi">—</b><span>program value vs. one year of subscription</span></div>
+      <div class="res"><span class="k">Full-program baseline effort</span><span class="v" id="oBase">-</span></div>
+      <div class="res"><span class="k">Blended reduction</span><span class="v" id="oBlend">-</span></div>
+      <div class="res"><span class="k">Engineer-hours saved</span><span class="v" id="oHrs">-</span></div>
+      <div class="res"><span class="k">≈ Person-years saved</span><span class="v" id="oPy">-</span></div>
+      <div class="res"><span class="k">Engineering-effort savings</span><span class="v" id="oEffort">-</span></div>
+      <div class="res"><span class="k">Rework avoided (3 late findings)</span><span class="v" id="oRework">-</span></div>
+      <div class="res big"><span class="k">Total value per program</span><span class="v" id="oTotal">-</span></div>
+      <div class="res"><span class="k" id="oCostK">License cost over the program</span><span class="v" id="oCost">-</span></div>
+      <div class="res"><span class="k">Net value after licenses</span><span class="v" id="oNet">-</span></div>
+      <div class="roi"><b id="oRoi">-</b><span>program value for every $1 of licenses, over the whole program</span></div>
     </div>
   </div>
 
@@ -173,8 +177,10 @@
       <div class="step"><b>Baseline hrs / phase</b><span>= <code>first-draft hrs × units × iteration factor</code> &nbsp;(units = 1 for once-per-aircraft &amp; CCA phases).</span></div>
       <div class="step"><b>Hours saved / phase</b><span>= <code>baseline hrs × reduction %</code>.</span></div>
       <div class="step"><b>Effort savings</b><span>= <code>Σ hours saved × loaded rate</code>; person-years = hours ÷ 2,080.</span></div>
-      <div class="step"><b>Rework avoided</b><span>= late findings caught at authoring × hours each × rate (10–30× cheaper than at cert review).</span></div>
+      <div class="step"><b>Rework avoided</b><span>= late findings caught at authoring × hours each × rate (10 to 30 times cheaper than at cert review).</span></div>
       <div class="step"><b>Total value</b><span>= <code>effort savings + rework avoided</code>.</span></div>
+      <div class="step"><b>License cost</b><span>= <code>licenses × price per month × 12 × program years</code>.</span></div>
+      <div class="step"><b>Return</b><span>= <code>total value ÷ license cost</code>, both taken over the whole program, so the two sides cover the same years.</span></div>
     </div>
     <div class="cons"><b>Deliberately conservative:</b> the same reduction is applied to the full iteration-inflated baseline, even though re-iteration is cheaper still (instant re-quantification + golden-thread auto-propagation). Quantification phases (PASA / PSSA / SSA / ASA) carry the highest reductions because the deterministic engine does the cut sets, exact P(top) and DAL allocation: work a draft-only tool can't do at all.</div>
   </div>
@@ -201,16 +207,16 @@
 
 <script>
   var PHASES=[
-    {n:"AFHA — Aircraft Functional Hazard Assessment",sys:false,fd:240,red:0.55},
-    {n:"PASA — Preliminary Aircraft Safety Assessment",sys:false,fd:320,red:0.65},
-    {n:"ASA — Aircraft Safety Assessment",sys:false,fd:280,red:0.60},
-    {n:"SFHA — System Functional Hazard Assessment",sys:true,fd:160,red:0.55},
-    {n:"PSSA — Preliminary System Safety Assessment",sys:true,fd:320,red:0.65},
-    {n:"SSA — System Safety Assessment",sys:true,fd:280,red:0.60},
+    {n:"AFHA: Aircraft Functional Hazard Assessment",sys:false,fd:240,red:0.55},
+    {n:"PASA: Preliminary Aircraft Safety Assessment",sys:false,fd:320,red:0.65},
+    {n:"ASA: Aircraft Safety Assessment",sys:false,fd:280,red:0.60},
+    {n:"SFHA: System Functional Hazard Assessment",sys:true,fd:160,red:0.55},
+    {n:"PSSA: Preliminary System Safety Assessment",sys:true,fd:320,red:0.65},
+    {n:"SSA: System Safety Assessment",sys:true,fd:280,red:0.60},
     {n:"FMEA / FMES",sys:true,fd:240,red:0.45},
-    {n:"ZSA — Zonal Safety Analysis",sys:false,fd:280,red:0.45},
-    {n:"PRA — Particular Risks Analysis",sys:false,fd:240,red:0.45},
-    {n:"CMA — Common Mode Analysis",sys:false,fd:240,red:0.50},
+    {n:"ZSA: Zonal Safety Analysis",sys:false,fd:280,red:0.45},
+    {n:"PRA: Particular Risks Analysis",sys:false,fd:240,red:0.45},
+    {n:"CMA: Common Mode Analysis",sys:false,fd:240,red:0.50},
     {n:"Traceability & change-impact (golden thread)",sys:false,fd:320,red:0.80},
     {n:"Report & DO-330 dossier assembly + review",sys:false,fd:320,red:0.65}
   ];
@@ -219,7 +225,7 @@
   function fmt(n){ return Math.round(n).toLocaleString('en-US'); }
   function money(n){ return '$'+fmt(n); }
   function model(){
-    var systems=num('systems'), cx=num('cx'), iter=num('iter'), rate=num('rate'), sub=num('sub');
+    var systems=num('systems'), cx=num('cx'), iter=num('iter'), rate=num('rate'), years=num('years'), lic=num('lic'), price=num('price');
     var units=systems*cx, baseTot=0, savedTot=0, rows=[];
     PHASES.forEach(function(p){
       var u=p.sys?units:1, base=p.fd*u*iter, saved=base*p.red;
@@ -228,9 +234,10 @@
     });
     var blended=baseTot?savedTot/baseTot:0, effort=savedTot*rate,
         reworkHrs=REWORK_FINDINGS*REWORK_HRS, rework=reworkHrs*rate,
-        total=effort+rework, py=(savedTot+reworkHrs)/HPY, roi=sub>0?total/sub:0;
+        total=effort+rework, py=(savedTot+reworkHrs)/HPY,
+        cost=lic*price*12*years, roi=cost>0?total/cost:0;
     return {units:units,baseTot:baseTot,savedTot:savedTot,blended:blended,effort:effort,
-            rework:rework,total:total,py:py,roi:roi,rows:rows};
+            rework:rework,total:total,py:py,cost:cost,net:total-cost,years:years,roi:roi,rows:rows};
   }
   function cxLabel(v){ return v<0.7?'simple':(v>1.3?'complex':'typical'); }
   function iterLabel(v){ return v<2.5?'low':(v>4?'high':'moderate'); }
@@ -245,12 +252,15 @@
     document.getElementById('oEffort').textContent= money(m.effort);
     document.getElementById('oRework').textContent= money(m.rework);
     document.getElementById('oTotal').textContent = money(m.total);
-    document.getElementById('oRoi').textContent   = (m.roi>0?m.roi.toFixed(1):'—')+'×';
+    document.getElementById('oCostK').textContent = 'License cost over '+fmt(m.years)+(m.years===1?' year':' years');
+    document.getElementById('oCost').textContent  = money(m.cost);
+    document.getElementById('oNet').textContent   = (m.net<0?'-':'')+money(Math.abs(m.net));
+    document.getElementById('oRoi').textContent   = m.roi>0?('$'+m.roi.toFixed(2)):'-';
     var html='';
     m.rows.forEach(function(r){
       html+='<tr><td>'+r.n+'</td><td>'+(r.sys?'× systems':'once')+'</td><td>'+fmt(r.fd)+'</td><td>'+fmt(r.base)+'</td><td>'+Math.round(r.red*100)+'%</td><td>'+fmt(r.saved)+'</td></tr>';
     });
-    html+='<tr class="sub"><td>Subtotal — engineering effort</td><td>'+m.units.toFixed(1)+' sys-units</td><td></td><td>'+fmt(m.baseTot)+'</td><td>'+Math.round(m.blended*100)+'%</td><td>'+fmt(m.savedTot)+'</td></tr>';
+    html+='<tr class="sub"><td>Subtotal: engineering effort</td><td>'+m.units.toFixed(1)+' sys-units</td><td></td><td>'+fmt(m.baseTot)+'</td><td>'+Math.round(m.blended*100)+'%</td><td>'+fmt(m.savedTot)+'</td></tr>';
     document.getElementById('bdBody').innerHTML=html;
   }
   document.querySelectorAll('input').forEach(function(el){ el.addEventListener('input', calc); });

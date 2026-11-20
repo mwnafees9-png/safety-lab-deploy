@@ -1,4 +1,15 @@
-## 17 Nov 2026 (latest): NO ARP TABLE NUMBERS ON ANY AUTOPILOT TABLE; THE TWO INTERDEPENDENCE TABLES CARRY THEIR TITLE IN THE TOP ROW. Behind the team switch (?apx=1).
+## 20 Nov 2026 (latest): THE WEBSITE ROI CALCULATOR SHOWS A FULL-SIZE PROGRAM AND ITS LICENSE COST; A CUSTOMER VERSION FOR RADIA (NOT ON THE SITE).
+
+**Why (Waqas).** "can we revise our onsite calculator and send brian a HTML version"; the numbers: "RADIAs numbers from both ROMs"; "update the website with full scale numbers and a file from brian".
+
+**What.**
+- **site/roi.html (public).** Defaults are now a full-size program: 20 systems, 5 years to design freeze, 5 engineer licenses at $2,500 per license per month (the published Pro+ rate; "Enterprise pricing is set per program"). The single "annual subscription" box is gone. New: license cost over the whole program (licenses x price x 12 x years), net value after licenses, and the return as program value for every $1 of licenses over the same years. Before, the page compared the value of a whole program with ONE year of subscription, which overstated the return. The value model (phases, first-draft hours, reductions, rework) is unchanged. Em dashes removed. No customer name or customer price on the page (tested).
+- **Safety_Lab_ROI_Calculator_Radia.html (repo root, NOT tracked, NOT in site/, never deployed).** One standalone file, no outside files, works offline. Same value model, plus Radia's prices as recorded on 17 Nov for SL-ROM-0001 Rev 3.0: first two licenses $2,250 / $2,000 / $1,750 / $1,500 per month for a 1 / 2 / 3 / 5 year term; 3rd and 4th $1,500; 5th to 9th $1,250; 10th on $1,000 (each license priced by its place in the count); reviewer $250; 10% rise each year; agreement terms 20% as its own line; perpetual $500,000 for 5 licenses plus $25,000 per extra license, no agreement terms line, no maintenance mentioned. Shows subscription next to perpetual over the same years, a year by year table, and the year the perpetual becomes the lower total.
+- **Assumptions made here, for Waqas to confirm against the ROM itself** (the Rev 3.0 file was not in reach): the extra-license prices go by each license's place in the count; the 10% rise applies to every subscription line from year 2; the 20% applies to the whole subscription including reviewers; reviewers are counted at $250 on the perpetual side too so the comparison is like for like; years past the term are carried on the same terms.
+
+**Tests.** tests/regression_roi_calculator_20261120 (12 checks on the site page, all sums by hand; with SL_ROI_CUSTOMER_FILE=<the Radia file> 15 more on its prices). Mutations red: a wrong tier price, cost for one year only.
+
+## 17 Nov 2026: NO ARP TABLE NUMBERS ON ANY AUTOPILOT TABLE; THE TWO INTERDEPENDENCE TABLES CARRY THEIR TITLE IN THE TOP ROW. Behind the team switch (?apx=1).
 
 **Why (Waqas).** "for the interdependence table we dont need to show the 4761 A caption and the left hand side column the the title can go in the top row with the white divider vertical" and "all the tables, dont mention the ARP table numbers, mention the reports own sequential numbers".
 
