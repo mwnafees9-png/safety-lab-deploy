@@ -1,9 +1,9 @@
 /* The ROI calculator on the website (site/roi.html), 20 Nov 2026.
  * The numbers are checked against sums done by hand, not against the page's own code.
- *   1  the full-size defaults: 20 systems, 5 years, 5 licenses at the published Pro+ rate
- *   2  the value side: baseline hours, hours saved, effort, rework, total (by hand)
- *   3  the cost side covers the whole program, the same years as the value side
- *   4  the old 5 system case still gives the same hours as before the change
+ *   1  the defaults: 5 licenses, 1,190 hours saved per engineer per year, 5 years, the published Pro+ rate
+ *   2  the value side is built from the licenses: licenses x hours saved x years x rate, plus rework (by hand)
+ *   3  the cost side covers the same years; the licenses drive both sides
+ *   4  the 57% and the two quick picks come from the phase table
  *   5  hygiene: no em dash, no customer price on the public page
  * Optional: SL_ROI_CUSTOMER_FILE points at the customer version; its prices are checked by hand too.
  */
@@ -27,20 +27,28 @@ function load(file) {
 const site = process.env.SL_ROI_SITE_FILE || path.join(__dirname, '..', 'site', 'roi.html');
 const S = load(site);
 console.log('[site] ' + site);
-// by hand: once-per-aircraft first-draft hours 2,240 (saved 1,326); per system 1,000 (saved 572)
-check('1 defaults are a full-size program: 20 systems, 5 years, 5 licenses, $2,500', S.els.systems.value === '20' && S.els.years.value === '5' && S.els.lic.value === '5' && S.els.price.value === '2500', [S.els.systems.value, S.els.years.value, S.els.lic.value, S.els.price.value]);
+// by hand: the savings are built from the licenses. 5 licenses x 1,190 hours x 5 years = 29,750 hours.
+check('1 defaults are a full-size team: 5 licenses, 1,190 hours each a year, 5 years, $2,500', S.els.lic.value === '5' && S.els.hrs.value === '1190' && S.els.years.value === '5' && S.els.price.value === '2500', [S.els.lic.value, S.els.hrs.value, S.els.years.value, S.els.price.value]);
+check('1 systems, complexity and churn are no longer inputs', !S.els.systems && !S.els.cx && !S.els.iter);
 let m = S.ctx.model();
-check('2 baseline hours = (2,240 + 20 x 1,000) x 3 = 66,720', near(m.baseTot, 66720), m.baseTot);
-check('2 hours saved = (1,326 + 20 x 572) x 3 = 38,298', near(m.savedTot, 38298), m.savedTot);
-check('2 effort = 38,298 x $110 = $4,212,780; rework = 3 x 200 x $110 = $66,000; total $4,278,780', near(m.effort, 4212780) && near(m.rework, 66000) && near(m.total, 4278780), [m.effort, m.rework, m.total]);
-check('2 person-years = (38,298 + 600) / 2,080', near(m.py, 38898 / 2080), m.py);
-check('3 license cost = 5 x $2,500 x 12 x 5 = $750,000, net $3,528,780, return 5.70504', near(m.cost, 750000) && near(m.net, 3528780) && Math.abs(m.roi - 4278780 / 750000) < 1e-9, [m.cost, m.net, m.roi]);
-S.els.years.value = '1'; m = S.ctx.model();
+check('2 hours saved: 5 x 1,190 = 5,950 a year, 29,750 over 5 years', m.hoursYear === 5950 && m.hoursTot === 29750, [m.hoursYear, m.hoursTot]);
+check('2 effort = 29,750 x $110 = $3,272,500; rework = 3 x 200 x $110 = $66,000; total $3,338,500', near(m.effort, 3272500) && near(m.rework, 66000) && near(m.total, 3338500), [m.effort, m.rework, m.total]);
+check('2 person-years = (29,750 + 600) / 2,080', near(m.py, 30350 / 2080), m.py);
+check('3 license cost = 5 x $2,500 x 12 x 5 = $750,000, net $2,588,500, return 4.4513', near(m.cost, 750000) && near(m.net, 2588500) && Math.abs(m.roi - 3338500 / 750000) < 1e-9 && S.els.oRoi.textContent === '$4.45', [m.cost, m.net, m.roi, S.els.oRoi.textContent]);
+S.els.lic.value = '10'; m = S.ctx.model();
+check('3 the licenses drive BOTH sides: 10 licenses double the hours saved and double the cost', m.hoursTot === 59500 && near(m.cost, 1500000), [m.hoursTot, m.cost]);
+S.els.lic.value = '5'; S.els.hrs.value = '590'; m = S.ctx.model();
+check('3 half time on the analyses: 5 x 590 x 5 = 14,750 hours, $1,622,500 + $66,000', m.hoursTot === 14750 && near(m.total, 1688500), [m.hoursTot, m.total]);
+S.els.hrs.value = '9999'; m = S.ctx.model();
+check('3 nobody saves more hours than a working year: held at 2,080', m.hrs === 2080, m.hrs);
+S.els.hrs.value = '1190'; S.els.years.value = '1'; m = S.ctx.model();
 check('3 one year of the program costs one year of licenses ($150,000)', near(m.cost, 150000), m.cost);
 S.els.lic.value = '0'; S.ctx.calc(); m = S.ctx.model();
 check('3 no licenses: no division by zero, the return shows as none', m.roi === 0 && S.els.oRoi.textContent === '-', [m.roi, S.els.oRoi.textContent]);
-S.els.systems.value = '5'; S.els.lic.value = '5'; S.els.years.value = '5'; m = S.ctx.model();
-check('4 the 5 system case is unchanged: 21,720 baseline hours, 12,558 saved', near(m.baseTot, 21720) && near(m.savedTot, 12558), [m.baseTot, m.savedTot]);
+// the 57%: once-per-aircraft first-draft hours 2,240 (saved 1,326); per system 1,000 (saved 572); 20 systems
+let t = S.ctx.refTable();
+check('4 where the 57% comes from: (1,326 + 20 x 572) / (2,240 + 20 x 1,000) = 12,766 / 22,240 = 57.4%', near(t.baseTot, 22240) && near(t.savedTot, 12766) && Math.floor(t.blended * 100) === 57 && S.ctx.REDUCTION === 0.57, [t.baseTot, t.savedTot, t.blended]);
+check('4 the two quick picks are 57% of a full and a half working year, to the nearest 10: 1,190 and 590', S.ctx.FULL_TIME === 1190 && S.ctx.HALF_TIME === 590 && /data-hrs="1190"/.test(S.html) && /data-hrs="590"/.test(S.html) && /57% of the analysis hours/.test(S.html), [S.ctx.FULL_TIME, S.ctx.HALF_TIME]);
 check('5 no em dash on the page', S.html.indexOf(String.fromCharCode(0x2014)) === -1);
 check('5 the public page carries no customer name or customer price', !/Radia|SL-ROM|2,?250|perpetual/i.test(S.html));
 check('5 the page shows the cost and the net', /id="oCost"/.test(S.html) && /id="oNet"/.test(S.html) && !/id="sub"/.test(S.html));
@@ -48,9 +56,9 @@ check('5 the page shows the cost and the net', /id="oCost"/.test(S.html) && /id=
 const cf = process.env.SL_ROI_CUSTOMER_FILE;
 if (cf) {
     console.log('[customer] ' + cf);
-    const C = load(cf), cost = C.ctx.radiaCost, val = C.ctx.roiModel;
-    let v = val({ systems: 20, cx: 1, iter: 3, rate: 110 });
-    check('C the value side matches the website: $4,278,780 at the same inputs', near(v.total, 4278780) && near(v.baseTot, 66720), v.total);
+    const C = load(cf), cost = C.ctx.radiaCost, val = C.ctx.valueModel;
+    let v = val({ lic: 2, hrs: 1190, rate: 110, years: 5 });
+    check('C the value side is the website model: 2 x 1,190 x 5 = 11,900 hours, $1,309,000 + $66,000 = $1,375,000', v.hoursTot === 11900 && near(v.total, 1375000) && C.ctx.REDUCTION === 0.57 && Math.floor(C.ctx.refTable().blended * 100) === 57, [v.hoursTot, v.total]);
     // 2 licenses, 5 year term: $1,500 x 2 x 12 = $36,000 in year 1; x (1.1^5 - 1)/0.1 = 6.1051 -> $219,783.60; terms 20% $43,956.72
     let c = cost({ lic: 2, rev: 0, years: 5, term: 5 });
     check('C 2 licenses, 5 year term, 5 years: licenses $219,783.60, terms $43,956.72, total $263,740.32', near(c.y1, 36000) && near(c.sLic, 219783.6) && near(c.sTerms, 43956.72) && near(c.sTot, 263740.32), [c.y1, c.sLic, c.sTerms, c.sTot]);
@@ -76,7 +84,7 @@ if (cf) {
     c = cost({ lic: 2.9, rev: -3, years: 99, term: 7 });
     check('C odd input is held: whole licenses, no negative reviewers, at most 15 years, unknown term falls to the 5 year rate', c.lic === 2 && c.rev === 0 && c.years === 15 && c.engMonth === 3000, [c.lic, c.rev, c.years, c.engMonth]);
     check('C no em dash; works offline (no outside file or address loaded)', C.html.indexOf(String.fromCharCode(0x2014)) === -1 && !/<link|src="http|href="http|@import|url\(/i.test(C.html));
-    check('C the page drew: totals and the return are filled in', C.els.sTot.textContent === '$263,740' && C.els.pTot.textContent === '$500,000' && C.els.sRoi.textContent === '$16.22' && C.els.pRoi.textContent === '$8.56' && /year 9/.test(C.els.even.textContent), [C.els.sTot.textContent, C.els.pTot.textContent, C.els.sRoi.textContent, C.els.pRoi.textContent, C.els.even.textContent]);
+    check('C the page drew: totals and the return are filled in', C.els.sTot.textContent === '$263,740' && C.els.pTot.textContent === '$500,000' && C.els.sRoi.textContent === '$5.21' && C.els.pRoi.textContent === '$2.75' && C.els.licEcho.textContent === '2' && (C.html.match(/id="lic"/g) || []).length === 1 && /year 9/.test(C.els.even.textContent), [C.els.sTot.textContent, C.els.pTot.textContent, C.els.sRoi.textContent, C.els.pRoi.textContent, C.els.even.textContent]);
 }
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
