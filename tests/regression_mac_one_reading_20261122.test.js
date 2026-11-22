@@ -101,6 +101,8 @@ function mutate(file, body) {
             // ---- 7: locked on today's MAC page
             const n0 = projectConfig.macModels.length; await macDeleteRule(ap.id); await macSubstantiate(ap.id);
             o.lock = [projectConfig.macModels.length === n0, _macFidRule(ap.id) === null, (projectConfig.macModels.find(r => r.id === ap.id).substantiation || {}).kind === 'assumption'];
+            macFidToggle(ap.id); o.lock.push(!_macFidOpen[ap.id]);
+            try { await switchTab('mac'); } catch (_) {} renderMacPage(); const rowTxt = Array.from(document.querySelectorAll('#view-mac tr')).map(t => t.innerText).find(t => /MAC Autopilot/.test(t)) || ''; o.lock.push(/Set in the MAC Autopilot/.test(rowTxt) && /lost when/.test(rowTxt));
             acFhaData.length = 0; keepFha.forEach(r => acFhaData.push(r)); projectConfig.macModels = keep;
             return o;
         });
@@ -124,7 +126,7 @@ function mutate(file, body) {
         check('6 CoFFE reads each failure condition\'s own combinations', R.two.coffe[0] === 2 && R.two.coffe[1] === fC, R.two.coffe);
         check('6 a plain rule still speaks for every failure condition of its function', R.two.plainFcs.indexOf('FC-TWIN') !== -1 && R.two.plainFcs.indexOf(fcId) !== -1 && R.two.plainFor.sort().join() === 'apx-mac-990017,t-fn', [R.two.plainFcs, R.two.plainFor]);
         check('6 the what-if lens ties each broken rule to its own failure condition', R.twoFs.some(x => x[0] === 'apx-mac-990017' && x[1] === 'FC-TWIN') && !R.twoFs.some(x => x[0] === 'apx-mac-990017' && x[1].indexOf(fcId) !== -1), R.twoFs);
-        check('7 an Autopilot rule is not deleted, substantiated or opened for fidelity edits from today\'s MAC page', R.lock.join() === 'true,true,true', R.lock);
+        check('7 an Autopilot rule is not deleted, substantiated or opened for fidelity edits from today\'s MAC page, which shows it in words with no edit buttons', R.lock.join() === 'true,true,true,true,true', R.lock);
         check('8 no page errors', errs.length === 0, errs.join(' | '));
         await pg.context().close();
     } catch (e) { check('browser run completed', false, e && e.stack ? e.stack : String(e)); }

@@ -3639,9 +3639,10 @@ function renderMacPage() {
                 '<td>' + (r.apx ? '<span class="sla-stamp" style="color: var(--color-accent);">MAC Autopilot</span> ' + esc((typeof macRuleWords === 'function') ? macRuleWords(r) : '') : (r.clauses || []).map(cl => _macClauseChips(cl, r)).join(' AND ')) + '</td>' +
                 '<td>' + breaches.length + ' combos' + (spf.length ? ' · <span style="color:var(--color-danger); font-weight:600;">' + spf.length + ' SPF</span>' : '') + '<div>' + bTxt + '</div></td>' +
                 '<td>' + subst + '</td>' +
-                '<td style="white-space:nowrap;"><button class="ckpt-m-btn" style="font-size:11px; padding:2px 8px;" onclick="macFidToggle(\'' + esc(r.id) + '\')">' + (_macFidOpen[r.id] ? 'Fidelity ▴' : 'Fidelity F1/F2 ▾') + '</button> ' +
+                (r.apx ? '<td style="font-size:11px;">Set in the MAC Autopilot. Change it or take it back out there.</td>' : '') +
+                (r.apx ? '' : '<td style="white-space:nowrap;"><button class="ckpt-m-btn" style="font-size:11px; padding:2px 8px;" onclick="macFidToggle(\'' + esc(r.id) + '\')">' + (_macFidOpen[r.id] ? 'Fidelity ▴' : 'Fidelity F1/F2 ▾') + '</button> ' +
                 '<button class="ckpt-m-btn" style="font-size:11px; padding:2px 8px;" onclick="macSubstantiate(\'' + esc(r.id) + '\')">' + (r.substantiation && r.substantiation.kind === 'sdd' ? 'Revert' : 'Substantiate') + '</button> ' +
-                '<button class="ckpt-m-btn" style="font-size:11px; padding:2px 8px;" onclick="macDeleteRule(\'' + esc(r.id) + '\')">✕</button></td>' +
+                '<button class="ckpt-m-btn" style="font-size:11px; padding:2px 8px;" onclick="macDeleteRule(\'' + esc(r.id) + '\')">✕</button></td>') +
                 (typeof SLCommentKinds !== 'undefined' ? SLCommentKinds.cell('mac', String(r.id)) : '<td></td>') + '</tr>';   // 31 Oct 2026: comments
             if (!mchk.ok) {
                 const rp = mchk.systems.map(m => {
@@ -3655,7 +3656,7 @@ function renderMacPage() {
                 const un = mchk.unknown.map(m => '<div style="margin:3px 0;">Member &ldquo;' + esc(m) + '&rdquo; resolves to nothing &mdash; deleted or renamed. Remove it or restore the function.</div>').join('');
                 html += '<tr><td colspan="8" style="background:var(--color-surface-2); border-left:3px solid #9A6200; padding:8px 16px; font-size:12px; color:var(--color-text-secondary);"><b style="color:#9A6200;">Member granularity &mdash; ' + (mchk.systems.length + mchk.unknown.length) + ' finding(s)</b>' + rp + un + '</td></tr>';
             }
-            if (_macFidOpen[r.id]) html += '<tr><td colspan="8" style="background:var(--color-surface-2); border-left:3px solid var(--color-text-primary); padding:10px 16px;">' + _macFidEditorHtml(r) + '</td></tr>';
+            if (_macFidOpen[r.id] && !r.apx) html += '<tr><td colspan="8" style="background:var(--color-surface-2); border-left:3px solid var(--color-text-primary); padding:10px 16px;">' + _macFidEditorHtml(r) + '</td></tr>';
         });
         html += '</tbody></table>';
         html += '<p style="font-size:11px; color:var(--color-text-tertiary); font-family:var(--font-mono);">Breach set = minimal failure combinations defeating the rule (F0 Counted: every (n−min+1)-subset · F1 Weighted / F2 Measured: minimal damage assignments driving surviving capacity below the floor; degraded states are their own events; loss dominates degraded — never double-counted; subsumption-reduced). Red singletons are single-point MAC breaches. Every compile is equivalence-proven against these sets.</p>';
@@ -3671,7 +3672,7 @@ function renderMacPage() {
 // diffs the breach set (the fidelity-upgrade diff) and re-proves equivalence.
 // ============================================================================
 let _macFidOpen = {};
-function macFidToggle(id) { _macFidOpen[id] = !_macFidOpen[id]; renderMacPage(); }
+function macFidToggle(id) { if (_macApxLocked(_macStore().find(r => r.id === id))) return; _macFidOpen[id] = !_macFidOpen[id]; renderMacPage(); }
 // 22 Nov 2026: a rule sent by the MAC Autopilot is changed in the MAC Autopilot, never here (its clauses hold only part of it)
 function _macApxLocked(r) {
     if (!(r && r.apx)) return false;
