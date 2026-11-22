@@ -172,7 +172,8 @@
         });
         (((typeof projectConfig !== 'undefined' && projectConfig.macModels) || [])).forEach(r => {
             E(); if (r.subId && !subs.has(r.subId)) dang('MAC ' + r.id, r.subId, 'sub-function unresolved');
-            (r.clauses || []).forEach(c => (c.of || []).forEach(id => { E(); if (!sysIds.has(id)) dang('MAC ' + r.id, id, 'clause member system unresolved'); }));
+            // 22 Nov 2026: a member is a system FUNCTION (since B6) or an item as often as a system; it is resolved when it leads to a live system
+            ((typeof macRuleMembers === 'function') ? macRuleMembers(r) : [].concat.apply([], (r.clauses || []).map(c => c.of || []))).forEach(id => { E(); const own = (typeof macTokOwner === 'function') ? macTokOwner(id) : id; if (!sysIds.has(id) && !(own && sysIds.has(own))) dang('MAC ' + r.id, id, 'clause member unresolved (no live system, system function or item)'); });
         });
         const ram = (typeof projectConfig !== 'undefined' && projectConfig.ram) || {};
         (ram.tasks || []).forEach(t => {

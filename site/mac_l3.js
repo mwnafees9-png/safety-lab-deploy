@@ -43,7 +43,9 @@
     // shortest-first (BFS); 'block' edges are excluded AND collected.
     function l3Reach(rule, lane) {
         const members = new Set();
-        (rule.clauses || []).forEach(cl => (cl.of || []).forEach(m => members.add(m)));
+        // 22 Nov 2026: the one reading of a MAC rule: a member may be a system function or an item; a flow that reaches its owner system reaches it
+        if (typeof macRuleMembers === 'function') { macRuleMembers(rule).forEach(m => members.add(m)); macRuleSystems(rule).forEach(m => members.add(m)); }
+        else (rule.clauses || []).forEach(cl => (cl.of || []).forEach(m => members.add(m)));
         const flows = (rule.flows || []).filter(f => f && (f.lane || 'loss') === lane);
         const blocked = flows.filter(f => f.transfer === 'block');
         const live = flows.filter(f => f.transfer !== 'block');
@@ -106,7 +108,7 @@
         const out = [];
         const systems = new Set();
         _rules().forEach(r => {
-            (r.clauses || []).forEach(cl => (cl.of || []).forEach(m => systems.add(m)));
+            if (typeof macRuleSystems === 'function') macRuleSystems(r).forEach(m => systems.add(m)); else (r.clauses || []).forEach(cl => (cl.of || []).forEach(m => systems.add(m)));
             (r.flows || []).forEach(f => { if (f) { systems.add(f.from); systems.add(f.to); } });
         });
 

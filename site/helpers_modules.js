@@ -1764,7 +1764,7 @@ function _ckptFingerprint(key) {
     let src;
     switch (key) {
         case 'AFHA': src = [(acFunctionsData || []).map(f => f.internalId || f.funcId || f.id), (flightPhasesData || []).map(p => [p.phase, p.duration, p.durationUnit]), fhaTup]; break;
-        case 'PASA': src = [fhaTup, (systemsData || []).map(s => s.id), acTreeIds, (acReqData || []).map(r => r.internalId || r.id).length, Object.entries((projectConfig.interdep && projectConfig.interdep.cells) || {}).map(([k, v]) => [k, v.state]), (projectConfig.macModels || []).map(m => [m.id, m.subId, m.phase, (m.clauses || []).map(c => [c.min, c.of]), m.substantiation && m.substantiation.kind])]; break;
+        case 'PASA': src = [fhaTup, (systemsData || []).map(s => s.id), acTreeIds, (acReqData || []).map(r => r.internalId || r.id).length, Object.entries((projectConfig.interdep && projectConfig.interdep.cells) || {}).map(([k, v]) => [k, v.state]), (projectConfig.macModels || []).map(m => [m.id, m.subId, m.phase, (m.clauses || []).map(c => [c.min, c.of]), m.substantiation && m.substantiation.kind, ...(m.apx && Array.isArray(m.apx.sets) ? [m.apx.sets] : [])])]; break;
         case 'SFHA': src = [fhaTup, (systemsData || []).map(s => s.id), sysFhaTup, (H.PASA && H.PASA.at) || null]; break;
         case 'PSSA': src = [sysFhaTup, sysTreeIds, (systemsData || []).map(s => (s.req || []).length), (H.PASA && H.PASA.at) || null]; break;
         case 'SSA':  src = [sysTreeIds, mirrorIds, (H.PSSA && H.PSSA.at) || null]; break;
@@ -2865,7 +2865,7 @@ function renderInterdepPage() {
 async function macRepointMember(ruleId, oldId, newFuncId) {
     if (!newFuncId) return;
     const r = ((projectConfig.macModels) || []).find(x => String(x.id) === String(ruleId));
-    if (!r) return;
+    if (!r || _macApxLocked(r)) return;
     const oldL = _macSysName(oldId), newL = _macSysName(newFuncId);
     const by = (await slPrompt('Re-point MAC member \u201C' + oldL + '\u201D at system function \u201C' + newL + '\u201D across this rule (clauses, weights, fidelity basis, arbitration). Sign with your name:', _signoffReviewerName() || '')) || '';
     if (!String(by).trim()) { renderMacPage(); return; }
@@ -2930,7 +2930,7 @@ async function macSaveDraft() {
 }
 async function macSubstantiate(id) {
     const r = _macStore().find(x => x.id === id);
-    if (!r) return;
+    if (!r || _macApxLocked(r)) return;
     if (r.substantiation && r.substantiation.kind === 'sdd') {
         const yes = await slConfirm('Revert to assumption (clear SDD substantiation ' + (r.substantiation.ref || '') + ')?', { okText: 'Revert' });
         if (yes) r.substantiation = { kind: 'assumption', ref: '', by: r.substantiation.by || '', at: new Date().toISOString() };
@@ -2945,6 +2945,7 @@ async function macSubstantiate(id) {
     renderMacPage();
 }
 async function macDeleteRule(id) {
+    if (_macApxLocked(_macStore().find(x => x.id === id))) return;
     const yes = await slConfirm('Delete this MAC rule? Its breach set disappears from downstream analyses.', { danger: true, okText: 'Delete' });
     if (!yes) return;
     const s = _macStore();
@@ -3002,6 +3003,8 @@ function macFidAssumed(rule) {
 // (links survive), and flags stale pages when the rule drifts.
 // ============================================================================
 function _macFcForRule(rule) {
+    // 22 Nov 2026: a rule sent by the MAC Autopilot stands for ONE failure condition, the one it was sent for
+    if (rule && rule.apx && typeof macRuleFcs === 'function') { const own = macRuleFcs(rule); if (own.length) return own[0]; }
     const rows = (acFhaData || []).filter(f => f.subId === rule.subId);
     if (!rows.length) return null;
     // 26 Oct 2026: the same rule as everywhere else (slFcGovView): each failure condition stands as its governing row,
@@ -3027,6 +3030,8 @@ function _macRuleFp(rule) {
         return base;
     });
     const payload = [rule.subId, rule.phase, cls];
+    // 22 Nov 2026: a rule sent by the MAC Autopilot is its named combinations; a change to any of them is a change to the rule
+    if (rule.apx && Array.isArray(rule.apx.sets)) payload.push(['apx', rule.apx.fcKey, rule.apx.sets.map(s => s.slice().sort()).sort()]);
     if (Array.isArray(rule.degraded) && rule.degraded.length) payload.push(rule.degraded.map(d => [d.sysId, d.label, d.weight]));
     return _ckptFnv(JSON.stringify(payload));
 }
@@ -3307,7 +3312,7 @@ function renderCoffePanel() {
         const hasMal = kase.parts.some(p => p.state === 'malfunction');
         let graftBtn = '';
         if (v && v.verdict === 'yes' && hasMal) {
-            const rule = _macStore().find(r => r.subId === fc.subId);
+            const rule = (typeof macRulesForFc === 'function') ? macRulesForFc(fc)[0] : _macStore().find(r => r.subId === fc.subId);
             const rec = rule && _macCompiledStore()[rule.id];
             const grafted = rec && (rec.grafts || []).indexOf(kase.key) !== -1;
             graftBtn = grafted
@@ -3631,7 +3636,7 @@ function renderMacPage() {
                 '<td>' + esc(sub ? sub.label : r.subId) + '</td>' +
                 '<td>' + esc(r.phase || 'All') + '</td>' +
                 '<td><span class="sla-stamp" style="color: var(--color-accent);">F' + lvl + '</span>' + (lvl > 0 && fidAssumed ? '<div style="font-size:10px; color:#9A6200; font-weight:600;">' + fidAssumed + ' ASSUMED</div>' : '') + '</td>' +
-                '<td>' + (r.clauses || []).map(cl => _macClauseChips(cl, r)).join(' AND ') + '</td>' +
+                '<td>' + (r.apx ? '<span class="sla-stamp" style="color: var(--color-accent);">MAC Autopilot</span> ' + esc((typeof macRuleWords === 'function') ? macRuleWords(r) : '') : (r.clauses || []).map(cl => _macClauseChips(cl, r)).join(' AND ')) + '</td>' +
                 '<td>' + breaches.length + ' combos' + (spf.length ? ' · <span style="color:var(--color-danger); font-weight:600;">' + spf.length + ' SPF</span>' : '') + '<div>' + bTxt + '</div></td>' +
                 '<td>' + subst + '</td>' +
                 '<td style="white-space:nowrap;"><button class="ckpt-m-btn" style="font-size:11px; padding:2px 8px;" onclick="macFidToggle(\'' + esc(r.id) + '\')">' + (_macFidOpen[r.id] ? 'Fidelity ▴' : 'Fidelity F1/F2 ▾') + '</button> ' +
@@ -3667,7 +3672,13 @@ function renderMacPage() {
 // ============================================================================
 let _macFidOpen = {};
 function macFidToggle(id) { _macFidOpen[id] = !_macFidOpen[id]; renderMacPage(); }
-function _macFidRule(id) { return _macStore().find(r => r.id === id); }
+// 22 Nov 2026: a rule sent by the MAC Autopilot is changed in the MAC Autopilot, never here (its clauses hold only part of it)
+function _macApxLocked(r) {
+    if (!(r && r.apx)) return false;
+    try { if (typeof showToast === 'function') showToast('This rule was sent by the MAC Autopilot. Change it there, or take it back out there.', 'warning', 4500); } catch (_) {}
+    return true;
+}
+function _macFidRule(id) { const r = _macStore().find(r => r.id === id); return (r && _macApxLocked(r)) ? null : r; }
 function _macFidAfter(rule) {
     rule.level = (typeof macRuleLevel === 'function') ? macRuleLevel(rule) : (rule.level || 0);
     try { if (typeof commitSaveChanges === 'function') commitSaveChanges(); } catch (_) {}

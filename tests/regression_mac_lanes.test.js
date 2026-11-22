@@ -237,7 +237,7 @@ console.log('\n[9] The computed (MAC) lane in CoFFE — coffeComputed(), rewritt
     X(/function macClauseWeighted\(rule, cl\) \{[\s\S]*?\n\}/) + '\n' +
     X(/function macBreachSetsChecked\(rule\) \{[\s\S]*?\n\}/) + '\n' +
     X(/function macBreachSets\(rule\) \{[\s\S]*?\n\}/) + '\n' +
-    X(/function _coffeBreachSetsForFc\(fc\) \{[\s\S]*?\n\}/) + '\n' +
+    /* 22 Nov 2026: the rules that speak for a failure condition come from the one reading of a MAC rule */ X(/function macRuleIsApx\(rule\) \{.*\}/) + '\n' + X(/function macRulesForFc\(fc\) \{[\s\S]*?\n\}/) + '\n' + X(/function _coffeBreachSetsForFc\(fc\) \{[\s\S]*?\n\}/) + '\n' +
     // 4 Sep 2026 — tokens resolve to their owner system (MAC members are system functions since B6)
     'let systemsData = [];\n' +
     X(/function _coffeTokSys\(tok\) \{[\s\S]*?\n\}/) + '\n' +
@@ -294,7 +294,7 @@ console.log('\n[9] The computed (MAC) lane in CoFFE — coffeComputed(), rewritt
       'function _idpFnOwner(id){ for (const s of systemsData) { const f = (s.functions||[]).find(x => x.funcId === id); if (f) return { system: s, fn: f }; } return null; }\n' +
       X(/function _macDegFor\(rule, sysId\) \{[\s\S]*?\n\}/) + '\n' + X(/function macClauseWeighted\(rule, cl\) \{[\s\S]*?\n\}/) + '\n' +
       X(/function macBreachSetsChecked\(rule\) \{[\s\S]*?\n\}/) + '\n' + X(/function macBreachSets\(rule\) \{[\s\S]*?\n\}/) + '\n' +
-      X(/function _coffeBreachSetsForFc\(fc\) \{[\s\S]*?\n\}/) + '\n' + X(/function _coffeTokSys\(tok\) \{[\s\S]*?\n\}/) + '\n' +
+      /* 22 Nov 2026: the rules that speak for a failure condition come from the one reading of a MAC rule */ X(/function macRuleIsApx\(rule\) \{.*\}/) + '\n' + X(/function macRulesForFc\(fc\) \{[\s\S]*?\n\}/) + '\n' + X(/function _coffeBreachSetsForFc\(fc\) \{[\s\S]*?\n\}/) + '\n' + X(/function _coffeTokSys\(tok\) \{[\s\S]*?\n\}/) + '\n' +
       X(/function _coffeDegSys\(tok\) \{[\s\S]*?\n\}/) + '\n' + X(/function coffeComputed\(fc, kase\) \{[\s\S]*?\n\}/) +
       '\n__RULES = [{ id: "r", subId: "SF-X", clauses: [{ min: 1, of: ["FCS-F1", "FCS-F2"] }, { min: 1, of: ["HYD-F1"] }] }];' +
       '\n__o.calc = parts => coffeComputed({ internalId: 1, subId: "SF-X" }, { parts, key: "k" });', sb3);

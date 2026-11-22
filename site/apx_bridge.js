@@ -31,7 +31,7 @@
  * ==========================================================================*/
 (function (root) {
     'use strict';
-    var VERSION = '1.3';   // 1.2 17 Nov 2026: what was sent can be taken back out one Autopilot at a time; the PSSA shows the assemblies and the lines the aircraft level added to its system
+    var VERSION = '1.4';   // 1.4 22 Nov 2026: a sent MAC rule names every function it is stated over (rule.apx.members), for the one reading of a MAC rule in misc_fn_modules.js   // 1.2 17 Nov 2026: what was sent can be taken back out one Autopilot at a time; the PSSA shows the assemblies and the lines the aircraft level added to its system
     var A = root.SLApxAuto, X = root.SLApx, M = root.SLApxMac, C = root.SLApxCof;
     if (!A || !A.kit || !X || !M || !M.model || !C || !C.model) { if (typeof module !== 'undefined' && module.exports) module.exports = { VERSION: VERSION, missing: true }; return; }
     var K = A.kit, S = K.S, T = K.T, arr = K.arr, safe = K.safe, lc = K.lc, MM = M.model, CM = C.model, AM = A.model;
@@ -78,7 +78,7 @@
         var st = MM.macStatus(fc);
         var rule = { id: ruleId(fc), level: 0, subId: fc.subId, phase: fc.phases || 'All phases', clauses: clauses, degraded: degraded,
             substantiation: { kind: st.k === 'backed' ? 'sdd' : 'assumption', ref: st.t, by: r.sent.by, at: r.sent.at }, floor: null, contributions: [],
-            apx: { fcKey: fc.key, fcId: fc.fcId, sets: ms.sets, status: st.k, at: r.sent.at } };
+            apx: { fcKey: fc.key, fcId: fc.fcId, sets: ms.sets, members: ms.sol.ds.map(function (d) { return d.funcId; }).filter(function (m, i, a) { return m && a.indexOf(m) === i; }), status: st.k, at: r.sent.at } };
         // the earlier rule of this aircraft function is retired (kept on file) when this failure condition is the one it stood for
         var forRule = K.fn('_macFcForRule'), moved = 0;
         p.macModels = p.macModels.filter(function (old) {

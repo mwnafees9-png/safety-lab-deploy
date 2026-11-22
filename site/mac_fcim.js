@@ -61,14 +61,18 @@
         const out = [];      // { sourceId, subId, desc, fingerprint, ruleId }
         const unbound = [];  // rules with no FCIM row to land on — named, never silent
         _rules().forEach(rule => {
-            if (!rule || !Array.isArray(rule.clauses) || !rule.clauses.length) return;
+            // 22 Nov 2026: a rule sent by the MAC Autopilot is its named combinations. Its clauses hold only the total-loss ones (possibly none),
+            // and what it still admits was answered combination by combination there, so the clause arithmetic below does not describe it.
+            const apx = !!(rule && rule.apx && Array.isArray(rule.apx.sets));
+            if (!rule || (apx ? !rule.apx.sets.length : (!Array.isArray(rule.clauses) || !rule.clauses.length))) return;
+            if (!Array.isArray(rule.clauses)) rule = Object.assign({}, rule, { clauses: [] });
             const row = _rowFor(rule.subId);
             const bc = (typeof macBreachSetsChecked === 'function') ? macBreachSetsChecked(rule) : { sets: [], error: 'engine absent' };
             if (bc.error) { unbound.push({ ruleId: rule.id, subId: rule.subId, why: bc.error }); return; }
             if (!row) { unbound.push({ ruleId: rule.id, subId: rule.subId, why: 'no FCIM row for ' + rule.subId + ' — author the matrix row first' }); return; }
             const weighted = (typeof macRuleLevel === 'function') && macRuleLevel(rule) > 0;
             // ---- within-MAC: the degradation the rule still admits ----------
-            rule.clauses.forEach((cl, ci) => {
+            (apx ? [] : rule.clauses).forEach((cl, ci) => {
                 const members = (cl && cl.of) || [];
                 if (!members.length) return;
                 const names = members.map(_sysName);

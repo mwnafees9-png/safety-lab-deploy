@@ -143,28 +143,22 @@
         (typeof acFhaData !== 'undefined' ? acFhaData : []).forEach(f => f && fhaAll.push(f));
         const sysName = id => { const s = _sysList().find(x => x.id === id); return s ? (s.name || s.id) : id; };
         const breaches = [];
+        // 22 Nov 2026: read through the one reading of a MAC rule (misc_fn_modules.js). A member is a system
+        // FUNCTION (or an item) as often as a system, and is down when its owner system is down; a rule sent by the
+        // MAC Autopilot breaks on its named combinations and stands for its own failure condition only.
+        const isDown = id => downSystems.has(id);
+        const tokName = t => (typeof macTokName === 'function') ? macTokName(t) : sysName(t);
         rules.forEach(rule => {
-            (rule.clauses || []).forEach(cl => {
-                const members = cl.of || [];
+            const ev = (typeof macRuleEval === 'function') ? macRuleEval(rule, isDown) : { parts: [] };
+            ev.parts.forEach(part => {
                 let detail;
-                // D2 (L1/L2) — weighted clauses evaluate surviving CAPACITY vs the
-                // scalar floor. The what-if lens toggles whole systems, so a toggled
-                // system contributes 0 (full loss — conservative; degraded states
-                // are not simulated here, they live in the compiled BDDs).
-                if (typeof macClauseWeighted === 'function' && macClauseWeighted(rule, cl)) {
-                    const w = m => (cl.weights && +cl.weights[m] > 0) ? +cl.weights[m] : 1;
-                    const floor = cl.floor != null ? +cl.floor : (cl.min || 1);
-                    const total = members.reduce((a, m) => a + w(m), 0);
-                    const surviving = members.reduce((a, m) => a + (downSystems.has(m) ? 0 : w(m)), 0);
-                    if (surviving >= floor - 1e-12) return;
-                    detail = 'capacity floor ' + floor + ' over [' + members.map(sysName).join(', ') + '] — ' + surviving + ' of ' + total + ' surviving';
-                } else {
-                    const avail = members.filter(m => !downSystems.has(m));
-                    if (avail.length >= (cl.min || 1)) return;
-                    detail = 'min ' + (cl.min || 1) + ' of [' + members.map(sysName).join(', ') + '] — ' + avail.length + ' available';
-                }
-                const fcs = fhaAll
-                    .filter(f => f.subId === rule.subId || (Array.isArray(f.subIds) && f.subIds.indexOf(rule.subId) >= 0))
+                // D2 (L1/L2): weighted clauses evaluate surviving CAPACITY vs the scalar floor. The what-if lens
+                // toggles whole systems, so a toggled system contributes 0 (full loss, conservative; degraded
+                // states are not simulated here, they live in the compiled BDDs).
+                if (part.kind === 'set') detail = 'all lost: ' + part.members.map(tokName).join(' and ');
+                else if (part.weighted) detail = 'capacity floor ' + part.floor + ' over [' + part.members.map(tokName).join(', ') + '] — ' + part.surviving + ' of ' + part.total + ' surviving';
+                else detail = 'min ' + part.min + ' of [' + part.members.map(tokName).join(', ') + '] — ' + part.left.length + ' available';
+                const fcs = ((typeof macRuleFcs === 'function') ? macRuleFcs(rule) : fhaAll.filter(f => f.subId === rule.subId || (Array.isArray(f.subIds) && f.subIds.indexOf(rule.subId) >= 0)))
                     .map(f => ({ fcId: f.fcId || '', severity: f.severity || '' }));
                 breaches.push({
                     ruleId: rule.id, subId: rule.subId, phase: rule.phase || '',

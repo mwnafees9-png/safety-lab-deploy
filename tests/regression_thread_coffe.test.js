@@ -53,7 +53,7 @@ console.log('[1] the lane, the skill, the thread');
   check('it never overwrites a verdict that landed meanwhile', /if \(V\[vk\]\) return;\s+\/\/ something landed meanwhile — never overwrite/.test(ai));
   check('the CoFFE panel marks an AI-proposed verdict as such, with what to do', /✨ AI-proposed<\/span>/.test(helpers) && /AI-proposed — not a review\. Click to clear it, then determine and sign; or leave it and sign your own\./.test(helpers));
   check('the golden thread: mac → coffe → trees', drv.indexOf("step: 'coffe'") > drv.indexOf("step: 'mac'") && drv.indexOf("step: 'coffe'") < drv.indexOf("step: 'trees'") && /direct: function \(\) \{ return SafetyLabAI\.draftCoffe\(\{ fcCap: 200 \}\); \}/.test(drv));
-  check('CoFFE now resolves a function-member token to its owner system (the B6 mismatch)', /function _coffeTokSys\(tok\)/.test(misc) && /const sysOf = _coffeTokSys\(tok\);/.test(misc) && /covered\.add\(_coffeTokSys\(m\)\)/.test(misc));
+  check('CoFFE now resolves a function-member token to its owner system (the B6 mismatch)', /function _coffeTokSys\(tok\)/.test(misc) && /const sysOf = _coffeTokSys\(tok\);/.test(misc) && /macRuleSystems\(r\)\.forEach\(m => covered\.add\(m\)\)/.test(misc) && /function macTokOwner\(tok\)[\s\S]{0,400}_coffeTokSys\(id\)/.test(misc));   // 22 Nov 2026: through the one reading of a MAC rule
 }
 
 console.log('\n[2] executed — the proposer asks the residue and files proposals');

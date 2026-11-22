@@ -171,6 +171,8 @@
         if (!cands.length && laneKey === 'tl') {
             // TL keeps macCompile's reach: the function's worst classified row.
             cands = fhaRows().filter(function (f) { return String(f.subId) === String(rule.subId); });
+            // 22 Nov 2026: a rule sent by the MAC Autopilot stands for ONE failure condition, the one it was sent for
+            if (rule.apx) { var own = cands.filter(function (f) { return String(f.internalId) === String(rule.apx.fcKey) || (f.fcId && String(f.fcId) === String(rule.apx.fcId || '')); }); if (own.length) cands = own; }
         }
         if (!cands.length) {
             var ln = LANES.find(function (l) { return l.key === laneKey; });

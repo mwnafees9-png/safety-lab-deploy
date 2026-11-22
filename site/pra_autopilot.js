@@ -1,4 +1,4 @@
-// pra_autopilot.js (SLPraAuto v2.9, 11 Nov 2026: a risk's section is written when it is first read; v2.8, 10 Nov 2026: the AI drafts only once the questions are answered; v2.7 9 Nov 2026; v2.6 v2.5 v2.4 v2.3 9 Nov 2026; v2.2 9 Nov 2026; v2.1 8 Nov 2026): the PRA page.
+// pra_autopilot.js (SLPraAuto v2.10, 22 Nov 2026: a MAC rule is read through the one reading in misc_fn_modules.js (a member may be a system function or an item; a MAC Autopilot rule is its named combinations); v2.9, 11 Nov 2026: a risk's section is written when it is first read; v2.8, 10 Nov 2026: the AI drafts only once the questions are answered; v2.7 9 Nov 2026; v2.6 v2.5 v2.4 v2.3 9 Nov 2026; v2.2 9 Nov 2026; v2.1 8 Nov 2026): the PRA page.
 // v2.3, Waqas, 9 Nov 2026: "I want the PRA reports to explain their methods their basis, the math, where we have multiple
 // impact zones, we should have 1 image per cone like in the rotor burst PRA 1 per engine and the cones be different distinct
 // colors, show the calculations, tell the whole story please"; "yeah needs to look clean and legible". Each risk the CAD model
@@ -51,7 +51,7 @@
 // Answers: projectConfig.praAuto = { v:1, answers: { qid: { pick, by, at } }, signed: { riskKey: { by, at } } }.
 (function (root) {
     'use strict';
-    var VERSION = '2.9';   // 2.9 11 Nov 2026: a risk's section is written when it is first read. 2.8 10 Nov 2026: the AI drafts a risk's parts only once its questions are answered (aiReady);   // 2.7 9 Nov 2026: the loss figure drawn with squared connectors in their own lanes (SLCcaReport.flow);   // 2.6 9 Nov 2026: proposed mitigations, path to compliance and conclusion are the engineer's (written or AI drafted and accepted); the tool's part is the summary of results;   // 2.5 9 Nov 2026: the burst bands table names each kind of piece's color in the pictures;   // 2.4 9 Nov 2026: every particular risk its own report, picked from a dropdown, with a register;   // 2.3 9 Nov 2026: each section tells the whole story (method, basis, calculations per danger source, one 3D picture per source); 2.2: 3D model pictures per risk
+    var VERSION = '2.10';   // 2.10 22 Nov 2026: a MAC rule is read through the one reading in misc_fn_modules.js. 2.9 11 Nov 2026: a risk's section is written when it is first read. 2.8 10 Nov 2026: the AI drafts a risk's parts only once its questions are answered (aiReady);   // 2.7 9 Nov 2026: the loss figure drawn with squared connectors in their own lanes (SLCcaReport.flow);   // 2.6 9 Nov 2026: proposed mitigations, path to compliance and conclusion are the engineer's (written or AI drafted and accepted); the tool's part is the summary of results;   // 2.5 9 Nov 2026: the burst bands table names each kind of piece's color in the pictures;   // 2.4 9 Nov 2026: every particular risk its own report, picked from a dropdown, with a register;   // 2.3 9 Nov 2026: each section tells the whole story (method, basis, calculations per danger source, one 3D picture per source); 2.2: 3D model pictures per risk
     var D2R = Math.PI / 180;
     function U() { return root.SLAutopilotUI; }
     function C() { return root.SLCadZonal; }
@@ -670,7 +670,14 @@
     // a MAC rule in words: the function it protects, when, and what it needs that the event takes away
     function macWords(b, down) {
         var rule = _arr((_pc() || {}).macModels).find(function (r) { return r && r.id === b.ruleId; }) || null;
-        var need = rule ? _arr(rule.clauses).map(function (cl) { var mem = _arr(cl.of), left = mem.filter(function (m) { return down.indexOf(m) < 0; }); return 'at least ' + (cl.floor != null ? cl.floor : (cl.min || 1)) + ' of ' + _list(mem.map(_sysName)) + ' (' + (left.length ? left.length + ' left: ' + _list(left.map(_sysName)) : 'none left') + ')'; }).join('; and ') : String(b.detail || '').replace(/\s*\u2014\s*/g, ': ');
+        // 22 Nov 2026: the one reading of a MAC rule (misc_fn_modules.js): a member may be a system function or an item, down when its
+        // owner system is down; a rule sent by the MAC Autopilot is its named combinations.
+        var nmT = function (m) { return String((typeof macTokName === 'function' ? macTokName(m) : null) || _sysName(m)).replace(/\s*\u2014\s*/g, ', '); };
+        var isDn = function (m) { return (typeof macTokDown === 'function') ? macTokDown(m, function (id) { return down.indexOf(id) >= 0; }) : down.indexOf(m) >= 0; };
+        var need = !rule ? String(b.detail || '').replace(/\s*\u2014\s*/g, ': ')
+            : (typeof macRuleIsApx === 'function' && macRuleIsApx(rule))
+                ? 'not to lose together ' + rule.apx.sets.filter(function (set) { return set.every(isDn); }).map(function (set) { return _list(set.map(nmT)); }).join('; or ') + ' (all of them are lost)'
+                : _arr(rule.clauses).map(function (cl) { var mem = _arr(cl.of), left = mem.filter(function (m) { return !isDn(m); }); return 'at least ' + (cl.floor != null ? cl.floor : (cl.min || 1)) + ' of ' + _list(mem.map(nmT)) + ' (' + (left.length ? left.length + ' left: ' + _list(left.map(nmT)) : 'none left') + ')'; }).join('; and ');
         var ph = b.phase && b.phase !== 'all' ? ' in ' + b.phase : '';
         return fnLabel(b.subId) + ph + ' needs ' + need;
     }
@@ -695,7 +702,7 @@
         var line = function (a, b) { if (pos[a] && pos[b]) edges.push([a, b]); };
         _arr(dm.zoneNotes).forEach(function (zn) { zn.systems.forEach(function (sid) { line('z:' + zn.zone, 's:' + sid); }); });
         knock.forEach(function (k) { var fromId = direct.find(function (sid) { var s0 = _sys(sid); return _sysName(sid) === k.from || (s0 && s0.name === k.from); }); if (fromId) line('s:' + fromId, 'k:' + k.id); });
-        _arr(dm.breaches).forEach(function (b) { var rule = _arr((_pc() || {}).macModels).find(function (r) { return r && r.id === b.ruleId; }); var mem = rule ? [].concat.apply([], _arr(rule.clauses).map(function (cl) { return _arr(cl.of); })) : []; b.fcs.forEach(function (f) { mem.forEach(function (sid) { if (pos['s:' + sid]) line('s:' + sid, 'fc:' + f.fcId); else if (pos['k:' + sid]) line('k:' + sid, 'fc:' + f.fcId); }); }); });
+        _arr(dm.breaches).forEach(function (b) { var rule = _arr((_pc() || {}).macModels).find(function (r) { return r && r.id === b.ruleId; }); var mem = rule ? (typeof macRuleMembers === 'function' ? macRuleMembers(rule).concat(macRuleSystems(rule)) : [].concat.apply([], _arr(rule.clauses).map(function (cl) { return _arr(cl.of); }))) : []; b.fcs.forEach(function (f) { mem.forEach(function (sid) { if (pos['s:' + sid]) line('s:' + sid, 'fc:' + f.fcId); else if (pos['k:' + sid]) line('k:' + sid, 'fc:' + f.fcId); }); }); });
         var title = 'What one ' + String(row.threat || 'event').toLowerCase() + ' takes out (' + row.praId + ')';
         // v1.x 9 Nov 2026: drawn by the shared column diagram (squared connectors in their own lanes, never through a box)
         var heads = ['ZONES', 'LOST DIRECTLY', 'KNOCK-ON', 'FAILURE CONDITIONS'], fl = F.flow('pra', { title: title, sub: 'Zones it reaches, the systems lost directly and as a knock-on, and the failure conditions that trip. Click a box for more.', cols: colsN.map(function (n, i) { return { head: heads[i], nodes: n }; }).filter(function (c) { return c.nodes.length; }), edges: edges });

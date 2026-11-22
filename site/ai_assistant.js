@@ -6091,7 +6091,7 @@
             (snapshot().itemsData || []).forEach(function (it) { if (it && it.itemId) nameOf[String(it.itemId)] = it.name || it.itemId; });
             const def = /^total/i.test(desc.trim()) ? 'MAC — total loss: the loss takes the aircraft outside the minimum acceptable configuration for this function.' : 'MAC — partial loss: degraded, but the minimum acceptable configuration for this function still holds.';
             const ruleTxt = rules.length
-                ? (' Rule: ' + rules.map(function (r) { return (r.phase && !/^all phases$/i.test(r.phase) ? (r.phase + ' — ') : '') + (r.clauses || []).map(function (c) { return 'at least ' + (c.min || 1) + ' of [' + (c.of || []).map(function (m) { return nameOf[String(m)] || String(m); }).join(', ') + ']'; }).join(' AND ') + (r.substantiation && r.substantiation.ref ? ' (' + r.substantiation.ref + ')' : ''); }).join('; ') + '.')
+                ? (' Rule: ' + rules.map(function (r) { return (r.phase && !/^all phases$/i.test(r.phase) ? (r.phase + ' — ') : '') + ((typeof macRuleIsApx === 'function' && macRuleIsApx(r)) ? macRuleWords(r, function (m) { return nameOf[String(m)] || String(m); }) : (r.clauses || []).map(function (c) { return 'at least ' + (c.min || 1) + ' of [' + (c.of || []).map(function (m) { return nameOf[String(m)] || String(m); }).join(', ') + ']'; }).join(' AND ')) + (r.substantiation && r.substantiation.ref ? ' (' + r.substantiation.ref + ')' : ''); }).join('; ') + '.')
                 : ' Rule: not yet defined for this function — to be set from the systems design.';
             return def + ruleTxt + ' | ';
         } catch (_) { return ''; }
@@ -6109,7 +6109,7 @@
                 const rs = rules.filter(function (r) { return r && String(r.subId) === id; });
                 if (!rs.length) { none.push(id); return; }
                 rs.forEach(function (r) {
-                    const cl = (r.clauses || []).map(function (c) { return 'at least ' + (c.min || 1) + ' of [' + (c.of || []).map(function (m) { return (fnName[String(m)] || String(m)) + ' (' + m + ')'; }).join('; ') + ']'; }).join(' AND ');
+                    const cl = (typeof macRuleIsApx === 'function' && macRuleIsApx(r)) ? (macRuleWords(r, function (m) { return (fnName[String(m)] || String(m)) + ' (' + m + ')'; }) + (r.apx.fcId ? ' [for failure condition ' + r.apx.fcId + ' only]' : '')) : (r.clauses || []).map(function (c) { return 'at least ' + (c.min || 1) + ' of [' + (c.of || []).map(function (m) { return (fnName[String(m)] || String(m)) + ' (' + m + ')'; }).join('; ') + ']'; }).join(' AND ');
                     lines.push(id + ' (' + (r.phase || 'All phases') + '): ' + cl + (r.substantiation && r.substantiation.ref ? ' — ' + r.substantiation.ref : ''));
                 });
             });
@@ -11995,6 +11995,7 @@
         const at = store.findIndex(function (r) { return r && String(r.id) === id; });
         if (at < 0) return { ok: false, error: 'no MAC rule ' + (id || '(none named)') };
         const old = store[at], f = (a && a.fields && typeof a.fields === 'object') ? a.fields : {};
+        if (old.apx) return { ok: false, blocked: true, error: 'not changed: this rule was sent by the MAC Autopilot; it is changed there' };   // 22 Nov 2026
         if (f.subId != null && String(f.subId) !== String(old.subId)) return { ok: false, blocked: true, error: 'not changed: a MAC rule stays on its function (' + old.subId + '); add a rule for the other function instead' };
         const args = { subId: old.subId, phase: f.phase != null ? f.phase : old.phase, clauses: f.clauses != null ? f.clauses : old.clauses, sddRef: f.sddRef != null ? f.sddRef : ((old.substantiation && old.substantiation.ref) || ''), rationale: f.rationale != null ? f.rationale : (old.aiRationale || '') };
         if (f.arbitration != null) args.arbitration = f.arbitration; else if (old.arbitration) args.arbitration = Object.assign({}, old.arbitration, { ref: old.arbitration.ref || '' });
@@ -12093,7 +12094,7 @@
             aiGenerated: true, aiModel: model || null, aiRationale: String((a && a.rationale) || '').trim().slice(0, 600), aiUnknownMembers: unknown.length ? unknown.slice(0, 8) : undefined
         };
         if (arbitration) rec.arbitration = arbitration;
-        const prior = store.find(function (r) { return r && String(r.subId) === subId && String(r.phase || 'All phases') === phase; });
+        const prior = store.find(function (r) { return r && !r.apx && String(r.subId) === subId && String(r.phase || 'All phases') === phase; });   // 22 Nov 2026: a rule sent by the MAC Autopilot is never the one an AI draft replaces
         let summary;
         if (prior) {
             const signed = !(prior.aiGenerated) || (prior.substantiation && prior.substantiation.kind === 'sdd') || prior.humanEdited;
@@ -12345,7 +12346,7 @@
             routing:     (s.routingData || []).map(function (r) { return { _id: r.internalId, rId: r.routingId, name: _chatFull(r.name), kind: r.kind }; }),
             markov:      ((typeof projectConfig !== 'undefined' && projectConfig && projectConfig.markovModels) || []).map(function (m) { return { id: m.id, name: _chatFull(m.name), states: (m.states || []).map(function (st) { return { n: st.name, failed: !!st.isFailed }; }), transitions: (m.transitions || []).map(function (t) { return { from: t.from, to: t.to }; }) }; }),
             interfaces:  ((typeof projectConfig !== 'undefined' && projectConfig && projectConfig.interfaces) || []).map(function (i) { return { id: i.id, from: i.fromSystemId, ff: i.fromFuncId || null, to: i.toSystemId, tf: i.toFuncId || null, kind: i.kind, medium: i.medium || null, dir: i.direction || null }; }),
-            mac:         ((typeof projectConfig !== 'undefined' && projectConfig && projectConfig.macModels) || []).map(function (r) { return { id: r.id, subId: r.subId, phase: r.phase || 'All phases', clauses: (r.clauses || []).map(function (c) { return { min: c.min, of: (c.of || []) }; }), basis: r.substantiation ? r.substantiation.kind : null }; }),
+            mac:         ((typeof projectConfig !== 'undefined' && projectConfig && projectConfig.macModels) || []).map(function (r) { return { id: r.id, subId: r.subId, phase: r.phase || 'All phases', clauses: (r.clauses || []).map(function (c) { return { min: c.min, of: (c.of || []) }; }), namedCombinations: (r.apx && Array.isArray(r.apx.sets)) ? r.apx.sets : undefined, basis: r.substantiation ? r.substantiation.kind : null }; }),
             // 28 Oct 2026: every review comment, so ANEM can answer and address them (reply_comment, draft comments)
             comments:    (Array.isArray(s.reviewCommentsData) ? s.reviewCommentsData : []).filter(Boolean).map(function (c) { return { id: c.commentId, on: c.target ? (c.target.kind + ' ' + c.target.id) : '', sys: (c.target && c.target.systemId) || undefined, where: _commentWhere(c.target) || undefined, by: c.authorName || '', anem: c.aiGenerated ? true : undefined, replyTo: c.parentId || undefined, status: c.status || 'open', text: _chatFull(c.text) }; }),
             systems:     (s.systemsData || []).map(function (sy) { return {

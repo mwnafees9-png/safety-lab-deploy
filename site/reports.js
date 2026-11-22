@@ -2144,7 +2144,7 @@ const Reports = (function() {
                 // D2 fidelity ladder (F0 Counted / F1 Weighted / F2 Measured) —
                 // weighted clauses render as capacity-vs-floor; degraded events by name.
                 const weightedFn = (typeof macClauseWeighted === 'function') ? macClauseWeighted : null;
-                const clauses = (r.clauses || []).map(c => {
+                const clauses = (typeof macRuleIsApx === 'function' && macRuleIsApx(r)) ? macRuleWords(r, _e1SysName) : (r.clauses || []).map(c => {
                     if (weightedFn && weightedFn(r, c)) {
                         const floor = c.floor != null ? c.floor : (c.min || 1);
                         return 'capacity ≥ ' + floor + ' from {' + (c.of || []).map(m => _e1SysName(m) + ((c.weights && +c.weights[m] > 0 && +c.weights[m] !== 1) ? ' ×' + c.weights[m] : '')).join(', ') + '}';

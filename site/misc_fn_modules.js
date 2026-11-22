@@ -1948,6 +1948,136 @@ function macBreachSets(rule) {
     return macBreachSetsChecked(rule).sets;
 }
 
+// ============================================================================
+// 22 Nov 2026: ONE READING OF A MAC RULE, FOR EVERY SCREEN.
+// Until now each screen read rule.clauses on its own, and two things went wrong:
+//   (1) MEMBERS ARE SYSTEM FUNCTIONS since 21 Aug 2026 (B6), and may be configuration
+//       items, but the what-if lens, the ZSA and PRA Autopilots, the integrity sweep,
+//       the modification impact and the schema check compared a member with a SYSTEM
+//       id letter for letter. A rule over functions never breached there, and every
+//       function member was reported as a system that does not exist.
+//   (2) A rule sent by the MAC Autopilot (rule.apx) carries its exact breach sets,
+//       named combinations that include partial losses ('deg:<system>:<what>').
+//       rule.clauses holds only the total-loss ones, so a screen reading the clauses
+//       saw part of the rule.
+// These functions are the one reading. A member is DOWN when it is down itself or
+// its owner system is down: total loss of a system covers the loss of any of its
+// functions, of any of its items, and any partial loss of it (the conservative
+// direction, the same rule _coffeTokSys states for CoFFE).
+// ============================================================================
+function macRuleIsApx(rule) { return !!(rule && rule.apx && Array.isArray(rule.apx.sets)); }
+function macTokIsDeg(tok) { return String(tok == null ? '' : tok).indexOf('deg:') === 0; }
+// the system behind a member token: a system id, a system function id, an item id, or 'deg:<system>:<what>'
+function macTokOwner(tok) {
+    const id = String(tok == null ? '' : tok);
+    if (!id) return '';
+    if (macTokIsDeg(id)) return String(_coffeDegSys(id) || '');
+    return String(_coffeTokSys(id) || '');
+}
+// every member the rule is stated over (functions, systems, items), once each, in order
+function macRuleMembers(rule) {
+    const out = [], add = m => { const k = String(m == null ? '' : m); if (k && !macTokIsDeg(k) && out.indexOf(k) === -1) out.push(k); };
+    (rule && Array.isArray(rule.clauses) ? rule.clauses : []).forEach(cl => ((cl && cl.of) || []).forEach(add));
+    if (macRuleIsApx(rule)) {
+        (rule.apx.members || []).forEach(add);
+        rule.apx.sets.forEach(set => (set || []).forEach(add));
+    }
+    return out;
+}
+// every system the rule rests on: the owner of each member and of each partial loss it names
+function macRuleSystems(rule) {
+    const out = [], add = id => { const k = String(id || ''); if (k && out.indexOf(k) === -1) out.push(k); };
+    macRuleMembers(rule).forEach(m => add(macTokOwner(m)));
+    (rule && Array.isArray(rule.degraded) ? rule.degraded : []).forEach(d => { if (d && d.sysId) add(macTokOwner(d.sysId) || d.sysId); });
+    if (macRuleIsApx(rule)) rule.apx.sets.forEach(set => (set || []).forEach(t => { if (macTokIsDeg(t)) add(macTokOwner(t)); }));
+    return out;
+}
+// does the rule involve this system, function or item (as a member, or as the system behind one)?
+function macRuleInvolves(rule, id) {
+    const k = String(id == null ? '' : id);
+    if (!k) return false;
+    return macRuleMembers(rule).indexOf(k) !== -1 || macRuleSystems(rule).indexOf(k) !== -1;
+}
+function macTokDown(tok, isDown) {
+    const k = String(tok == null ? '' : tok);
+    if (!k) return false;
+    if (!macTokIsDeg(k) && isDown(k)) return true;
+    const own = macTokOwner(k);
+    return !!(own && isDown(own));
+}
+// a member or a partial loss, in words
+function macTokName(tok) {
+    const k = String(tok == null ? '' : tok);
+    if (macTokIsDeg(k)) {
+        const rest = k.slice(4), i = rest.indexOf(':'), sid = i < 0 ? rest : rest.slice(0, i), what = i < 0 ? '' : rest.slice(i + 1);
+        const nm = (typeof _macSysName === 'function') ? _macSysName(sid) : sid;
+        return nm + (what ? ' (' + what + ')' : ' (degraded)');
+    }
+    return (typeof _macSysName === 'function') ? _macSysName(k) : k;
+}
+// Is the rule broken with these things down? isDown(id) answers for a system, function or item id.
+// Returns { breached, parts }: one part per clause that is no longer met (kind 'clause': members, left,
+// min or floor/total/surviving) or, for a rule sent by the MAC Autopilot, per named combination that is
+// fully lost (kind 'set': members). A weighted clause counts a member that is down as zero capacity.
+function macRuleEval(rule, isDown) {
+    const down = t => macTokDown(t, isDown), parts = [];
+    if (macRuleIsApx(rule)) {
+        rule.apx.sets.forEach(set => { if (set && set.length && set.every(down)) parts.push({ kind: 'set', members: set.slice(), left: [] }); });
+        return { breached: parts.length > 0, parts };
+    }
+    (rule && Array.isArray(rule.clauses) ? rule.clauses : []).forEach(cl => {
+        const members = (cl && cl.of) || [];
+        if (!members.length) return;
+        const left = members.filter(m => !down(m));
+        if (macClauseWeighted(rule, cl)) {
+            const w = m => (cl.weights && +cl.weights[m] > 0) ? +cl.weights[m] : 1;
+            const floor = cl.floor != null ? +cl.floor : (cl.min || 1);
+            const total = members.reduce((a, m) => a + w(m), 0), surviving = left.reduce((a, m) => a + w(m), 0);
+            if (surviving >= floor - 1e-12) return;
+            parts.push({ kind: 'clause', weighted: true, floor, total, surviving, members: members.slice(), left });
+        } else {
+            const min = cl.min || 1;
+            if (left.length >= min) return;
+            parts.push({ kind: 'clause', weighted: false, min, members: members.slice(), left });
+        }
+    });
+    return { breached: parts.length > 0, parts };
+}
+// The rule in words. A rule sent by the MAC Autopilot is its named combinations; any other rule is its clauses.
+function macRuleWords(rule, nameOf) {
+    const nm = nameOf || macTokName;
+    if (macRuleIsApx(rule)) {
+        if (!rule.apx.sets.length) return 'no combination loses it';
+        return 'lost when ' + rule.apx.sets.map(set => set.map(t => macTokIsDeg(t) ? macTokName(t) : nm(t)).join(' and ')).join('; or when ');
+    }
+    return (rule && Array.isArray(rule.clauses) ? rule.clauses : []).map(c => {
+        if (macClauseWeighted(rule, c)) return 'capacity of at least ' + (c.floor != null ? c.floor : (c.min || 1)) + ' from [' + (c.of || []).map(nm).join(', ') + ']';
+        return 'at least ' + (c.min || 1) + ' of [' + (c.of || []).map(nm).join(', ') + ']';
+    }).join(' AND ') || 'no clauses';
+}
+// The failure conditions a rule stands for. A rule sent by the MAC Autopilot stands for ONE failure condition
+// (two failure conditions of one aircraft function each send their own rule); any other rule stands for every
+// failure condition of its aircraft function.
+function macRuleFcs(rule) {
+    const rows = ((typeof acFhaData !== 'undefined' && acFhaData) || []).filter(f => f && rule && (f.subId === rule.subId || (Array.isArray(f.subIds) && f.subIds.indexOf(rule.subId) >= 0)));
+    if (!macRuleIsApx(rule)) return rows;
+    const own = rows.filter(f => String(f.internalId) === String(rule.apx.fcKey));
+    return own.length ? own : rows.filter(f => String(f.fcId || '') === String(rule.apx.fcId || ''));
+}
+// The rules that speak for a failure condition: the same aircraft function, and for a rule sent by the MAC
+// Autopilot, only the one sent for this failure condition.
+function macRulesForFc(fc) {
+    if (!fc) return [];
+    return _macStore().filter(r => r && (r.subId === fc.subId || (Array.isArray(fc.subIds) && fc.subIds.indexOf(r.subId) >= 0)) &&
+        (!macRuleIsApx(r) || String(r.apx.fcKey) === String(fc.internalId) || (fc.fcId && String(r.apx.fcId || '') === String(fc.fcId))));
+}
+// "This function is required" (one member, redundancy not modeled yet) is not a discovered single point of failure.
+// A rule sent by the MAC Autopilot is never that: every combination in it was answered by an engineer.
+function macRuleHasUnmodelledClause(rule) {
+    if (macRuleIsApx(rule)) return false;
+    return (rule && Array.isArray(rule.clauses) ? rule.clauses : []).some(cl => ((cl && cl.of) || []).length <= 1);
+}
+
 function macStats() {
     const rules = _macStore();
     let spf = 0, combos = 0, unsub = 0;
@@ -2021,7 +2151,7 @@ function coffeCases(fc) {
 
 function _coffeBreachSetsForFc(fc) {
     // 15 Nov 2026: a MAC Autopilot rule is for ONE failure condition, not for every condition of its aircraft function
-    const rules = _macStore().filter(r => r.subId === fc.subId && (!r.apx || String(r.apx.fcId) === String(fc.fcId)));
+    const rules = macRulesForFc(fc);
     let sets = [];
     rules.forEach(r => { sets = sets.concat(macBreachSets(r)); });
     return sets;
@@ -2155,8 +2285,8 @@ function coffeShortestRoute(fc) {
     // been modelled yet. That is not a discovered single point of failure. Without this,
     // 17 of Aeolus's 22 rules raise a hard finding on day one and everyone learns to
     // ignore the flag. Same rule SLMacLanes.lanes() applies; kept in step deliberately.
-    const rules = _macStore().filter(r => r.subId === fc.subId);
-    out.singleMemberClause = rules.some(r => (r.clauses || []).some(cl => (cl && cl.of || []).length <= 1));
+    const rules = macRulesForFc(fc);
+    out.singleMemberClause = rules.some(macRuleHasUnmodelledClause);
     out.unmodelled = (out.order === 1 || out.modelOrder === 1) && out.singleMemberClause;
     const sev = String(fc && fc.severity || '');
     out.hard = (out.order === 1 || out.modelOrder === 1) &&
@@ -2169,9 +2299,9 @@ function coffeShortestRoute(fc) {
 // Their availability cases cannot be computed, so they genuinely need elicitation —
 // and that is worth saying out loud rather than leaving as a blank column.
 function coffeUnmodelledSystems(fc) {
-    const rules = _macStore().filter(r => r.subId === fc.subId);
+    const rules = macRulesForFc(fc);
     const covered = new Set();
-    rules.forEach(r => (r.clauses || []).forEach(cl => (cl.of || []).forEach(m => { covered.add(m); covered.add(_coffeTokSys(m)); })));
+    rules.forEach(r => { macRuleMembers(r).forEach(m => covered.add(m)); macRuleSystems(r).forEach(m => covered.add(m)); });
     return idpContributors(fc).filter(id => !covered.has(id));
 }
 
@@ -2250,7 +2380,7 @@ async function coffeEditResult(fcInternalId, caseKey) {
 function coffeGraft(fcInternalId, caseKey) {
     const fc = (acFhaData || []).find(f => String(f.internalId) === String(fcInternalId));
     if (!fc) return;
-    const rule = _macStore().find(r => r.subId === fc.subId);
+    const rule = macRulesForFc(fc)[0];
     const rec = rule && _macCompiledStore()[rule.id];
     const page = rec && (ftaPages || []).find(p => p.id === rec.pageId);
     if (!page || !page.root) { if (typeof showToast === 'function') showToast('Compile the MAC tree for this function first (MF&MS tab).', 'warning', 3500); return; }
@@ -2406,8 +2536,7 @@ async function mfmsAiRestructure(ruleId) {
     const rec = _macCompiledStore()[ruleId];
     if (!rule || !rec) return;
     const fc = _macFcForRule(rule);
-    const sysList = [...new Set((rule.clauses || []).flatMap(c => c.of || []))]
-        .map(id => ({ id, name: _macSysName(id) }));
+    const sysList = macRuleMembers(rule).map(id => ({ id, name: _macSysName(id) }));
     const breach = macBreachSets(rule);
     const system = 'You restructure aviation fault trees for readability. You will receive breach combinations (minimal cut sets at system granularity) for an aircraft-level failure condition. Produce a JSON tree whose Boolean logic is EXACTLY equivalent: it must fail precisely on those combinations, no more, no less. Use meaningful intermediate gate names an ARP4761A reviewer would recognize. Schema: {"name":string,"gate":"OR"|"AND"|"VOTING","k":int(VOTING only),"children":[...]} — leaves are {"sys":"<systemId>","name":string}. Use ONLY the given system ids, each as many times as the logic requires. Reply with the JSON object only, no fences, no commentary.';
     const user = 'Failure condition: ' + (fc ? (fc.fcId + ' — ' + (fc.fcDesc || '')) : rule.subId) +

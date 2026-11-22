@@ -175,6 +175,9 @@
     }
     function ruleShape(rule) {
         var members = [], min = 0;
+        // 22 Nov 2026: a rule sent by the MAC Autopilot is its named combinations, not a count: its members are everything it names,
+        // and no spare count can be read off it. derive() below does not count a partial loss against it; it says so.
+        if (rule && rule.apx && Array.isArray(rule.apx.sets)) { members = (typeof G.macRuleMembers === 'function') ? G.macRuleMembers(rule).map(String) : []; return { members: members, min: 0, spares: 0, apx: true }; }
         (rule && Array.isArray(rule.clauses) ? rule.clauses : []).forEach(function (c) {
             if (!c) return;
             min += Math.max(1, parseInt(c.min, 10) || 1);
@@ -194,6 +197,7 @@
     }
     function ruleText(rule) {
         var nm = _nameOf();
+        if (rule && rule.apx && Array.isArray(rule.apx.sets) && typeof G.macRuleWords === 'function') return G.macRuleWords(rule, function (m) { return nm[String(m)] || String(m); });
         return (rule && Array.isArray(rule.clauses) ? rule.clauses : []).map(function (c) { return 'at least ' + (c.min || 1) + ' of [' + (c.of || []).map(function (m) { return nm[String(m)] || String(m); }).join(', ') + ']'; }).join(' AND ') || 'no clauses';
     }
     // cond {id, desc, subId}; subIds: the aircraft sub-function(s) the rule is keyed on
@@ -225,6 +229,7 @@
             var r = ruleForPhase(rules, ph);
             if (!r) return { phase: ph, level: '', status: 'no-rule' };
             var sh = ruleShape(r);
+            if (sh.apx) return { phase: ph, level: '', status: 'named', rule: r, shape: sh };
             var left = sh.spares - lost;
             if (left < 0) return { phase: ph, level: '', status: 'outside', rule: r, shape: sh };
             return { phase: ph, level: left === 0 ? 'large' : (left === 1 ? 'significant' : 'slight'), status: 'derived', rule: r, shape: sh, left: left };
@@ -233,6 +238,7 @@
         var derived = per.filter(function (x) { return x.status === 'derived'; });
         if (!derived.length) {
             if (per.some(function (x) { return x.status === 'outside'; })) { out.status = 'outside'; out.note = 'This partial loss removes more than the MAC rule allows (' + ruleText(per.find(function (x) { return x.rule; }).rule) + ') — outside the MAC; the aircraft level is the loss itself.'; }
+            else if (per.some(function (x) { return x.status === 'named'; })) { out.status = 'no-rule'; out.note = 'The MAC rule for ' + subTxt + ' was set in the MAC Autopilot as named combinations (' + ruleText(per.find(function (x) { return x.status === 'named'; }).rule) + '). A partial loss is not counted against it here; the aircraft level is the drafter\'s, assumed pending review against the MAC Autopilot.'; out.assumption = 'Aircraft effect level for ' + id + ' in ' + want.join(', ') + ' assumed pending review against the MAC Autopilot rule for ' + subTxt + '.'; }
             else { out.status = 'no-rule'; out.note = 'The MAC rule for ' + subTxt + ' names other phases only — no rule for ' + want.join(', ') + '; the aircraft level is the drafter\'s, assumed pending the MAC.'; out.assumption = 'Aircraft effect level for ' + id + ' in ' + want.join(', ') + ' assumed pending a MAC rule for ' + subTxt + ' in those phases.'; }
             return out;
         }

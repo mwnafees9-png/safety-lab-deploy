@@ -6,7 +6,7 @@
  * the project, the wording a fixed library. Rebuild: zsa_type_hazards.js (SLZsaTypeHazards); zsa_autopilot.js 1.9 puts
  * its section in every zone and lets the engineer set what each unit is and what it is made of in the zone's Edit;
  * cad_viewer.js 2.9 keeps the STEP materials by part in the project when a model is opened.
- *   1  index.html: zsa_type_hazards.js 1.0 right before zsa_autopilot.js 1.9; cad_viewer.js 2.9
+ *   1  index.html: zsa_type_hazards.js 1.0 right before zsa_autopilot.js 1.9 or later; cad_viewer.js 2.9
  *   2  the kind of a unit comes from its own name first (a FADEC on an engine is electronics, the ignition exciters are
  *      electrical power, the thrust reverser actuation is not the engine), never from its system's tag ahead of that
  *   3  materials map to the library (titanium, aluminum, carbon fiber, nickel alloy, plastics, seals); an unknown one says so
@@ -47,7 +47,7 @@ function mutate(file, body) {
 }
 {
     const H = rd('index.html');
-    check('1  zsa_type_hazards.js 1.0 right before zsa_autopilot.js 1.9; cad_viewer.js 2.10; headers say so', /zsa_type_hazards\.js\?v=1\.0" defer><\/script>\s*<script src="zsa_autopilot\.js\?v=1\.9"/.test(H) && H.indexOf('cad_viewer.js?v=2.10') > 0 && /SLZsaTypeHazards v1\.0/.test(rd('zsa_type_hazards.js').slice(0, 200)) && /SLZsaAuto v1\.9/.test(rd('zsa_autopilot.js').slice(0, 200)));
+    check('1  zsa_type_hazards.js 1.0 right before zsa_autopilot.js 1.9 or later; cad_viewer.js 2.10; headers say so', /zsa_type_hazards\.js\?v=1\.0" defer><\/script>\s*<script src="zsa_autopilot\.js\?v=1\.(9|[1-9]\d+)"/.test(H) && H.indexOf('cad_viewer.js?v=2.10') > 0 && /SLZsaTypeHazards v1\.0/.test(rd('zsa_type_hazards.js').slice(0, 200)) && /SLZsaAuto v1\.(9|[1-9]\d+)/.test(rd('zsa_autopilot.js').slice(0, 200)));
 }
 // ---- the module alone -------------------------------------------------------------------------------------------------
 function loadModule(extra) {

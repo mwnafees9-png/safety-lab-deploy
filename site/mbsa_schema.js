@@ -60,11 +60,14 @@
         if (!rule || typeof rule !== 'object') return [where + ': not an object'];
         if (!rule.id) issues.push(where + ': missing id');
         if (!rule.subId) issues.push(where + ': missing subId (the function it protects)');
-        if (!Array.isArray(rule.clauses) || !rule.clauses.length) issues.push(where + ': no clauses');
+        // 22 Nov 2026: a rule sent by the MAC Autopilot is its named combinations (rule.apx.sets); its clauses hold only the total-loss ones and may be empty
+        const apx = !!(rule.apx && Array.isArray(rule.apx.sets));
+        const live = m => sysIds.has(m) || ((typeof macTokOwner === 'function') && sysIds.has(macTokOwner(m)));
+        if (apx ? !rule.apx.sets.length : (!Array.isArray(rule.clauses) || !rule.clauses.length)) issues.push(where + ': no clauses');
         (rule.clauses || []).forEach((cl, i) => {
             if (!cl || !Array.isArray(cl.of) || !cl.of.length) { issues.push(where + ' clause ' + i + ': empty member list'); return; }
             if (!(cl.min >= 1) || cl.min > cl.of.length) issues.push(where + ' clause ' + i + ': min ' + cl.min + ' outside 1..' + cl.of.length);
-            cl.of.forEach(m => { if (sysIds.size && !sysIds.has(m)) issues.push(where + ' clause ' + i + ': member "' + m + '" is not a live system'); });
+            cl.of.forEach(m => { if (sysIds.size && !live(m)) issues.push(where + ' clause ' + i + ': member "' + m + '" is not a live system, system function or item'); });
             // D2 L1/L2 additions (all OPTIONAL; absence ⇒ exact L0 behavior)
             if (cl.weights !== undefined) {
                 if (!cl.weights || typeof cl.weights !== 'object' || Array.isArray(cl.weights)) issues.push(where + ' clause ' + i + ': weights must be an object {sysId: number}');
@@ -85,7 +88,7 @@
             if (!d || !d.sysId) { issues.push(dw + ': missing sysId'); return; }
             if (!String(d.label || '').trim()) issues.push(dw + ': missing label');
             if (!(+d.weight >= 0)) issues.push(dw + ': retained weight must be ≥ 0');
-            const inAnyClause = (rule.clauses || []).some(c => c && Array.isArray(c.of) && c.of.indexOf(d.sysId) !== -1);
+            const inAnyClause = apx || (rule.clauses || []).some(c => c && Array.isArray(c.of) && c.of.indexOf(d.sysId) !== -1);
             if (!inAnyClause) issues.push(dw + ': "' + d.sysId + '" is not a member of any clause');
             (rule.clauses || []).forEach((c, ci) => {
                 if (!c || !Array.isArray(c.of) || c.of.indexOf(d.sysId) === -1) return;

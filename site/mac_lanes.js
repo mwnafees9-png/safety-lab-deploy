@@ -126,6 +126,9 @@
   }
 
   function members(rule) {
+    // 22 Nov 2026: the one reading of a MAC rule (misc_fn_modules.js). A rule sent by the MAC Autopilot also names the members
+    // that appear only in its partial-loss combinations.
+    if (typeof macRuleMembers === 'function') return macRuleMembers(rule);
     var out = [];
     (rule && rule.clauses || []).forEach(function (cl) {
       (cl && cl.of || []).forEach(function (m) { if (out.indexOf(m) === -1) out.push(m); });
@@ -243,7 +246,7 @@
       // A one-member clause is "this function is required", i.e. the architecture has
       // not been modelled yet. That is NOT the same claim as a discovered single point
       // of failure, and reporting it as one cries wolf.
-      var singleMemberClause = (rule && rule.clauses || []).some(function (cl) { return (cl && cl.of || []).length <= 1; });
+      var singleMemberClause = (typeof macRuleHasUnmodelledClause === 'function') ? macRuleHasUnmodelledClause(rule) : (rule && rule.clauses || []).some(function (cl) { return (cl && cl.of || []).length <= 1; });
       findings.push(singleMemberClause
         ? { kind: 'unmodelled', msg: 'Order-1 route, but from a single-member clause — this reads "the function is required", i.e. the redundancy has not been modeled yet. Not a discovered single point of failure.' }
         : { kind: 'spf', msg: 'Order-1 route to a Catastrophic condition from a multi-member clause — a single failure reaches the condition.' });

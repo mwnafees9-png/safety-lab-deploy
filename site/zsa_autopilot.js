@@ -1,4 +1,4 @@
-// zsa_autopilot.js (SLZsaAuto v1.9, 10 Nov 2026: what each kind of equipment and material in a zone brings, and what that does to the equipment around it and the aircraft; v1.8 9 Nov 2026; v1.7 v1.6 v1.5 9 Nov 2026; v1.4 8 Nov 2026; v1.0 4 Nov 2026): the ZSA Autopilot on the ZSA page.
+// zsa_autopilot.js (SLZsaAuto v1.10, 22 Nov 2026: a MAC rule is read through the one reading in misc_fn_modules.js (a member may be a system function or an item; a MAC Autopilot rule is its named combinations); v1.9, 10 Nov 2026: what each kind of equipment and material in a zone brings, and what that does to the equipment around it and the aircraft; v1.8 9 Nov 2026; v1.7 v1.6 v1.5 9 Nov 2026; v1.4 8 Nov 2026; v1.0 4 Nov 2026): the ZSA Autopilot on the ZSA page.
 //
 // Waqas: "Put PRAs in the PRA, ZSAs in the ZSA, with same interface as Sys Lab but make the inputs more intuitive like
 // CMAs in safety lab"; "think about it similarly to how we built the planning auto pilot"; "the interface should be so
@@ -44,7 +44,7 @@
 //     over), and keeps a severity an engineer set in the report's Edit (row.severityBy === 'engineer').
 (function (root) {
     'use strict';
-    var VERSION = '1.9';   // 1.9 10 Nov 2026: each zone says what its kinds of equipment and its materials bring (zsa_type_hazards.js);   // 1.8 9 Nov 2026: the loss figure drawn with squared connectors in their own lanes (SLCcaReport.flow);   // 1.7 9 Nov 2026: proposed mitigations, path to compliance and conclusion per zone, written or AI drafted and accepted;   // 1.6 9 Nov 2026: every zone its own report, picked from a dropdown, with a register   // 1.5 9 Nov 2026: 3D model pictures per zone, picked beside its questions (spec.shots)
+    var VERSION = '1.10';   // 1.10 22 Nov 2026: a MAC rule is read through the one reading in misc_fn_modules.js;   // 1.9 10 Nov 2026: each zone says what its kinds of equipment and its materials bring (zsa_type_hazards.js);   // 1.8 9 Nov 2026: the loss figure drawn with squared connectors in their own lanes (SLCcaReport.flow);   // 1.7 9 Nov 2026: proposed mitigations, path to compliance and conclusion per zone, written or AI drafted and accepted;   // 1.6 9 Nov 2026: every zone its own report, picked from a dropdown, with a register   // 1.5 9 Nov 2026: 3D model pictures per zone, picked beside its questions (spec.shots)
     // PHASE 2 SWITCH (8 Nov 2026): true hides the ZSA table, its entry form and the "Zone models" panel, because the
     // ZSA report (cca_report.js) holds every field with its own Edit and "Add a zone". Flip it when the report frame is wired.
     var TABLE_RETIRED = true;   // 8 Nov 2026 (v1.4): the report frame is wired, the table is retired
@@ -603,10 +603,13 @@
             if (brs.length) {
                 T(tid('mac'), 'Minimum aircraft configuration rules that one event in ' + title + ' breaks', ['Function that needs it', 'Flight phases', 'What the rule needs', 'What is left', 'Failure conditions it leads to'], brs.map(function (b) {
                     var rule = mac.find(function (r) { return r && r.id === b.ruleId; }) || { clauses: [] };
-                    var cl = _arr(rule.clauses).filter(function (c) { var mem = _arr(c.of), left = mem.filter(function (m) { return !down[m]; }); return left.length < (c.min || 1) || (c.floor != null); });
-                    if (!cl.length) cl = _arr(rule.clauses);
-                    var need = cl.map(function (c) { var mem = _arr(c.of).map(function (m) { return _sysName(m) || m; }); return (c.floor != null ? 'enough working capacity from ' : 'at least ' + (c.min || 1) + ' of ') + _join(mem); }).join('; and ');
-                    var left = cl.map(function (c) { var l = _arr(c.of).filter(function (m) { return !down[m]; }).map(function (m) { return _sysName(m) || m; }); return l.length ? 'Only ' + _join(l) : 'None of them'; }).join('; ');
+                    // 22 Nov 2026: the one reading of a MAC rule (misc_fn_modules.js): a member may be a system function or an item, down when
+                    // its owner system is down; a rule sent by the MAC Autopilot is its named combinations.
+                    var nmT = function (m) { return (typeof macTokName === 'function' ? macTokName(m) : null) || _sysName(m) || m; };
+                    var ev0 = (typeof macRuleEval === 'function') ? macRuleEval(rule, function (id) { return !!down[id]; }) : { parts: [] };
+                    var parts = ev0.parts.length ? ev0.parts : _arr(rule.clauses).map(function (c) { return { kind: 'clause', weighted: c.floor != null, min: c.min || 1, members: _arr(c.of), left: _arr(c.of).filter(function (m) { return !down[m]; }) }; });
+                    var need = parts.map(function (p) { return p.kind === 'set' ? 'not all of ' + _join(p.members.map(nmT)) + ' lost together' : (p.weighted ? 'enough working capacity from ' : 'at least ' + p.min + ' of ') + _join(p.members.map(nmT)); }).join('; and ');
+                    var left = parts.map(function (p) { var l = p.left.map(nmT); return l.length ? 'Only ' + _join(l) : 'None of them'; }).join('; ');
                     var ph = !rule.phase || /^all$/i.test(String(b.phase || rule.phase)) ? 'All flight phases' : String(b.phase || rule.phase);
                     return [_sfLabel(b.subId), ph, need, left, _arr(b.fcs).map(function (x) { return _fcLabel(x.fcId) + ' (' + x.severity + ')'; }).join('; ') || 'None recorded'];
                 }));
@@ -883,7 +886,7 @@
         L.direct.forEach(function (id) { line('z:' + sec.code, 's:' + id); });
         L.knock.forEach(function (k) { var from = L.direct.find(function (id) { return _sysName(id) === k.from; }); line(from ? 's:' + from : 'z:' + sec.code, 'k:' + k.id); });
         var mac = _arr(_pc().macModels);
-        L.breaches.forEach(function (b) { var rule = mac.find(function (r) { return r && r.id === b.ruleId; }); var mem = rule ? [].concat.apply([], _arr(rule.clauses).map(function (c) { return _arr(c.of); })) : []; b.fcs.forEach(function (fc) { mem.forEach(function (id) { if (pos['s:' + id]) line('s:' + id, 'fc:' + fc); else if (pos['k:' + id]) line('k:' + id, 'fc:' + fc); }); }); });
+        L.breaches.forEach(function (b) { var rule = mac.find(function (r) { return r && r.id === b.ruleId; }); var mem = rule ? (typeof macRuleMembers === 'function' ? macRuleMembers(rule).concat(macRuleSystems(rule)) : [].concat.apply([], _arr(rule.clauses).map(function (c) { return _arr(c.of); }))) : []; b.fcs.forEach(function (fc) { mem.forEach(function (id) { if (pos['s:' + id]) line('s:' + id, 'fc:' + fc); else if (pos['k:' + id]) line('k:' + id, 'fc:' + fc); }); }); });
         var title = 'What one event in ' + sec.title + ' takes out';
         // v1.x 9 Nov 2026: drawn by the shared column diagram (squared connectors in their own lanes, never through a box)
         var heads = ['ZONE', 'LOST DIRECTLY', 'KNOCK-ON', 'FAILURE CONDITIONS'], fl = F.flow('zsa', { title: title, sub: 'The systems lost directly and as a knock-on, and the failure conditions that trip. Click a box for more.', cols: colsN.map(function (n, i) { return { head: heads[i], nodes: n }; }).filter(function (c) { return c.nodes.length; }), edges: edges });

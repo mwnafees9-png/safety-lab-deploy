@@ -90,7 +90,8 @@
         });
         const macRules = new Map();
         ((projectConfig.macModels) || []).forEach(r => {
-            const touches = subIds.has(r.subId) || (r.clauses || []).some(c => (c.of || []).some(id => S.systems.includes(id)));
+            // 22 Nov 2026: a member may be a system function or an item of an in-scope system; a MAC Autopilot rule also rests on its partial losses
+            const touches = subIds.has(r.subId) || ((typeof macRuleInvolves === 'function') ? S.systems.some(id => macRuleInvolves(r, id)) : (r.clauses || []).some(c => (c.of || []).some(id => S.systems.includes(id))));
             if (!touches) return;
             add(macRules, r.id, 'MAC floor on ' + r.subId + ' includes an in-scope system');
             const rec = (projectConfig.macCompiled || {})[r.id];
