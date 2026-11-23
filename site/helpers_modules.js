@@ -3061,6 +3061,7 @@ function _macVerify(rule, root) {
 function macCompile(ruleId) {
     const rule = _macStore().find(r => r.id === ruleId);
     if (!rule) return { ok: false, reason: 'rule not found' };
+    if (rule.apx) return { ok: false, apx: true, reason: macApxNote(rule) };   // 23 Nov 2026: the guard (misc_fn_modules.js)
     const fc = _macFcForRule(rule);
     if (!fc) return { ok: false, reason: 'no AFHA failure condition on function ' + rule.subId + ' — add the FHA row first' };
     const subMeta = (acFunctionsData || []).find(f => f.subId === rule.subId) || {};
@@ -3313,7 +3314,7 @@ function renderCoffePanel() {
         let graftBtn = '';
         if (v && v.verdict === 'yes' && hasMal) {
             const rule = (typeof macRulesForFc === 'function') ? macRulesForFc(fc)[0] : _macStore().find(r => r.subId === fc.subId);
-            const rec = rule && _macCompiledStore()[rule.id];
+            const rec = rule && !rule.apx && _macCompiledStore()[rule.id];   // 23 Nov 2026: no graft onto a page built from an Autopilot rule
             const grafted = rec && (rec.grafts || []).indexOf(kase.key) !== -1;
             graftBtn = grafted
                 ? ' <span style="font-size:10px; color: var(--color-success); font-family: var(--font-mono);">✓ grafted</span>'
@@ -3459,22 +3460,31 @@ function renderMfmsPanel() {
     if (typeof SLLazy !== 'undefined' && SLLazy.defer('mfms-host', 'renderMfmsPanel', arguments)) return;   // lazy_render.js: off screen -> pending, runs on arrival
     const host = document.getElementById('mfms-host');
     if (!host) return;
-    const rules = _macStore();
+    const allRules = _macStore(), rules = allRules.filter(r => !r.apx), apxRules = allRules.filter(r => r.apx);   // 23 Nov 2026: the guard; the tiles count the rules built here
     const store = _macCompiledStore();
     const fresh = rules.filter(r => macTreeStatus(r) === 'fresh').length;
     const stale = rules.filter(r => macTreeStatus(r) === 'stale').length;
     const unver = rules.filter(r => { const rec = store[r.id]; return rec && rec.verified === false; }).length;
 
     let html = '<div class="ckpt-posture" style="margin-top:0;">' +
-        '<div class="ckpt-tile"><div class="ckpt-tile-label">MAC rules</div><div class="ckpt-tile-value">' + rules.length + '</div><div class="ckpt-tile-sub">compile sources</div></div>' +
+        '<div class="ckpt-tile"><div class="ckpt-tile-label">MAC rules</div><div class="ckpt-tile-value">' + rules.length + '</div><div class="ckpt-tile-sub">compile sources' + (apxRules.length ? ' · ' + apxRules.length + ' more from the MAC Autopilot' : '') + '</div></div>' +
         '<div class="ckpt-tile' + (fresh === rules.length && rules.length ? ' ckpt-tile-ok' : '') + '"><div class="ckpt-tile-label">Trees fresh</div><div class="ckpt-tile-value">' + fresh + ' / ' + rules.length + '</div><div class="ckpt-tile-sub">' + stale + ' stale</div></div>' +
         '<div class="ckpt-tile' + (unver ? ' ckpt-tile-danger' : ' ckpt-tile-ok') + '"><div class="ckpt-tile-label">Equivalence verified</div><div class="ckpt-tile-value">' + (rules.length - unver) + ' / ' + rules.length + '</div><div class="ckpt-tile-sub">BDD cut sets ≡ breach sets</div></div>' +
         '<div class="ckpt-tile"><div class="ckpt-tile-label"></div><div style="padding-top:6px;"><button class="ckpt-m-btn ckpt-m-btn-primary" onclick="macCompileAll()">Compile all</button></div></div></div>';
 
-    if (!rules.length) {
+    if (!allRules.length) {
         html += '<p style="color: var(--color-text-tertiary); font-size: 13px;">No MAC rules to compile — write them on the MAC Model tab. Each rule compiles to an aircraft-level MF&MS fault tree: OR of clause-breach gates (VOTING k = n−min+1), linked to the function\'s worst failure condition, ready for top-down budget allocation.</p>';
     } else {
         html += '<table class="data-table" style="width:100%; font-size:12.5px;"><thead><tr><th>Function</th><th>FC</th><th>Tree</th><th>Breach combos</th><th>Status</th><th>Verified</th><th></th></tr></thead><tbody>';
+        apxRules.forEach(r => {
+            const own = macApxOwnTree(r), rec = store[r.id], old = rec && (ftaPages || []).some(p => p.id === rec.pageId);
+            html += '<tr>' +
+                '<td>' + esc(r.subId) + '</td>' +
+                '<td class="u-mono">' + esc(r.apx.fcId || '') + '</td>' +
+                '<td colspan="4">' + esc(macApxNote(r)) + (old ? ' <span class="sla-stamp" style="color:var(--color-warning);">BUILT HERE BEFORE</span> The page built here from this rule is kept; check it against ' + esc(r.apx.fcId || 'the failure condition') + '\'s own tree.' : '') + '</td>' +
+                '<td style="white-space:nowrap;">' + (own && own.id ? '<button class="ckpt-m-btn" style="font-size:11px; padding:2px 8px;" onclick="openFTAPageById(\'' + esc(own.id) + '\')">Open ' + esc(r.apx.fcId || '') + ' tree ↗</button> ' : '<span style="font-size:11px;">No tree for ' + esc(r.apx.fcId || 'it') + ' yet</span> ') +
+                (old ? '<button class="ckpt-m-btn" style="font-size:11px; padding:2px 8px;" onclick="openFTAPageById(\'' + esc(rec.pageId) + '\')">Open old page ↗</button>' : '') + '</td></tr>';
+        });
         rules.forEach(r => {
             const fc = _macFcForRule(r);
             const st = macTreeStatus(r);

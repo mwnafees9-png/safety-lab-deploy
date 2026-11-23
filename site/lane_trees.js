@@ -434,6 +434,8 @@
     function status(ruleId, laneKey) {
         var rule = ruleById(ruleId);
         var rec = (store()[ruleId] || {})[laneKey];
+        // 23 Nov 2026: the guard (misc_fn_modules.js macApxNote): a rule sent by the MAC Autopilot is never built into lane trees
+        if (rule && rule.apx) return rec && pages().some(function (p) { return p.id === rec.pageId; }) ? 'apx-old' : 'apx';
         if (!rule || !rec || !pages().some(function (p) { return p.id === rec.pageId; })) return 'missing';
         var b = bindLane(rule, laneKey);
         return rec.fp === laneFp(rule, laneKey, b.fc) ? 'fresh' : 'stale';
@@ -515,9 +517,11 @@
                  sets: ls.sets.length, residue: residue.length, fcId: fc.fcId };
     }
 
+    function apxNote(rule) { var f = G('macApxNote'); return f ? f(rule) : 'Sent by the MAC Autopilot. Its fault tree is its failure condition\'s own tree.'; }
     function compile(ruleId) {
         var rule = ruleById(ruleId);
         if (!rule) return { ok: false, reason: 'rule not found' };
+        if (rule.apx) return { ok: false, apx: true, reason: apxNote(rule), lanes: {}, findings: [] };   // 23 Nov 2026: the guard
         var out = { ok: true, lanes: {}, findings: [] };
         var M = G('SLMacLanes');
         if (M) {
@@ -535,8 +539,9 @@
     }
 
     function compileAll() {
-        var res = { rules: 0, pages: 0, findings: 0 };
+        var res = { rules: 0, pages: 0, findings: 0, skippedApx: 0 };
         rules().forEach(function (r) {
+            if (r.apx) { res.skippedApx++; return; }   // 23 Nov 2026: the guard
             var c = compile(r.id);
             res.rules++;
             LANES.forEach(function (ln) { if (c.lanes[ln.key] && c.lanes[ln.key].ok) res.pages++; });
@@ -562,6 +567,13 @@
         html += '<table class="data-table" style="width:100%; font-size:12px;"><thead><tr><th>Function</th>' +
             LANES.map(function (l) { return '<th style="text-align:center;">' + l.label + '</th>'; }).join('') + '<th>Findings</th><th></th></tr></thead><tbody>';
         rs.forEach(function (r) {
+            if (r.apx) {   // 23 Nov 2026: the guard
+                var own = null; try { var fo = G('macApxOwnTree'); own = fo ? fo(r) : null; } catch (_) { own = null; }
+                var olds = LANES.map(function (ln) { var rc = (store()[r.id] || {})[ln.key]; return rc && pages().some(function (p) { return p.id === rc.pageId; }) ? { ln: ln, rc: rc } : null; }).filter(Boolean);
+                html += '<tr><td>' + _esc(fnLabel(r.subId)) + '</td><td colspan="' + LANES.length + '" style="font-size:11.5px;">' + _esc(apxNote(r)) + (olds.length ? ' <span class="sla-stamp" style="color:var(--color-warning);">BUILT HERE BEFORE</span> ' + olds.map(function (o) { return '<a style="cursor:pointer;" onclick="openFTAPageById(\'' + _esc(o.rc.pageId) + '\')">' + _esc(o.ln.label) + ' page ↗</a>'; }).join(' · ') + ': kept; check against ' + _esc(r.apx.fcId || 'its') + ' own tree.' : '') + '</td><td></td><td>'
+                    + (own && own.id ? '<button class="ckpt-m-btn" style="font-size:11px; padding:2px 8px;" onclick="openFTAPageById(\'' + _esc(own.id) + '\')">Open ' + _esc(r.apx.fcId || '') + ' tree ↗</button>' : '<span style="font-size:11px;">No tree for ' + _esc(r.apx.fcId || 'it') + ' yet</span>') + '</td></tr>';
+                return;
+            }
             var recs = store()[r.id] || {};
             var cells = LANES.map(function (ln) {
                 var st = status(r.id, ln.key);

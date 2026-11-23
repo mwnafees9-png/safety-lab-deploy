@@ -49,11 +49,21 @@
  *   links    { '<column>|<state>': { id: 'LNK-n', sysId, fcId, by, at, review } }
  *   sent     { by, at, status } once sent to the PASA; any later change clears it
  *
+ * v1.3, Waqas, 23 Nov 2026, on today's MAC page modes (a backup taking over, where the takeover itself can fail): "on modes I am
+ * good with the questions". For an assembly group built "two, one backs up the other" the build asks one more thing: "Can the
+ * change-over to <the standby unit> fail on its own?" (called the change-over here so it is never mixed up with the
+ * switch-off questions). It is a yes or no answered by the engineer; the tool never assumes it, and the MAC cannot be sent
+ * while it is unanswered. When yes, the group's "not working" is two named ways, shown wherever that loss is written and
+ * drawn: both units lost, or the unit in use lost with the change-over failing. The change-over is written onto the system
+ * as its own assembly entry (kind 'change-over'), and it goes to the PASA with the rule (rule.apx.inside). The answer does not
+ * change what "not working" means at the aircraft level, so no switch-off answer is set aside because of it.
+ *   g.co = { can: 'yes' | 'no', name, by, at }  (only for the 'backup' build; dropped when the build changes)
+ *
  * API (window.SLApxMac): model, act, PATTERNS. Tests: tests/regression_apx_mac_20261115.test.js.
  * ==========================================================================*/
 (function (root) {
     'use strict';
-    var VERSION = '1.2';   // 1.1 17 Nov 2026: the build step asks first; assemblies are written onto their system; every loss gets its line in the system's FHA by itself, severity left blank
+    var VERSION = '1.3';   // 1.3 23 Nov 2026: the change-over question for a group built as one unit backing up the other   // 1.1 17 Nov 2026: the build step asks first; assemblies are written onto their system; every loss gets its line in the system's FHA by itself, severity left blank
     var A = root.SLApxAuto, X = root.SLApx;
     if (!A || !A.kit || !X) { if (typeof module !== 'undefined' && module.exports) module.exports = { VERSION: VERSION, missing: true }; return; }
     var K = A.kit, E = K.E, S = K.S, T = K.T, arr = K.arr, safe = K.safe, lc = K.lc;
@@ -98,10 +108,21 @@
     function unitNames(g) { var p = patOf(g); if (!p) return []; return p.units.map(function (d, k) { var u = arr(g.units)[k]; return u && T(u.name) ? T(u.name) : d; }); }
     function splitOK(g) { var p = patOf(g); return !!p && p.units.length === 2 && p.map.join() === 'O,D,F'; }
     function statesOf(g) { var p = patOf(g); if (!p) return ['F', 'O']; if (g.pos === 'each' && splitOK(g)) return ['F', 'A', 'B', 'O']; return ['F', 'D', 'O'].filter(function (x) { return p.map.indexOf(x) !== -1; }); }
+    // ---- the change-over of a group built "two, one backs up the other" --------------------------------------------------
+    function coAsk(g) { return !!(g && g.pattern === 'backup' && patOf(g)); }
+    function coDefault(g) { var u = unitNames(g); return 'Change-over to ' + (u[1] || 'the standby unit'); }
+    // null: not asked for this build, or not answered yet; otherwise { yes, name }
+    function coOf(g) { if (!coAsk(g) || !g.co || (g.co.can !== 'yes' && g.co.can !== 'no')) return null; return { yes: g.co.can === 'yes', name: T(g.co.name) || coDefault(g) }; }
+    // the ways the group is "not working", in words: one way, or two when the change-over can fail on its own
+    function coWays(d) {
+        var co = d && d.g ? coOf(d.g) : null; if (!co || !co.yes) return null;
+        return [{ k: 'both', text: 'Both lost (' + d.units.join(' and ') + ')', parts: [d.units[0] + ' lost', d.units[1] + ' lost'] },
+                { k: 'co', text: d.units[0] + ' lost with the ' + lc(co.name) + ' failing', parts: [d.units[0] + ' lost', co.name + ' fails'] }];
+    }
     function desc(c, g) {
         var p = patOf(g);
         return { id: c.colId + '#' + g.id, colId: c.colId, gid: g.id, g: g, sysId: c.sysId, sysName: c.sysName, fnName: c.fnName, funcId: c.funcId, named: !!T(g.name), name: T(g.name) || c.sysName,
-            set: !!p, P: p, pos: g.pos || 'same', states: statesOf(g), sided: !!p && p.units.length > 1 && (g.pos === 'each' || g.pos === 'mirror'), units: unitNames(g) };
+            set: !!p, P: p, pos: g.pos || 'same', states: statesOf(g), sided: !!p && p.units.length > 1 && (g.pos === 'each' || g.pos === 'mirror'), units: unitNames(g), co: coOf(g), coOpen: coAsk(g) && !coOf(g) };
     }
     // every column of this failure condition; a system function with no build yet shows as one unset column
     function macCols(fc) {
@@ -146,6 +167,7 @@
     function joinAnd(a) { return a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1]; }
     function unitWords(d, st) {
         var u = d.units, pre = d.named && d.P && d.P.units.length === u.length && u.every(function (x, k) { return x !== d.P.units[k]; }) ? '' : d.name + ': ';
+        if (st === 'F' && d.co && d.co.yes) return pre + 'both (' + u.join(' and ') + '), or ' + u[0] + ' with the ' + lc(d.co.name) + ' failing';
         if (st === 'F') return pre + (u.length <= 1 ? (u[0] || 'the unit') : u.length === 2 ? 'both (' + u.join(' and ') + ')' : 'all ' + u.length + ' (' + u.join(', ') + ')');
         if (st === 'A') return pre + u[0]; if (st === 'B') return pre + u[1];
         if (st === 'D') { var p = d.P, k = p.map.indexOf('D'); return pre + (k <= 1 ? (u.length === 2 ? 'either ' + u.join(' or ') : 'any one of ' + u.join(', ')) : 'any ' + k + ' of ' + u.join(', ')); }
@@ -195,6 +217,7 @@
         var r = peek(fc.key) || {}, why = r.why || {}, nw = rulesOf(sol).filter(function (x) { return !T(why[x.c]); }).length;
         if (nw) out.push('Say why for ' + nw + ' MAC rule' + (nw > 1 ? 's' : '') + '.');
         if (!T(r.ev)) out.push('Give the evidence for the answers (for example the performance analysis or simulation).');
+        var co0 = ds.filter(function (d) { return d.coOpen; }); if (co0.length) out.push('Say whether the change-over to the standby can fail on its own for ' + joinAnd(co0.map(function (d) { return d.name; })) + ' (How each system is built).');
         return out;
     }
 
@@ -369,7 +392,7 @@
         var sy = sysById(col.sysId); if (!sy) return;
         var keep = arr(sy.assemblies).filter(function (a) { return a && !a.apx; }), mine = [];
         K.allCols().filter(function (c) { return c.sysId === col.sysId; }).forEach(function (c) {
-            groupsOf(c.colId).forEach(function (g) { var P = patOf(g); if (!P) return; unitNames(g).forEach(function (n, k) { var u = g.units[k] || {}; mine.push({ id: u.id || (g.id + '.' + (k + 1)), name: n, side: u.side || 'C', groupId: g.id, group: T(g.name), funcId: c.funcId, build: g.pattern, apx: true }); }); });
+            groupsOf(c.colId).forEach(function (g) { var P = patOf(g); if (!P) return; unitNames(g).forEach(function (n, k) { var u = g.units[k] || {}; mine.push({ id: u.id || (g.id + '.' + (k + 1)), name: n, side: u.side || 'C', groupId: g.id, group: T(g.name), funcId: c.funcId, build: g.pattern, apx: true }); }); var co = coOf(g); if (co && co.yes) mine.push({ id: g.id + '.co', name: co.name, side: 'C', groupId: g.id, group: T(g.name), funcId: c.funcId, build: g.pattern, kind: 'change-over', apx: true }); });
         });
         sy.assemblies = keep.concat(mine);
     }
@@ -382,6 +405,7 @@
         g.units = P ? P.units.map(function (d, k) { var o = old[k]; return { id: (o && o.id) || (g.id + '.' + (k + 1)), name: o && T(o.name) && o.name !== d && P.units.length === old.length ? T(o.name) : '', side: (o && o.side && P.units.length === old.length ? o.side : (P.sides ? P.sides[k] : 'C')) }; }) : [];
         if (P && P.units.length < 2) g.pos = 'same';
         if (P && pattern === 'lr' && g.pos === 'same') g.pos = 'mirror';
+        if (g.pattern !== 'backup') delete g.co;
         delete g.resolve; stamp(g, src, ref); affected(colId); K.save();
         return g;
     }
@@ -390,6 +414,15 @@
     function setUnit(fc, colId, gid, k, field, v) { var g = groupById(colId, gid); if (!g || !g.units[k]) return; if (field === 'side') g.units[k].side = ['LH', 'RH', 'C'].indexOf(v) !== -1 ? v : 'C'; else g.units[k].name = T(v); mirror(colId); K.save(); }
     function addGroup(fc, colId) { var gs = groupsOf(colId); if (!gs.length) newGroup(colId); var g = newGroup(colId); affected(colId); K.save(); return g; }
     function removeGroup(fc, colId, gid) { var b = builds()[colId]; if (!b || b.groups.length < 2) return false; var g = groupById(colId, gid); if (!g) return false; if (!Array.isArray(b.removed)) b.removed = []; b.removed.push({ id: g.id, name: g.name, at: K.now(), by: K.who() }); b.groups = b.groups.filter(function (x) { return x.id !== gid; }); affected(colId); K.save(); return true; }
+    // the change-over answer: a yes or no from the engineer, and the name used for it (default "Change-over to <standby>")
+    function setCo(fc, colId, gid, can, name) {
+        var g = groupById(colId, gid); if (!coAsk(g)) return false;
+        if (can != null) { if (can !== 'yes' && can !== 'no') return false; g.co = { can: can, name: g.co ? T(g.co.name) : '', by: K.who(), at: K.now() }; }
+        if (name != null) { if (!g.co) return false; g.co.name = T(name); }
+        mirror(colId);
+        K.fcs().forEach(function (f) { if (K.picked(f).some(function (c) { return c.colId === colId; })) { var r = peek(f.key); if (r && r.sent) touched(f.key); } });
+        K.save(); return true;
+    }
     function setMirror(fc, v) { var r = rec(fc.key); r.mirror = !!v; sync(fc); touched(fc.key); }
     function answer(fc, c, v) {
         var sol = solved(fc); if (!sol || sol.error) throw new Error(sol && sol.error ? sol.error : 'Set how every system is built first.');
@@ -554,6 +587,7 @@
         + '.apx-prog4{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:0 0 14px}.apx-prog4>div{border:1px solid var(--color-border,rgba(20,23,28,.3));border-radius:10px;padding:8px 12px;background:var(--color-surface-2,#F6F6F4)}.apx-prog4 b{display:block;font-size:20px}'
         + '.apx-answers{display:flex;gap:12px;flex-wrap:wrap}.apx-btn.yes{background:#0B7A3E;border-color:#0B7A3E;color:#fff}.apx-btn.no{background:#B42318;border-color:#B42318;color:#fff}'
         + '.apx-lanes{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}.apx-lane{border:1px solid var(--color-border,rgba(20,23,28,.3));border-radius:12px;padding:12px 14px}.apx-lane h4{margin:0 0 6px}.apx-li{margin:6px 0 0;padding-left:14px;position:relative}.apx-li::before{content:"";position:absolute;left:2px;top:.6em;width:5px;height:5px;border-radius:50%;background:currentColor}'
+        + '.apx-co{margin:8px 0 0;padding:8px 10px;border:1.5px solid var(--color-border,rgba(20,23,28,.3));border-radius:10px}.apx-co.open{border-color:#B26A00;border-width:2px}.apx-co .apx-urow{margin:0 0 6px}'
         + '.apx-bld{border:1.5px solid var(--color-border,rgba(20,23,28,.3));border-radius:12px;padding:12px 14px;margin:0 0 10px;background:var(--color-surface-1,#fff)}.apx-bld.on{border-color:#1A6EF2}'
         + '.apx-grp{display:grid;grid-template-columns:minmax(180px,260px) minmax(0,1fr);gap:8px 14px;align-items:start;padding:10px 0;border-top:1px solid var(--color-border,rgba(20,23,28,.2))}.apx-grp:first-of-type{border-top:0}'
         + '.apx-urow{display:grid;grid-template-columns:minmax(0,1fr) 190px;gap:8px;margin:0 0 6px}'
@@ -610,6 +644,10 @@
                 var right = sel('pat|' + key, [['', 'Pick how it is built']].concat(Object.keys(PATTERNS).map(function (k) { return [k, PATTERNS[k].label]; })), g ? g.pattern : '', ' style="width:100%" aria-label="How ' + E(c.sysName) + ' is built"');
                 if (P) {
                     right += '<div style="margin-top:8px">' + P.units.map(function (dn, k) { var u = g.units[k] || {}; return '<div class="apx-urow"><input type="text" data-apx-xc="uname|' + E(key) + '|' + k + '" value="' + E(u.name || '') + '" placeholder="' + E(dn) + ': its name in your design" aria-label="Assembly ' + (k + 1) + ' name">' + sel('uside|' + key + '|' + k, SIDES, u.side || 'C', ' aria-label="Side"') + '</div>'; }).join('') + '</div>';
+                    if (coAsk(g)) { var co1 = g.co && (g.co.can === 'yes' || g.co.can === 'no') ? g.co.can : '', u1 = unitNames(g)[1];
+                        right += '<div class="apx-co' + (co1 ? '' : ' open') + '"><div class="apx-urow" style="align-items:center;grid-template-columns:minmax(0,1fr) auto"><b>Can the change-over to ' + E(u1) + ' fail on its own?</b><div class="apx-sw" role="group" aria-label="Can the change-over fail on its own"><button type="button" class="' + (co1 === 'yes' ? 'on' : '') + '" data-apx-x="co|' + E(key) + '|yes" aria-pressed="' + (co1 === 'yes') + '">Yes</button><button type="button" class="' + (co1 === 'no' ? 'on' : '') + '" data-apx-x="co|' + E(key) + '|no" aria-pressed="' + (co1 === 'no') + '">No</button></div></div>'
+                            + (co1 === 'yes' ? '<div class="apx-urow"><input type="text" data-apx-xc="coname|' + E(key) + '" value="' + E(T(g.co.name)) + '" placeholder="' + E(coDefault(g)) + ': its name in your design" aria-label="Change-over name"></div><div style="font-size:12.5px">Not working is then two ways: both lost, or ' + E(unitNames(g)[0]) + ' lost with the change-over failing. Both are drawn under this loss in the fault tree gate.</div>'
+                            : co1 === 'no' ? '<div style="font-size:12.5px">Not working is both lost.</div>' : '<div style="font-size:12.5px">For example a shuttle valve that sticks, or a transfer relay that does not close. The tool does not assume this: say yes or no.</div>') + '</div>'; }
                     if (P.units.length > 1) right += '<div class="apx-urow" style="align-items:center;grid-template-columns:minmax(0,1fr) minmax(0,1fr)"><b>Does it matter which one is lost?</b>' + sel('pos|' + key, POS, g.pos || 'same') + '</div>' + (g.pos !== 'same' ? '<div style="font-size:12.5px">' + (g.pos === 'each' && splitOK(g) ? 'Each one lost is asked on its own.' : 'One side lost is asked on its own.') + ' It is never worked out from "both lost", because an uneven loss can be worse than an even one.</div>' : '');
                     right += '<div style="font-size:12.5px;margin-top:6px">' + (g.src === 'sdd' ? '<span class="apx-tag ok">From the SDD</span>' : g.src === 'doc' ? '<span class="apx-tag">From a document, accepted by ' + E(g.by) + '</span>' : g.src === 'told' ? '<span class="apx-tag">From your words, accepted by ' + E(g.by) + '</span>' : '<span class="apx-tag">Set by hand</span>') + (g.ref ? E(g.ref) : (g.src === 'sdd' ? '' : 'assumed until the SDD is compared')) + '</div>';
                 }
@@ -658,6 +696,7 @@
         var wayCell = function (d, st) { return st === 'O' ? 'Must fully work' : st === 'F' ? 'Not needed' : st === 'D' ? 'OK partly working' : 'OK with ' + d.units[st === 'A' ? 0 : 1] + ' lost'; };
         var ways = '<div class="apx-cap">Ways to still ' + E(okWord(fc)) + '</div><div class="apx-tw"><table data-sl-worksheet="1" class="apx-arp"><tr><th>Way</th>' + sol.ds.map(function (d) { return '<th>' + E(d.name) + '</th>'; }).join('') + '</tr>' + okMax.map(function (c, k) { return '<tr><td>Way ' + (k + 1) + '</td>' + sol.ds.map(function (d, i) { return '<td>' + E(wayCell(d, c[i])) + '</td>'; }).join('') + '</tr>'; }).join('') + '</table></div>';
         var txt = function (d, x) { var p = d.P, n0 = p.units.length, k = p.map.indexOf(x), last = p.map.lastIndexOf(x); if (k < 0) return 'Does not happen with this build'; if (x === 'O') return last > 0 ? (n0 === 2 ? 'Both work' : 'All ' + n0 + ' work') + ', or ' + last + ' lost (redundancy only)' : n0 === 1 ? 'It works' : n0 === 2 ? 'Both work' : 'All ' + n0 + ' work'; if (x === 'D' && d.states.indexOf('A') !== -1) return d.units[0] + ' lost, or ' + d.units[1] + ' lost (each asked on its own)'; return k === last ? k + ' of ' + n0 + ' lost' : k + ' to ' + last + ' of ' + n0 + ' lost'; };
+        var txt0 = txt; txt = function (d, x) { var w = x === 'F' ? coWays(d) : null; return w ? w.map(function (y) { return y.text; }).join(', or ') : txt0(d, x); };
         var states = '<div class="apx-cap">What each state means</div><div class="apx-tw"><table data-sl-worksheet="1" class="apx-arp"><tr><th>Assembly group</th><th>Build</th><th>Fully working</th><th>Partly working</th><th>Not working</th></tr>' + sol.ds.map(function (d) { return '<tr><td class="l"><b>' + E(d.name) + '</b></td><td class="l">' + E(d.P.label) + '</td><td class="O l">' + E(txt(d, 'O')) + '</td><td class="D l">' + E(txt(d, 'D')) + '</td><td class="F l">' + E(txt(d, 'F')) + '</td></tr>'; }).join('') + '</table></div>';
         var asm = '<div class="apx-cap">Stated assumptions (go into the PASA)</div><div class="apx-tw"><table data-sl-worksheet="1" class="apx-arp"><tr><th>Assembly group</th><th>Does it matter which one is lost?</th><th>So the tool</th></tr>' + sol.ds.map(function (d) { return '<tr><td class="l"><b>' + E(d.name) + '</b></td><td class="l">' + E((POS.filter(function (p) { return p[0] === d.pos; })[0] || POS[0])[1]) + '</td><td class="l">' + (d.sided ? 'Asked "one side lost" on its own. It is never assumed from the answer for "both lost", because an uneven loss can be worse than an even one' : 'Counted how many are lost and carried answers over by logic') + '</td></tr>'; }).join('') + '</table></div>';
         var body = rulesTable(fc, sol, true) + '<p style="margin:8px 0 16px;font-size:12.5px">Each rule is a named combination of assemblies: the smallest mixes that break the function. Anything bigger breaks it too. Give each one its reason.</p>' + ways + states + asm
@@ -757,6 +796,7 @@
         if (action === 'way') { ui.way = arg; return true; }
         if (action === 'sddway') { ui.sddWay = arg; return true; }
         if (action === 'addgrp') { addGroup(fc, arg); return true; }
+        if (action === 'co') { a = arg.split('|'); setCo(fc, a[0], a[1], a[2], null); return true; }
         if (action === 'askadd') {
             var ac = ui.ask.col, ap = ui.ask.pat, an = T(K.val('[data-apx-xc="askname"]') || ui.ask.name);
             if (!ac) { K.toast('Pick the system function first.', 'warning'); return false; }
@@ -807,6 +847,7 @@
         if (action === 'told') { ui.told = v; return false; }
         if (action === 'pat') { a = arg.split('|'); setPattern(fc, a[0], a[1], v, 'hand', ''); return true; }
         if (action === 'pos') { a = arg.split('|'); setPos(fc, a[0], a[1], v); return true; }
+        if (action === 'coname') { a = arg.split('|'); setCo(fc, a[0], a[1], null, v); return true; }
         if (action === 'gname') { a = arg.split('|'); if (!a[1]) newGroup(a[0]).name = T(v); else setGroupName(fc, a[0], a[1], v); K.save(); return true; }
         if (action === 'uname') { a = arg.split('|'); setUnit(fc, a[0], a[1], Number(a[2]), 'name', v); return true; }
         if (action === 'uside') { a = arg.split('|'); setUnit(fc, a[0], a[1], Number(a[2]), 'side', v); return true; }
@@ -819,8 +860,8 @@
     }
 
     var api = { VERSION: VERSION, PATTERNS: PATTERNS,
-        model: { macCols: macCols, ready: ready, solved: solved, breaking: breaking, rules: rulesOf, ruleWords: ruleWords, caseText: caseText, unitWords: unitWords, stLabel: stLabel, lanes: lanes, malfList: malfList, aloneMalf: aloneMalf, comboMalf: comboMalf, left: left, status: status, macStatus: macStatus, linkEvents: linkEvents, sysFcText: sysFcText, sysFcRow: sysFcRow, contributions: contributions, setEffect: setEffect, allEvents: allEvents, sysById: sysById, joinAnd: joinAnd, unitsOff: unitsOff, linkOf: linkOf, linkState: linkState, orphanLinks: orphanLinks, treeCheck: treeCheck, cutSets: cutSets, groupsOf: groupsOf, lossBase: lossBase, sysGroups: sysGroups, peek: peek, conversion: conversion, oldRules: oldRules, docs: docs, acTree: acTree, rulesTable: rulesTable },
-        act: { setPattern: setPattern, setPos: setPos, setGroupName: setGroupName, setUnit: setUnit, addGroup: addGroup, removeGroup: removeGroup, setMirror: setMirror, answer: answer, undo: undo, clearAnswers: clearAnswers, setWhy: setWhy, setEv: setEv, setMalf: setMalf, setLink: setLink, linkIntoTree: linkIntoTree, createSysFc: createSysFc, ensureSysFcs: ensureSysFcs, mirror: mirror, setSdd: setSdd, resolveSdd: resolveSdd, send: send, propose: propose, acceptProposal: acceptProposal, dismissProposal: dismissProposal, readSdd: readSdd, convert: convert, cleanProposal: cleanProposal },
+        model: { coOf: coOf, coWays: coWays, macCols: macCols, ready: ready, solved: solved, breaking: breaking, rules: rulesOf, ruleWords: ruleWords, caseText: caseText, unitWords: unitWords, stLabel: stLabel, lanes: lanes, malfList: malfList, aloneMalf: aloneMalf, comboMalf: comboMalf, left: left, status: status, macStatus: macStatus, linkEvents: linkEvents, sysFcText: sysFcText, sysFcRow: sysFcRow, contributions: contributions, setEffect: setEffect, allEvents: allEvents, sysById: sysById, joinAnd: joinAnd, unitsOff: unitsOff, linkOf: linkOf, linkState: linkState, orphanLinks: orphanLinks, treeCheck: treeCheck, cutSets: cutSets, groupsOf: groupsOf, lossBase: lossBase, sysGroups: sysGroups, peek: peek, conversion: conversion, oldRules: oldRules, docs: docs, acTree: acTree, rulesTable: rulesTable },
+        act: { setCo: setCo, setPattern: setPattern, setPos: setPos, setGroupName: setGroupName, setUnit: setUnit, addGroup: addGroup, removeGroup: removeGroup, setMirror: setMirror, answer: answer, undo: undo, clearAnswers: clearAnswers, setWhy: setWhy, setEv: setEv, setMalf: setMalf, setLink: setLink, linkIntoTree: linkIntoTree, createSysFc: createSysFc, ensureSysFcs: ensureSysFcs, mirror: mirror, setSdd: setSdd, resolveSdd: resolveSdd, send: send, propose: propose, acceptProposal: acceptProposal, dismissProposal: dismissProposal, readSdd: readSdd, convert: convert, cleanProposal: cleanProposal },
         linkPicker: linkPicker, click: click, change: change, style: style, note: note, sel: sel, _ui: ui };
     A.register('mac', { name: 'MAC', steps: ['Failure condition', 'How each system is built', 'Switch it off', 'What the tool worked out', 'Wrong actions that cause it', 'The three lanes', 'Links down to the system fault trees', 'Check the fault tree against the MAC', 'Add the SDD, compare and send'], render: render, click: click, change: change, status: status });
     try { root.SLApxMac = api; } catch (_) {}

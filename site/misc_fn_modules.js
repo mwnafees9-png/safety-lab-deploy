@@ -2048,7 +2048,8 @@ function macRuleWords(rule, nameOf) {
     const nm = nameOf || macTokName;
     if (macRuleIsApx(rule)) {
         if (!rule.apx.sets.length) return 'no combination loses it';
-        return 'lost when ' + rule.apx.sets.map(set => set.map(t => macTokIsDeg(t) ? macTokName(t) : nm(t)).join(' and ')).join('; or when ');
+        const ins = rule.apx.inside || {}, two = t => (ins[t] && !macTokIsDeg(t) && Array.isArray(ins[t].ways)) ? ' (' + ins[t].ways.map(w => w.join(' and ')).join('; or ') + ')' : '';
+        return 'lost when ' + rule.apx.sets.map(set => set.map(t => (macTokIsDeg(t) ? macTokName(t) : nm(t)) + two(t)).join(' and ')).join('; or when ');
     }
     return (rule && Array.isArray(rule.clauses) ? rule.clauses : []).map(c => {
         if (macClauseWeighted(rule, c)) return 'capacity of at least ' + (c.floor != null ? c.floor : (c.min || 1)) + ' from [' + (c.of || []).map(nm).join(', ') + ']';
@@ -2090,15 +2091,40 @@ function macStats() {
     return { rules: rules.length, combos, spf, unsub };
 }
 
+// ============================================================================
+// 23 Nov 2026: THE GUARD ON THE OLDER TREE BUILDERS (Waqas: "Happy with the guard").
+// The MF&MS compile (one page per rule) and the lane trees (three pages per rule: total loss, partial loss,
+// malfunction) were written for a rule that covers a whole aircraft function as "at least 1 of these". A rule sent
+// by the MAC Autopilot is for ONE failure condition and is named combinations. Built from here it would (1) read
+// only its total-loss combinations, (2) hang one failure condition's answers under the function's other failure
+// conditions, and (3) make a second tree beside the failure condition's own tree (fc_auto_trees.js: one tree per
+// failure condition). So neither builder builds from it: each points to that failure condition's own tree. A page
+// built from it before this is kept (nothing is deleted) and marked to be checked against that tree.
+// ============================================================================
+// the failure condition's own tree (the one fc_auto_trees.js keeps), or null
+function macApxOwnTree(rule) {
+    if (!(rule && rule.apx)) return null;
+    try {
+        const F = window.SLFcTrees; if (!F || typeof F.groups !== 'function' || typeof F.treeFor !== 'function') return null;
+        const g = (F.groups('ac') || []).filter(x => x && x.gov && (String(x.gov.internalId) === String(rule.apx.fcKey) || (rule.apx.fcId && String(x.gov.fcId || '') === String(rule.apx.fcId))))[0];
+        return g ? (F.treeFor(g) || null) : null;
+    } catch (_) { return null; }
+}
+function macApxNote(rule) {
+    const f = (rule && rule.apx && rule.apx.fcId) || 'its failure condition';
+    return 'Sent by the MAC Autopilot for ' + f + '. Its fault tree is ' + f + '\'s own tree, not one built here.';
+}
 function macTreeStatus(rule) {
     const rec = _macCompiledStore()[rule.id];
+    if (rule && rule.apx) return rec && (ftaPages || []).some(p => p.id === rec.pageId) ? 'apx-old' : 'apx';
     if (!rec || !(ftaPages || []).some(p => p.id === rec.pageId)) return 'missing';
     return rec.fp === _macRuleFp(rule) ? 'fresh' : 'stale';
 }
 
 function macCompileAll() {
-    const rules = _macStore();
+    const rules = _macStore().filter(r => !r.apx), skippedApx = _macStore().length - rules.length;   // 23 Nov 2026: the guard
     let ok = 0, fail = 0, notes = [];
+    if (skippedApx) notes.push(skippedApx + ' rule' + (skippedApx === 1 ? '' : 's') + ' sent by the MAC Autopilot not compiled here (each uses its failure condition\'s own tree)');
     rules.forEach(r => {
         const res = macCompile(r.id);
         if (res.ok) { ok++; if (res.added.length || res.removed.length) notes.push(r.subId + ': +' + res.added.length + '/−' + res.removed.length + ' combos'); if (!res.verified) notes.push(r.subId + ': EQUIVALENCE CHECK FAILED'); }
@@ -2381,6 +2407,7 @@ function coffeGraft(fcInternalId, caseKey) {
     const fc = (acFhaData || []).find(f => String(f.internalId) === String(fcInternalId));
     if (!fc) return;
     const rule = macRulesForFc(fc)[0];
+    if (rule && rule.apx) { if (typeof showToast === 'function') showToast(macApxNote(rule) + ' Add the branch in that tree.', 'warning', 5000); return; }   // 23 Nov 2026: the guard
     const rec = rule && _macCompiledStore()[rule.id];
     const page = rec && (ftaPages || []).find(p => p.id === rec.pageId);
     if (!page || !page.root) { if (typeof showToast === 'function') showToast('Compile the MAC tree for this function first (MF&MS tab).', 'warning', 3500); return; }
@@ -2528,6 +2555,7 @@ async function wsPssaNewTree() {
 }
 
 async function mfmsAiRestructure(ruleId) {
+    { const r0 = _macStore().find(r => r.id === ruleId); if (r0 && r0.apx) { if (typeof showToast === 'function') showToast(macApxNote(r0), 'warning', 4500); return; } }   // 23 Nov 2026: the guard, before anything else
     if (!(window.SafetyLabAI && SafetyLabAI.available && SafetyLabAI.available())) {
         if (typeof showToast === 'function') showToast('AI backend not available — check AI Settings.', 'warning', 3500);
         return;

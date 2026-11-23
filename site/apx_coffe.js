@@ -26,7 +26,7 @@
  * ==========================================================================*/
 (function (root) {
     'use strict';
-    var VERSION = '1.3';   // 1.3 17 Nov 2026: no ARP table or figure numbers on the captions   // 1.1 17 Nov 2026: the functional failures are the lines the tool added to each system's FHA; each line's effect on its own is written from the CoFFE table
+    var VERSION = '1.4';   // 1.4 23 Nov 2026: a backup whose change-over can fail on its own is drawn under its loss as its two ways   // 1.3 17 Nov 2026: no ARP table or figure numbers on the captions   // 1.1 17 Nov 2026: the functional failures are the lines the tool added to each system's FHA; each line's effect on its own is written from the CoFFE table
     var A = root.SLApxAuto, X = root.SLApx, M = root.SLApxMac;
     if (!A || !A.kit || !X || !M || !M.model) { if (typeof module !== 'undefined' && module.exports) module.exports = { VERSION: VERSION, missing: true }; return; }
     var K = A.kit, E = K.E, S = K.S, T = K.T, arr = K.arr, safe = K.safe, lc = K.lc, MM = M.model, note = M.note, joinAnd = MM.joinAnd;
@@ -117,7 +117,7 @@
 
     // ---- the summary, the gate, the numbers, the pairs ---------------------------------------------------------------------
     function summaryRows(fc, sol) { return sol && sol.done ? X.summary(sol.cols, sol.lvl, sol.FL) : null; }
-    function evWords(d, st) { return st === 'F' ? 'total loss of ' + d.name : st === 'M' ? 'malfunction of ' + d.sysName : 'partial loss of ' + d.name + (st === 'A' || st === 'B' ? ' (' + d.units[st === 'A' ? 0 : 1] + ' lost)' : ''); }
+    function evWords(d, st) { return st === 'F' ? 'total loss of ' + d.name + (MM.coWays && MM.coWays(d) ? ' (both lost, or ' + d.units[0] + ' lost with the ' + lc(d.co.name) + ' failing)' : '') : st === 'M' ? 'malfunction of ' + d.sysName : 'partial loss of ' + d.name + (st === 'A' || st === 'B' ? ' (' + d.units[st === 'A' ? 0 : 1] + ' lost)' : ''); }
     // The conclusion for the rows of one outcome: "X in addition to partial loss of any A, B or C functions resulting in ..."
     function conclusions(fc, rows, level, sol) {
         var ds = sol.ds, res = lc(outcomeName(fc, sol.FL - level));
@@ -299,7 +299,14 @@
         return '<div class="apx-cap">CoFFE table result: ' + E(outcomeName(fc, 0)) + '</div><div class="apx-tw"><table data-sl-worksheet="1" class="apx-arp"><tr>' + heads(fc, sol.ds) + '<th>' + E(resName(fc)) + '</th></tr>' + (rs.length ? rs.map(function (r) { return '<tr>' + r.c.split('').map(function (s, i) { return cellTd(sol.ds[i], s); }).join('') + '<td>' + E(outcomeName(fc, 0)) + '</td></tr>'; }).join('') : '<tr><td class="l" colspan="' + (sol.ds.length + 1) + '">No mix of these failures causes it.</td></tr>') + '</table></div>'
             + (con.length ? '<p style="margin:12px 0 0">Through the CoFFE analysis it can be concluded that: ' + con.map(function (x) { return '"' + E(x.t.charAt(0).toLowerCase() + x.t.slice(1)) + '"'; }).join('; ') + '.</p>' : '');
     }
-    function evNode(fc, sol, e) { var d = colById(sol, e.col); return '<b>' + E(ffId(fc, d.isM ? d.colId : d.id, e.st)) + '</b> ' + E(evWords(d, e.st).replace(/^./, function (x) { return x.toUpperCase(); })); }
+    // 23 Nov 2026: a group built as one unit backing up the other, whose change-over can fail on its own, is not working two
+    // ways; both are drawn under its loss. The budget stays on the loss event: it covers both ways.
+    function evInside(d, st) {
+        var w = st === 'F' && MM.coWays ? MM.coWays(d) : null; if (!w) return '';
+        var li = function (x) { return '<div class="apx-tli">' + x + '</div>'; };
+        return ' <span class="apx-gate">OR</span><div class="apx-tul">' + li(' <span class="apx-gate">AND</span><div class="apx-tul">' + w[0].parts.map(function (x) { return li(E(x)); }).join('') + '</div>') + li(' <span class="apx-gate">AND</span><div class="apx-tul">' + w[1].parts.map(function (x) { return li(E(x)); }).join('') + '</div>') + '</div>';
+    }
+    function evNode(fc, sol, e) { var d = colById(sol, e.col); return '<b>' + E(ffId(fc, d.isM ? d.colId : d.id, e.st)) + '</b> ' + E(evWords(d, e.st).replace(/^./, function (x) { return x.toUpperCase(); })) + (d.isM ? '' : evInside(d, e.st)); }
     function gateHtml(fc, sol) {
         var g = gate(fc, sol), alone = MM.aloneMalf(fc), li = function (x) { return '<div class="apx-tli">' + x + '</div>'; }, inner = '';
         if (g && g.shape === 'core-any') inner = ' <span class="apx-gate">AND</span><div class="apx-tul">' + g.core.map(function (e) { return li(evNode(fc, sol, e)); }).join('') + li('<b>Any one of these further failures</b><span class="apx-gate">OR</span><div class="apx-tul">' + g.any.map(function (e) { return li(evNode(fc, sol, e)); }).join('') + '</div>') + '</div>';
@@ -441,7 +448,7 @@
     }
 
     var api = { VERSION: VERSION,
-        model: { cofCols: cofCols, ready: ready, solved: solved, next: next, outcomes: outcomes, outcomeName: outcomeName, named: named, macSays: macSays, disagreements: disagreements, caseText: caseText, codeOf: codeOf, ffId: ffId, ffRows: ffRows, summary: summaryRows, conclusions: conclusions, fcRows: fcRows, shortest: shortest, gate: gate, gateEvents: gateEvents, mathCheck: mathCheck, target: target, pairs: pairs, indepList: indepList, status: status, ownEffects: ownEffects, left: left, peek: peek, oldVerdicts: oldVerdicts, resName: resName, levelName: levelName, fmt: fmt, evWords: evWords, colById: colById },
+        model: { evInside: evInside, cofCols: cofCols, ready: ready, solved: solved, next: next, outcomes: outcomes, outcomeName: outcomeName, named: named, macSays: macSays, disagreements: disagreements, caseText: caseText, codeOf: codeOf, ffId: ffId, ffRows: ffRows, summary: summaryRows, conclusions: conclusions, fcRows: fcRows, shortest: shortest, gate: gate, gateEvents: gateEvents, mathCheck: mathCheck, target: target, pairs: pairs, indepList: indepList, status: status, ownEffects: ownEffects, left: left, peek: peek, oldVerdicts: oldVerdicts, resName: resName, levelName: levelName, fmt: fmt, evWords: evWords, colById: colById },
         act: { setOutcome: setOutcome, addOutcome: addOutcome, removeOutcome: removeOutcome, setResultName: setResultName, answer: answer, undo: undo, clearAnswers: clearAnswers, setBudget: setBudget, setIndep: setIndep, send: send, convert: convert },
         tables: { q43: tableQ43, q46: tableQ46, q47: tableQ47, q48: tableQ48, gate: gateHtml, pairs: tablePairs }, _ui: ui };
     A.register('cof', { name: 'CoFFE', steps: ['Failure condition', 'The system failures and their FHA lines', 'Name the outcomes', 'Answer the quick questions', 'The full CoFFE table', 'Summary and result', 'Fault tree, budgets and independence', 'Common resource pairs and send'], render: render, click: click, change: change, status: status });
