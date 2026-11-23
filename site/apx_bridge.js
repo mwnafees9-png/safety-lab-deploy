@@ -31,7 +31,7 @@
  * ==========================================================================*/
 (function (root) {
     'use strict';
-    var VERSION = '1.6';   // 1.6 23 Nov 2026: budgets per flight with the rate per flight hour; linked outcomes and their failure conditions; single shared failures; the CMA list; the PASA assumptions, numbered once and never reused   // 1.5 23 Nov 2026: a backup whose change-over can fail on its own goes to the PASA with its two ways (build table, gate, rule.apx.inside)   // 1.4 22 Nov 2026: a sent MAC rule names every function it is stated over (rule.apx.members), for the one reading of a MAC rule in misc_fn_modules.js   // 1.2 17 Nov 2026: what was sent can be taken back out one Autopilot at a time; the PSSA shows the assemblies and the lines the aircraft level added to its system
+    var VERSION = '1.7';   // 1.7 23 Nov 2026: a failure condition with more than one CoFFE source: each shown, their sum checked, the driver named, disagreements found   // 1.6 23 Nov 2026: budgets per flight with the rate per flight hour; linked outcomes and their failure conditions; single shared failures; the CMA list; the PASA assumptions, numbered once and never reused   // 1.5 23 Nov 2026: a backup whose change-over can fail on its own goes to the PASA with its two ways (build table, gate, rule.apx.inside)   // 1.4 22 Nov 2026: a sent MAC rule names every function it is stated over (rule.apx.members), for the one reading of a MAC rule in misc_fn_modules.js   // 1.2 17 Nov 2026: what was sent can be taken back out one Autopilot at a time; the PSSA shows the assemblies and the lines the aircraft level added to its system
     var A = root.SLApxAuto, X = root.SLApx, M = root.SLApxMac, C = root.SLApxCof;
     if (!A || !A.kit || !X || !M || !M.model || !C || !C.model) { if (typeof module !== 'undefined' && module.exports) module.exports = { VERSION: VERSION, missing: true }; return; }
     var K = A.kit, S = K.S, T = K.T, arr = K.arr, safe = K.safe, lc = K.lc, MM = M.model, CM = C.model, AM = A.model;
@@ -232,15 +232,27 @@
         return b;
     }
     function gateWords(g, ev) { return g.shape === 'core-any' ? MM.joinAnd(g.core.map(ev)) + ' happens together with any one of: ' + g.any.map(ev).join('; ') : 'any one of these combinations happens: ' + g.sets.map(function (x) { return x.map(ev).join(' and '); }).join('; or '); }
-    // A failure condition that is a lesser outcome of another failure condition's CoFFE table: its part of that table.
+    // A failure condition that is a lesser outcome of other failure conditions' CoFFE tables: its part of each sent one; with
+    // more than one source (those tables, and its own when sent), their sum against its objective, the driver, and any case
+    // two sources answer differently (apx_coffe.js 1.6).
     function linkedInBlocks(fc2) {
-        var cb = CM.coveredBy(fc2); if (!cb || !sentRec('cof', cb.fc)) return null;
-        var fc = cb.fc, sol = CM.solved(fc); if (!sol || sol.error || !sol.done) return null;
-        var g = CM.linkedGate(fc, sol, cb.i), bud = (CM.peek ? CM.peek(fc.key) : null) || ((pc().apx || {}).cof || {})[fc.key] || {}, b = bud.budgets || {};
-        var ev = function (e) { var d = CM.colById(sol, e.col); return CM.ffId(fc, d.isM ? d.colId : d.id, e.st) + ' ' + CM.evWords(d, e.st); };
-        var out = [{ k: 'p', text: fc2.fcId + ' is the outcome "' + cb.name + '" of the CoFFE table for ' + fc.fcId + ' (signed by ' + sentRec('cof', fc).sent.by + '). One table covers both. From it, ' + fc2.fcId + ' happens when ' + (g ? gateWords(g, ev) : 'no mix causes it') + '.' }];
-        if (g) { var mc = CM.checkGate(g, b, fc2); out.push({ k: 'p', text: mc.missing ? 'Its events do not all have a budget yet in ' + fc.fcId + '\'s CoFFE.' : mc.error ? mc.error : CM.mathWords(mc, g, b, fc2.sev) + (mc.ok === false ? ' Finding: the budgets do not meet ' + fc2.fcId + '\'s objective.' : '') }); }
-        return out;
+        var out = [];
+        CM.coveredByAll(fc2).forEach(function (cb) {
+            if (!sentRec('cof', cb.fc)) return;
+            var fc = cb.fc, sol = CM.solved(fc); if (!sol || sol.error || !sol.done) return;
+            var g = CM.linkedGate(fc, sol, cb.i), b = ((pc().apx || {}).cof || {})[fc.key] || {}, bud = b.budgets || {};
+            var ev = function (e) { var d = CM.colById(sol, e.col); return CM.ffId(fc, d.isM ? d.colId : d.id, e.st) + ' ' + CM.evWords(d, e.st); };
+            out.push({ k: 'p', text: fc2.fcId + ' is the outcome "' + cb.name + '" of the CoFFE table for ' + fc.fcId + ' (signed by ' + sentRec('cof', fc).sent.by + '). From it, ' + fc2.fcId + ' happens when ' + (g ? gateWords(g, ev) : 'no mix causes it') + '.' });
+            if (g) { var mc = CM.checkGate(g, bud, fc2); out.push({ k: 'p', text: mc.missing ? 'Its events do not all have a budget yet in ' + fc.fcId + '\'s CoFFE.' : mc.error ? mc.error : 'From this source: ' + CM.mathWords(mc, g, bud, fc2.sev) }); }
+        });
+        var cmb = CM.combined(fc2, true);
+        if (cmb.n > 1) {
+            out.push({ k: 'table', name: 'apx-src-' + fc2.fcId, title: 'The CoFFE sources of ' + fc2.fcId, rows: cmb.sources.map(function (x) { var p = x.mc && x.mc.p != null ? x.mc.p : null; return { Source: x.label.charAt(0).toUpperCase() + x.label.slice(1), 'Probability per flight': !x.g ? 'No mix causes it' : p == null ? 'Budgets not all given' : CM.fmt(p), Share: cmb.p && p != null ? Math.round(100 * p / cmb.p) + '%' : '' }; }), lead: '{N} lists every CoFFE source of ' + fc2.fcId + '.' });
+            out.push({ k: 'p', text: cmb.open ? fc2.fcId + ' has ' + cmb.n + ' CoFFE sources; they are added together once each has all its budgets.' : fc2.fcId + ' has ' + cmb.n + ' CoFFE sources, added together: ' + CM.fmt(cmb.p) + ' per flight' + (cmb.rate != null ? ' = ' + CM.fmt(cmb.rate) + ' per flight hour over a ' + Number(cmb.hours).toFixed(2) + ' h flight, ' + (cmb.ok ? 'within' : 'over') + ' the ' + CM.fmt(cmb.target) + ' per flight hour objective' : '') + '. Each source is a different route to it, so the figure is their sum: never lower than the true one, exact when the routes never happen in the same flight, and higher than the truth where two sources hold the same combination.' + (cmb.driver ? ' The driver is ' + cmb.driver.label + ' (' + Math.round(100 * cmb.share) + '%).' : '') + (cmb.ok === false ? ' Finding: together they do not meet ' + fc2.fcId + '\'s objective.' : '') });
+            var dis = CM.disagreements2(fc2, true);
+            if (dis.length) { out.push({ k: 'p', text: 'Finding: the CoFFE sources of ' + fc2.fcId + ' disagree on ' + dis.length + ' case' + (dis.length > 1 ? 's' : '') + ' (the same failures with everything else working, answered two ways).' }); out.push({ k: 'table', name: 'apx-srcdis-' + fc2.fcId, title: 'Cases the CoFFE sources of ' + fc2.fcId + ' answer differently', rows: dis.map(function (x) { return { 'With everything else working': x.what.charAt(0).toUpperCase() + x.what.slice(1), ['Says it causes ' + fc2.fcId]: x.aSays ? x.a : x.b, 'Says it does not': x.aSays ? x.b : x.a }; }), lead: '{N} lists them. Either the answers or the performance data need a second look.' }); }
+        }
+        return out.length ? out : null;
     }
     // ---- the PASA assumptions: what each state means (MAC), what each outcome means (CoFFE), why a resource failure has no
     // effect on a function (Interdependence). Each has a permanent ID (PASA-ASMP-nn), given the first time it is seen and never
@@ -268,7 +280,7 @@
         if (sentRec('idp', fc)) { out.idp = safe(function () { return idpBlocks(fc); }, null); out.res = safe(function () { return resBlocks(fc); }, null); }
         if (sentRec('mac', fc)) out.mac = safe(function () { return macBlocks(fc); }, null);
         if (sentRec('cof', fc)) out.cof = safe(function () { return cofBlocks(fc); }, null);
-        else { var li = safe(function () { return linkedInBlocks(fc); }, null); if (li) out.cof = li; }
+        var li = safe(function () { return linkedInBlocks(fc); }, null); if (li) out.cof = (out.cof || []).concat(li);
         var as = safe(function () { return assumptions(fc); }, []) || [];
         out.asmp = as.length ? [{ k: 'table', name: 'apx-asmp-' + fc.fcId, title: 'PASA assumptions for ' + fc.fcId, rows: as, lead: '{N} lists the assumptions ' + fc.fcId + ' rests on. Each has to be shown true later, in the SSA or by test.' }] : null;
         return out.idp || out.mac || out.cof || out.asmp || out.changed.length ? out : null;

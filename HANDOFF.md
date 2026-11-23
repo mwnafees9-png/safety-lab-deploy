@@ -1,4 +1,19 @@
-## 23 Nov 2026, later (latest): THE CoFFE DONE THE WAY THE BOOK DOES IT. Four gaps closed and one math error fixed, after reading ARP4761A B.4.1 to B.4.3.3 (Tables B2, B3) and Q.4.2.5 to Q.4.4.4 (Tables Q.4-3 to Q.4-12, Figure Q.4-1, Table Q.4-17) and Q.17.4.7.2. Behind the team switch (?apx=1).
+## 23 Nov 2026, latest: A FAILURE CONDITION WITH MORE THAN ONE CoFFE SOURCE. Behind the team switch (?apx=1).
+
+**Why (Waqas).** On the two loose ends left by the book work (a failure condition linked as an outcome by two tables pointed to the first; one with its own table was shelved when another claimed it): "is there a world where we show it with a note and claim that there is a more conservative use of this", then "ok lets get it done" on: add the sources together, name the driver, and compare the sources where they share assembly groups.
+
+**What (apx_coffe.js 1.6, apx_bridge.js 1.7).**
+- Sources of a failure condition = its own table (if started) plus every table that links one of its lesser outcomes to it (coveredByAll, sourcesFor). Nothing is dropped or picked.
+- The figure is the SUM of the sources per flight (each is a different route to the same event, so the larger alone would leave the other out; the sum is never lower than the true one), capped at 1, turned into a rate per flight hour with SLTopBasis over its own flight time, and checked against its objective (combined). The driver is the largest share.
+- Disagreements (disagreements2): over the assembly groups two sources share, every single and every pair with everything else working is compared; a case one source says causes it and the other says does not is a finding (the answers or the performance data need a second look), with a table.
+- Its own table is never shelved: with no table of its own the CoFFE points to each claiming table and offers "Make a table of its own as well" (rec.ownToo); with one, the page stays live, with a banner and the sources on every step, and its own table is a further source in the sum.
+- PASA: the linked part of each sent claimer, then the sources table (apx-src-), the sum against the objective with the driver, and the disagreements (apx-srcdis-).
+
+**Tests.** New tests/regression_apx_coffe_sources_20261123 (12 checks on the K350 demo: FC-07 and FC-01 both link their middle outcome to FC-02; sum, rate and driver by hand; 11 disagreements worked out by hand from the two rules; own table as a third source; three sends; the PASA). Mutations maxonly, nodis and shelve each go red. All apx, PASA, PSSA, generated requirements, storage and durability suites green.
+
+**Open.** The CMA Autopilot does not read projectConfig.apx.cma yet. site/landing-1.html: keep or delete (untracked).
+
+## 23 Nov 2026, later: THE CoFFE DONE THE WAY THE BOOK DOES IT. Four gaps closed and one math error fixed, after reading ARP4761A B.4.1 to B.4.3.3 (Tables B2, B3) and Q.4.2.5 to Q.4.4.4 (Tables Q.4-3 to Q.4-12, Figure Q.4-1, Table Q.4-17) and Q.17.4.7.2. Behind the team switch (?apx=1).
 
 **Why (Waqas).** "can you read through the CoFFE analysis in the ARP 4761A and understand it properly including the examples", then on the four gaps and the per-flight question: "yes lets get this done now".
 

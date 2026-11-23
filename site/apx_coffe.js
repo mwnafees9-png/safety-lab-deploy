@@ -44,12 +44,24 @@
  *      rule the rest of the tool uses (SLTopBasis.meets, over the failure condition's own tree) before it is compared with
  *      the objective. Before this the per-flight product was compared with the per-flight-hour objective directly.
  *   rec.outFc { i: fcKey | 'none' } (1 <= i < last), rec.outDef { i: text } (0 <= i < last)
+ * v1.6, 23 Nov 2026 (Waqas, on a failure condition claimed by two tables, or claimed while it has its own table: "is there a
+ * world where we show it with a note and claim that there is a more conservative use of this"; agreed: combine, name the
+ * driver, check the two against each other; "ok lets get it done"):
+ *   SOURCES. A failure condition's CoFFE sources are its own table (when it has one) and every other table that names it as
+ *   an outcome. Each is shown with its gate and its number. Both routes cause it, so taking the bigger one alone would leave
+ *   the other out: the figure checked against its objective is the SUM of the sources' probabilities per flight, never lower
+ *   than the true one (exact when the routes never happen in the same flight; a combination two tables both hold is counted
+ *   twice, which overstates, and the note says so). The source with the larger share is named as the driver.
+ *   DISAGREEMENT. Where two sources share assembly groups, the simple cases (one failure alone, or two together, everything
+ *   else working) are compared: one says it causes the failure condition, the other says it does not, that is a finding.
+ *   Its own table is never shelved: a failure condition with its own answers keeps its table live; one with none is pointed
+ *   to the table(s) that claim it, and can still start its own (rec.ownToo).
  *
  * API (window.SLApxCof): model, act. Tests: tests/regression_apx_coffe_20261115.test.js.
  * ==========================================================================*/
 (function (root) {
     'use strict';
-    var VERSION = '1.5';   // 1.5 23 Nov 2026: resource failures by what they do; one table for several failure conditions; outcome definitions; the CMA list; budgets per flight   // 1.4 23 Nov 2026: a backup whose change-over can fail on its own is drawn under its loss as its two ways   // 1.3 17 Nov 2026: no ARP table or figure numbers on the captions   // 1.1 17 Nov 2026: the functional failures are the lines the tool added to each system's FHA; each line's effect on its own is written from the CoFFE table
+    var VERSION = '1.6';   // 1.6 23 Nov 2026: every CoFFE source of a failure condition shown, added together for the check, the driver named, the sources checked against each other   // 1.5 23 Nov 2026: resource failures by what they do; one table for several failure conditions; outcome definitions; the CMA list; budgets per flight   // 1.4 23 Nov 2026: a backup whose change-over can fail on its own is drawn under its loss as its two ways   // 1.3 17 Nov 2026: no ARP table or figure numbers on the captions   // 1.1 17 Nov 2026: the functional failures are the lines the tool added to each system's FHA; each line's effect on its own is written from the CoFFE table
     var A = root.SLApxAuto, X = root.SLApx, M = root.SLApxMac;
     if (!A || !A.kit || !X || !M || !M.model) { if (typeof module !== 'undefined' && module.exports) module.exports = { VERSION: VERSION, missing: true }; return; }
     var K = A.kit, E = K.E, S = K.S, T = K.T, arr = K.arr, safe = K.safe, lc = K.lc, MM = M.model, note = M.note, joinAnd = MM.joinAnd;
@@ -91,6 +103,64 @@
         var hit = null;
         K.fcs().forEach(function (f) { if (hit || f.key === fc.key) return; var r = peek(f.key); if (!r || !r.outFc) return; Object.keys(r.outFc).forEach(function (i) { if (!hit && S(r.outFc[i]) === fc.key && Number(i) < outcomes(f).length - 1) hit = { fc: f, i: Number(i), name: outcomes(f)[Number(i)] }; }); });
         return hit;
+    }
+    // every other table that names this failure condition as one of its outcomes
+    function coveredByAll(fc) {
+        var out = [];
+        K.fcs().forEach(function (f) { if (f.key === fc.key) return; var r = peek(f.key); if (!r || !r.outFc) return; Object.keys(r.outFc).forEach(function (i) { if (S(r.outFc[i]) === fc.key && Number(i) >= 1 && Number(i) < outcomes(f).length - 1) out.push({ fc: f, i: Number(i), name: outcomes(f)[Number(i)] }); }); });
+        return out;
+    }
+    function ownStarted(fc) { var r = peek(fc.key); return !!(r && (r.ownToo || r.sent || r.wasSent || (r.a1 && Object.keys(r.a1).length))); }
+    // The CoFFE sources of a failure condition: its own table, then each table that claims it. Each: { label, owner, i, sol,
+    // g, mc, causes(case) }. onlySent: the PASA counts only what was sent.
+    function sourcesFor(fc2, onlySent) {
+        var out = [];
+        if (ownStarted(fc2) && (!onlySent || (peek(fc2.key) || {}).sent) && named(fc2) && ready(fc2)) {
+            var s0 = solved(fc2);
+            if (s0 && !s0.error && s0.done) { var g0 = gate(fc2, s0); out.push({ own: true, owner: fc2, label: 'its own CoFFE table', sol: s0, g: g0, mc: g0 ? checkGate(g0, (peek(fc2.key) || {}).budgets || {}, fc2) : null, causes: function (c) { return s0.lvl[c] == null ? null : s0.lvl[c] === s0.FL; } }); }
+        }
+        coveredByAll(fc2).forEach(function (cb) {
+            if (onlySent && !(peek(cb.fc.key) || {}).sent) return;
+            var s1 = named(cb.fc) && ready(cb.fc) ? solved(cb.fc) : null; if (!s1 || s1.error || !s1.done) return;
+            var g1 = linkedGate(cb.fc, s1, cb.i), L = s1.FL - cb.i;
+            out.push({ own: false, owner: cb.fc, i: cb.i, name: cb.name, label: 'the outcome "' + cb.name + '" of the CoFFE table for ' + cb.fc.fcId, sol: s1, g: g1, mc: g1 ? checkGate(g1, (peek(cb.fc.key) || {}).budgets || {}, fc2) : null, causes: function (c) { return s1.lvl[c] == null ? null : s1.lvl[c] >= L; } });
+        });
+        return out;
+    }
+    // The sources added together (probabilities per flight), turned into a rate per flight hour over fc2's own tree, and the driver.
+    function combined(fc2, onlySent) {
+        var src = sourcesFor(fc2, onlySent); if (src.length < 2) return { sources: src, n: src.length };
+        var withGate = src.filter(function (x) { return x.g; }), open = withGate.filter(function (x) { return !x.mc || x.mc.missing || x.mc.error || x.mc.p == null; });
+        if (open.length) return { sources: src, n: src.length, open: open };
+        var p = Math.min(1, withGate.reduce(function (a, x) { return a + x.mc.p; }, 0)), drv = withGate.slice().sort(function (a, b) { return b.mc.p - a.mc.p; })[0];
+        var tg = target(fc2), TB = root.SLTopBasis, page = safe(function () { return MM.acTree(fc2); }, null), m = tg != null && TB && TB.meets ? safe(function () { return TB.meets(p, tg, page); }, null) : null;
+        return { sources: src, n: src.length, p: p, driver: drv || null, share: drv && p > 0 ? drv.mc.p / p : null, target: tg, rate: m ? m.rate : null, hours: m ? m.hours : null, ok: tg == null || !m ? null : m.pass };
+    }
+    // Where two sources share assembly groups: the cases with one or two failures and everything else working, compared.
+    function disagreements2(fc2, onlySent) {
+        var src = sourcesFor(fc2, onlySent), out = [];
+        for (var a = 0; a < src.length; a++) for (var b = a + 1; b < src.length; b++) {
+            var A1 = src[a], B1 = src[b], ida = A1.sol.ds.map(function (d) { return d.id; }), shared = B1.sol.ds.filter(function (d) { return ida.indexOf(d.id) !== -1; });
+            var statesOf = function (d) { var da = A1.sol.ds[ida.indexOf(d.id)]; return d.states.filter(function (x) { return x !== 'O' && da.states.indexOf(x) !== -1; }); };
+            var caseIn = function (S1, m) { var c = S1.sol.ds.map(function (d) { return m[d.id] || 'O'; }).join(''); return S1.sol.cases.indexOf(c) === -1 ? null : c; };
+            var test = function (m, words) { var ca = caseIn(A1, m), cb = caseIn(B1, m); if (!ca || !cb) return; var x = A1.causes(ca), y = B1.causes(cb); if (x == null || y == null || x === y) return; out.push({ what: words, a: A1.label, b: B1.label, aSays: x, bSays: y }); };
+            var word = function (d, st) { return evWords(d, st); };
+            shared.forEach(function (d, k) {
+                statesOf(d).forEach(function (st) { var m = {}; m[d.id] = st; test(m, word(d, st) + ' alone'); });
+                shared.slice(k + 1).forEach(function (e) { statesOf(d).forEach(function (s1) { statesOf(e).forEach(function (s2) { var m = {}; m[d.id] = s1; m[e.id] = s2; test(m, word(d, s1) + ' and ' + word(e, s2)); }); }); });
+            });
+        }
+        return out;
+    }
+    function sourcesHtml(fc2) {
+        var src = sourcesFor(fc2, false); if (!src.length) return '';
+        var cmb = combined(fc2, false), dis = disagreements2(fc2, false), h = '';
+        h += '<div class="apx-cap">The CoFFE sources of ' + E(fc2.fcId) + '</div><div class="apx-tw"><table data-sl-worksheet="1" class="apx-arp"><tr><th>Source</th><th>Probability per flight</th><th>Share</th></tr>'
+            + src.map(function (x) { var p = x.mc && x.mc.p != null ? x.mc.p : null; return '<tr><td class="l">' + E(x.label.charAt(0).toUpperCase() + x.label.slice(1)) + '</td><td>' + (!x.g ? 'No mix causes it' : p == null ? 'Budgets not all given' : E(fmt(p))) + '</td><td>' + (cmb.p && p != null ? Math.round(100 * p / cmb.p) + '%' : '') + '</td></tr>'; }).join('') + '</table></div>';
+        if (src.length > 1) h += note(cmb.ok === false ? 'bad' : cmb.ok ? 'good' : '', cmb.open ? E(fc2.fcId) + ' has ' + src.length + ' CoFFE sources. They are added together once each has all its budgets (' + E(joinAnd(cmb.open.map(function (x) { return x.label; }))) + ' still to give).'
+            : '<b>' + E(fc2.fcId) + ' has ' + src.length + ' CoFFE sources, added together: ' + E(fmt(cmb.p)) + ' per flight' + (cmb.rate != null ? ' = ' + E(fmt(cmb.rate)) + ' per flight hour over a ' + Number(cmb.hours).toFixed(2) + ' h flight, ' + (cmb.ok ? 'within' : 'over') + ' the ' + E(fmt(cmb.target)) + ' objective' : '') + '.</b> Each source is a different route to it, so the figure is their sum: never lower than the true one, exact when the routes never happen in the same flight, and higher than the truth where two sources hold the same combination. ' + (cmb.driver ? 'The driver is ' + E(cmb.driver.label) + ' (' + Math.round(100 * cmb.share) + '%).' : ''));
+        if (dis.length) h += note('bad', '<b>Finding: the sources disagree on ' + dis.length + ' case' + (dis.length > 1 ? 's' : '') + '.</b> The same failures with everything else working are answered two ways. Either the answers or the performance data need a second look.') + '<div class="apx-tw"><table data-sl-worksheet="1" class="apx-arp"><tr><th>With everything else working</th><th>Says it causes ' + E(fc2.fcId) + '</th><th>Says it does not</th></tr>' + dis.map(function (x) { return '<tr><td class="l">' + E(x.what.charAt(0).toUpperCase() + x.what.slice(1)) + '</td><td class="l">' + E(x.aSays ? x.a : x.b) + '</td><td class="l">' + E(x.aSays ? x.b : x.a) + '</td></tr>'; }).join('') + '</table></div>';
+        return h;
     }
     function candidates(fc) { return K.fcs().filter(function (f) { return f.key !== fc.key; }).sort(function (a, b) { return (b.subId === fc.subId) - (a.subId === fc.subId); }); }
     function named(fc) { return outcomes(fc).slice(1).every(function (x) { return !!x; }); }
@@ -450,8 +520,9 @@
     function style() { M.style(); if (typeof document === 'undefined' || document.getElementById('apx-style-cof')) return; var st = document.createElement('style'); st.id = 'apx-style-cof'; st.textContent = CSS; document.head.appendChild(st); }
     function card(q, help, body) { return K.card(q, help, body); }
     function need(fc, title) {
-        var cb = coveredBy(fc);
-        if (cb) return card(title, E(fc.fcId) + ' is the outcome "' + E(cb.name) + '" of the CoFFE table for ' + E(cb.fc.fcId) + '. One table covers both, so there is no second table here. Its own math check and its PASA part come from that table.', '<button class="apx-btn p" data-apx-x="gofc|' + E(cb.fc.key) + '">Open the CoFFE for ' + E(cb.fc.fcId) + '</button>');
+        var cbs = coveredByAll(fc);
+        if (cbs.length && !ownStarted(fc)) return card(title, E(fc.fcId) + ' is ' + E(joinAnd(cbs.map(function (cb) { return 'the outcome "' + cb.name + '" of the CoFFE table for ' + cb.fc.fcId; }))) + '. ' + (cbs.length > 1 ? 'Those tables cover it, so there is no table of its own here. Its figure is theirs added together.' : 'One table covers both, so there is no second table here. Its own math check and its PASA part come from that table.'),
+            cbs.map(function (cb) { return '<button class="apx-btn p" style="margin:0 8px 8px 0" data-apx-x="gofc|' + E(cb.fc.key) + '">Open the CoFFE for ' + E(cb.fc.fcId) + '</button>'; }).join('') + '<button class="apx-btn" style="margin:0 0 8px" data-apx-x="owntoo">Give ' + E(fc.fcId) + ' a table of its own as well</button>' + sourcesHtml(fc));
         if (!MM.macCols(fc).length) return card(title, 'No system is checked for this failure condition yet. Do the Interdependence Autopilot first.', '<button class="apx-btn p" data-apx-ap="idp">Open the Interdependence Autopilot</button>');
         if (!ready(fc)) return card(title, 'The CoFFE table needs to know how each system is built: that is what "partly working" means. Set the builds in the MAC Autopilot first.', '<button class="apx-btn p" data-apx-ap="mac">Open the MAC Autopilot</button>');
         return null;
@@ -536,7 +607,7 @@
         var bud = evs.map(function (x) { var e = x.e, d = colById(sol, e.col), k = x.k; return '<div class="apx-math"><b>' + E(ffId(fc, d.isM ? d.colId : d.id, e.st)) + '</b><span>' + E(evWords(d, e.st).replace(/^./, function (y) { return y.toUpperCase(); })) + (lk.length ? '<span style="display:block;font-size:12px">Used by ' + E(joinAnd(x.fcs)) + '</span>' : '') + '</span><input type="text" data-apx-xc="bud|' + E(k) + '" value="' + (b[k] ? E(fmt(b[k])) : '') + '" placeholder="For example 1E-07" aria-label="Budget"><span>per flight</span></div>'; }).join('');
         var check = !mc ? '' : mc.error ? note('bad', E(mc.error)) : mc.missing ? note('', 'Give every event a budget, as a probability per flight, and the tool checks the math against the objective' + (target(fc) != null ? ' (' + fmt(target(fc)) + ' per flight hour for ' + E(fc.sev) + ')' : '') + '. ' + mc.missing + ' of ' + mc.of + ' still to give.')
             : note(mc.ok === false ? 'bad' : mc.ok ? 'good' : '', '<b>Math check, ' + E(fc.fcId) + ':</b> ' + E(mathWords(mc, g, b, fc.sev)) + (mc.ok === false ? ' Lower one of the budgets.' : mc.ok ? ' The budgets fit.' : '') + ' The events are taken as independent, which the independence principles below must make true.');
-        check += lk.map(function (l) { var m2 = l.mc; if (!l.g) return note('', '"' + E(l.name) + '" (' + E(l.fc.fcId) + '): no mix in this table causes it.'); return !m2 || m2.missing ? note('', '<b>' + E(l.fc.fcId) + '</b> is the outcome "' + E(l.name) + '". Give its events a budget too and the tool checks it against ' + E(l.fc.fcId) + '\'s objective.') : m2.error ? note('bad', E(m2.error)) : note(m2.ok === false ? 'bad' : m2.ok ? 'good' : '', '<b>Math check, ' + E(l.fc.fcId) + ' (the outcome "' + E(l.name) + '" or worse, ' + E(l.fc.sev) + '):</b> ' + E(mathWords(m2, l.g, b, l.fc.sev)) + (m2.ok === false ? ' Lower one of its budgets: an event used by more than one failure condition must meet the strictest.' : '')); }).join('');
+        check += lk.map(function (l) { var oth = sourcesFor(l.fc, false).length > 1 ? note('', E(l.fc.fcId) + ' has other CoFFE sources too; its figure is all of them added together: see the CoFFE for ' + E(l.fc.fcId) + '.') : ''; return oth + (function () { var m2 = l.mc; if (!l.g) return note('', '"' + E(l.name) + '" (' + E(l.fc.fcId) + '): no mix in this table causes it.'); return !m2 || m2.missing ? note('', '<b>' + E(l.fc.fcId) + '</b> is the outcome "' + E(l.name) + '". Give its events a budget too and the tool checks it against ' + E(l.fc.fcId) + '\'s objective.') : m2.error ? note('bad', E(m2.error)) : note(m2.ok === false ? 'bad' : m2.ok ? 'good' : '', '<b>Math check, ' + E(l.fc.fcId) + ' (the outcome "' + E(l.name) + '" or worse, ' + E(l.fc.sev) + '):</b> ' + E(mathWords(m2, l.g, b, l.fc.sev)) + (m2.ok === false ? ' Lower one of its budgets: an event used by more than one failure condition must meet the strictest.' : '')); })(); }).join('');
         var ip = indepList(fc, sol).map(function (x) { return '<div class="apx-tick' + (x.on ? ' on' : '') + '" style="grid-template-columns:26px minmax(0,1fr)"><button type="button" class="apx-box" data-apx-x="ip|' + x.key + '" aria-pressed="' + x.on + '" aria-label="' + E(x.key) + '"></button><span>' + E(x.text) + ' <b>[PASA-' + x.key + ']</b></span></div>'; }).join('');
         return card('What the CoFFE feeds', 'All worked out by the tool from your answers. You give the budgets and confirm the principles.', gateHtml(fc, sol) + '<h4 style="margin:20px 0 8px">Probability budgets</h4>' + (bud || '<p>Nothing to budget: no mix causes the failure condition.</p>') + check + '<h4 style="margin:20px 0 8px">Independence principles</h4><div class="apx-ticks">' + (ip || '<p>None: no combination causes the failure condition.</p>') + '</div>');
     }
@@ -552,11 +623,17 @@
         if (T9.singles && T9.singles.length) body = note('bad', '<b>Finding: a single failure causes ' + E(fc.fcId) + '.</b> ' + E(joinAnd(T9.singles.map(function (r) { return r.parts[0]; }))) + (T9.singles.length > 1 ? ' each reach' : ' reaches') + ' more than one branch of the gate, so on ' + (T9.singles.length > 1 ? 'its' : 'its') + ' own it causes the failure condition. ' + (/catastrophic|hazardous/i.test(fc.sev) ? 'That is not allowed for a ' + E(fc.sev) + ' failure condition; the design has to change.' : '')) + body;
         return card('Common resource pairs, then send', '', body) + (T9.main ? K.preview('', T9.main) : '') + (T9.same ? K.preview('', T9.same) : '') + (T9.cma ? K.preview('', T9.cma) : '');
     }
-    function render(i, fc) { style(); return [null, stepLinks, stepOutcomes, stepQuestions, stepFull, stepSummary, stepFeeds, stepCommon][i](fc); }
+    function render(i, fc) {
+        style(); var h = [null, stepLinks, stepOutcomes, stepQuestions, stepFull, stepSummary, stepFeeds, stepCommon][i](fc);
+        var cbs = coveredByAll(fc);
+        if (cbs.length && ownStarted(fc)) h = card('This failure condition has more than one CoFFE source', E(fc.fcId) + ' has a table of its own and is also ' + E(joinAnd(cbs.map(function (cb) { return 'the outcome "' + cb.name + '" of the CoFFE table for ' + cb.fc.fcId; }))) + '. Both are kept and shown; the figure checked against its objective is their sum.', sourcesHtml(fc)) + h;
+        return h;
+    }
     function click(action, arg, el, fc) {
         var a;
         if (action === 'mkfc') return M.click(action, arg, el, fc);
         if (action === 'gofc') { K.ui.fc = arg; K.ui.step = 1; return true; }
+        if (action === 'owntoo') { rec(fc.key).ownToo = { by: K.who(), at: K.now() }; touched(fc.key); return true; }
         if (action === 'addout') { addOutcome(fc); return true; }
         if (action === 'delout') { removeOutcome(fc, Number(arg)); return true; }
         if (action === 'a1') { a = arg.split('|'); answer(fc, 1, a[0], a[1] === '1'); return true; }
@@ -582,7 +659,7 @@
     }
 
     var api = { VERSION: VERSION,
-        model: { resEvents: resEvents, craOpen: craOpen, finishRows: finishRows, cmaList: cmaList, outFc: outFc, outDef: outDef, linkedOutcomes: linkedOutcomes, coveredBy: coveredBy, linkedGate: linkedGate, linkedChecks: linkedChecks, budgetEvents: budgetEvents, checkGate: checkGate, mathWords: mathWords, ways: ways, colById: colById, evInside: evInside, cofCols: cofCols, ready: ready, solved: solved, next: next, outcomes: outcomes, outcomeName: outcomeName, named: named, macSays: macSays, disagreements: disagreements, caseText: caseText, codeOf: codeOf, ffId: ffId, ffRows: ffRows, summary: summaryRows, conclusions: conclusions, fcRows: fcRows, shortest: shortest, gate: gate, gateEvents: gateEvents, mathCheck: mathCheck, target: target, pairs: pairs, indepList: indepList, status: status, ownEffects: ownEffects, left: left, peek: peek, oldVerdicts: oldVerdicts, resName: resName, levelName: levelName, fmt: fmt, evWords: evWords, colById: colById },
+        model: { coveredByAll: coveredByAll, ownStarted: ownStarted, sourcesFor: sourcesFor, combined: combined, disagreements2: disagreements2, sourcesHtml: sourcesHtml, resEvents: resEvents, craOpen: craOpen, finishRows: finishRows, cmaList: cmaList, outFc: outFc, outDef: outDef, linkedOutcomes: linkedOutcomes, coveredBy: coveredBy, linkedGate: linkedGate, linkedChecks: linkedChecks, budgetEvents: budgetEvents, checkGate: checkGate, mathWords: mathWords, ways: ways, colById: colById, evInside: evInside, cofCols: cofCols, ready: ready, solved: solved, next: next, outcomes: outcomes, outcomeName: outcomeName, named: named, macSays: macSays, disagreements: disagreements, caseText: caseText, codeOf: codeOf, ffId: ffId, ffRows: ffRows, summary: summaryRows, conclusions: conclusions, fcRows: fcRows, shortest: shortest, gate: gate, gateEvents: gateEvents, mathCheck: mathCheck, target: target, pairs: pairs, indepList: indepList, status: status, ownEffects: ownEffects, left: left, peek: peek, oldVerdicts: oldVerdicts, resName: resName, levelName: levelName, fmt: fmt, evWords: evWords, colById: colById },
         act: { setOutFc: setOutFc, setOutDef: setOutDef, setOutcome: setOutcome, addOutcome: addOutcome, removeOutcome: removeOutcome, setResultName: setResultName, answer: answer, undo: undo, clearAnswers: clearAnswers, setBudget: setBudget, setIndep: setIndep, send: send, convert: convert },
         tables: { q43: tableQ43, q46: tableQ46, q47: tableQ47, q48: tableQ48, gate: gateHtml, pairs: tablePairs }, _ui: ui };
     A.register('cof', { name: 'CoFFE', steps: ['Failure condition', 'The system failures and their FHA lines', 'Name the outcomes', 'Answer the quick questions', 'The full CoFFE table', 'Summary and result', 'Fault tree, budgets and independence', 'Common resource pairs and send'], render: render, click: click, change: change, status: status });
