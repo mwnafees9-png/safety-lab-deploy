@@ -140,14 +140,15 @@ const tick = (ms) => new Promise((r) => setTimeout(r, ms || 0));
     const L1 = await pg.evaluate(() => { const secs = SLZsaAuto.reportSections(), bad = [];
       secs.forEach((s) => { const ev = fsEvaluate(['zone:' + s.code]), fc = __tbl(s, 'fcs'), mac = __tbl(s, 'mac');
         ev.trippedFcs.forEach((t) => { const row = fc && fc.rows.find((r) => r[0].indexOf(t.fcId + ' ') === 0); if (!row || row[1] !== t.severity) bad.push(s.code + ' ' + t.fcId); });
-        if ((ev.breaches.length ? 1 : 0) !== (mac ? 1 : 0) || (mac && mac.rows.length !== ev.breaches.length)) bad.push(s.code + ' mac'); });
+        const nRules = new Set(ev.breaches.map((b) => b.ruleId)).size; if ((nRules ? 1 : 0) !== (mac ? 1 : 0) || (mac && mac.rows.length !== nRules)) bad.push(s.code + ' mac'); });
       const c = secs.find((x) => x.code === 'Z-CWB'), tx = __txt(c);
-      return { bad, direct: /lost directly: Fuel System and Hydraulic Power System\./.test(tx), knock: /As a knock-on, these systems stop because they depend on what is lost: Propulsion \(4 × turbofan\), through Fuel System and Fuel feed/.test(tx), fc14: __tbl(c, 'fcs').rows.some((r) => r[0] === 'FC-14 Loss of fuel delivery to all engines' && r[1] === 'Catastrophic'), mac: __tbl(c, 'mac').rows[0], cadAlso: /The CAD model also places equipment of/.test(__txt(secs.find((x) => x.code === 'Z-MLGW'))) };
+      return { bad, direct: /lost directly: Fuel System and Hydraulic Power System\./.test(tx), knock: /As a knock-on, these systems stop because they depend on what is lost: Propulsion \(4 × turbofan\), through Fuel System and Fuel feed/.test(tx), fc14: __tbl(c, 'fcs').rows.some((r) => r[0] === 'FC-14 Loss of fuel delivery to all engines' && r[1] === 'Catastrophic'), mac: __tbl(c, 'mac').rows.find((r) => /^SF-11 /.test(r[0])), cadAlso: /The CAD model also places equipment of/.test(__txt(secs.find((x) => x.code === 'Z-MLGW'))) };
     });
     check('L1 the systems one event loses directly, named', L1.direct);
     check('L2 the knock-on systems, named with what they depend on', L1.knock);
-    check('L3 every failure condition the aircraft model trips for the zone is listed with its name and severity (all zones)', L1.bad.length === 0 && L1.fc14, L1.bad.join('; '));
-    check('L4 each broken minimum configuration rule says the function, the phases, what it needs, what is left and what it leads to', L1.mac && /^SF-11 Deliver fuel to four engines$/.test(L1.mac[0]) && L1.mac[1] === 'All flight phases' && /at least 1 of Fuel System/.test(L1.mac[2]) && L1.mac[3] === 'None of them' && /FC-14 Loss of fuel delivery to all engines \(Catastrophic\)/.test(L1.mac[4]), JSON.stringify(L1.mac));
+    // 23 Nov 2026: the HL-1 demo opens with the MAC Autopilot sent; a rule it sent breaks once per named combination and is listed once
+    check('L3 every failure condition the aircraft model trips for the zone is listed with its name and severity, each broken rule once (all zones)', L1.bad.length === 0 && L1.fc14, L1.bad.join('; '));
+    check('L4 each broken minimum configuration rule says the function, the phases, what it needs, what is left and what it leads to', L1.mac && /^SF-11 Deliver fuel to four engines$/.test(L1.mac[0]) && /^Takeoff, Climb, Cruise, Descent, Approach, Landing$/.test(L1.mac[1]) && /^not all of Fuel System \(Tank groups: all lost\) lost together; and not all of Fuel System \(Engine feed paths: all lost\) lost together/.test(L1.mac[2]) && /^None of them/.test(L1.mac[3]) && /FC-14 Loss of fuel delivery to all engines \(Catastrophic\)/.test(L1.mac[4]), JSON.stringify(L1.mac));
     check('L5 equipment the CAD model places in the zone that the aircraft model does not count is said plainly', L1.cadAlso);
 
     console.log('\n[D] each finding with its decision');

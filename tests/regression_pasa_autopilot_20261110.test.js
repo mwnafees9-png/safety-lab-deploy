@@ -281,7 +281,9 @@ const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y
         check('O4 no mitigations part: the requirements are the mitigations', !r.heads.some(h => /mitigation/i.test(h)) && !r.wordHeads.some(h => /mitigation/i.test(h)));
 
         console.log('\n[I] interdependence and common resources');
-        check('I1 existing work is filled in and named: Propulsion feeds FC-05 from the architecture; the other rows wait for an answer', r.idpRowsBefore.some(x => x.s === 'sys-prp' && x.st === 'feeds') && r.idpRowsBefore.some(x => x.st === 'open'), JSON.stringify(r.idpRowsBefore));
+        // 23 Nov 2026: the HL-1 demo opens with the Interdependence Autopilot sent for every failure condition, so every row of
+        // FC-05 is answered: Propulsion from the architecture, the Fuel System from the fuel feed resource, the rest clear
+        check('I1 existing work is filled in and named: Propulsion feeds FC-05 from the architecture, the Fuel System from the Interdependence Autopilot; every row answered', r.idpRowsBefore.some(x => x.s === 'sys-prp' && x.st === 'feeds') && r.idpRowsBefore.some(x => x.s === 'sys-fue' && x.st === 'feeds') && !r.idpRowsBefore.some(x => x.st === 'open'), JSON.stringify(r.idpRowsBefore));
         check('I2 Fuel feeds FC-05 with nothing traced: a finding in the report and a question (trace one, or say why not)', r.untraced.indexOf('sys-fue') >= 0 && r.fuelQ && r.fuelFinding);
         check('I3 tracing writes the SFHA trace once, however many times it is answered (no duplicate)', r.traceOnce);
         check('I4 the tree carrying a system the table does not show is flagged (Electrical Power System through G-7151)', r.treeNotInTable.indexOf('sys-eps') >= 0);

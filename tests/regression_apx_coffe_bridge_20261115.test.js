@@ -149,7 +149,9 @@ function mutate(file, body) {
         check('4 Table Q.4-8: the smallest mixes that cause the failure condition (F with one more degraded)', sum.top.join() === 'FDOO,FODO,FOOD', sum.top);
         check('4 the conclusion is written the book\'s way', sum.con.length === 1 && /^Total loss of .* in addition to partial loss of any .* or .* functions resulting in loss of deceleration capability on landing$/.test(sum.con[0]), sum.con);
         check('4 the best outcome shows the most that can be lost and still be fine', sum.best.length >= 1 && sum.best.every(c => c[0] === 'O'), sum.best);
-        check('4 shortest route: two failures together, no single failure', sum.sr.order === 2 && sum.sr.single === false, sum.sr);
+        // 23 Nov 2026 (Waqas: "Fix it"): failures are counted, not table columns. Here the first resource's total loss takes out
+        // every function it feeds, so one resource failure makes FDOO: the shortest route is that one failure, named
+        check('4 shortest route: counted in failures; one resource failure that takes out every function it feeds is one failure, named', sum.sr.order === 1 && sum.sr.single === true && sum.sr.routes.length >= 1 && sum.sr.routes.every(r => / \(by .* total loss\)$/.test(r)), sum.sr);
         const alone = await pg.evaluate((K) => { const A = SLApxAuto, M = SLApxMac, C = SLApxCof, f = A.model.fcOf(K), ml = M.model.malfList(f); M.act.setMalf(f, ml[2].colId, true, 'alone'); const s = C.model.solved(f), sr = C.model.shortest(f, s), stillDone = s.done; M.act.setMalf(f, ml[2].colId, false, 'alone'); return { sr, stillDone, sev: f.sev }; }, K);
         check('4 a wrong action that causes a Hazardous condition alone is a single-failure finding, and stays out of the table', alone.sr.order === 1 && alone.sr.single === true && alone.stillDone === true, alone);
 

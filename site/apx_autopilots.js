@@ -48,7 +48,7 @@
  * ==========================================================================*/
 (function (root) {
     'use strict';
-    var VERSION = '1.6';   // 1.6 23 Nov 2026: each resource failure says what it does to each function it feeds (no effect with its reason, partial loss, total loss, wrong action); the CoFFE and the fault tree place it by that   // 1.5 17 Nov 2026: no ARP table numbers on any table; the two interdependence tables carry their title in the top row, with a white vertical divider; the common resource table has no left-hand column.   // 1.4 17 Nov 2026: "check" for "tick"; the AI reads a design document or the engineer's words and proposes the systems, functions and resources (a person accepts each); the resources are Assumed until compared with the architecture document; what was sent can be taken back out from the page.   // 1.3 17 Nov 2026: a function that does the job is traced up to the aircraft function when it is checked or added here (and the trace the Autopilot made comes off with the check); a resource's providing function is written where the architecture reads it (providedByFunctions).   // 1.2 16 Nov 2026: the Autopilot ASKS for each system and its function, and whether it is a resource system; a resource system is a row of Table Q.4-2, never a column of Table Q.4-1; no resource is checked by the tool.   // 1.1 16 Nov 2026: a field in a row lines up with its label and its button (the site's own bottom margin on fields is taken off inside the Autopilots)
+    var VERSION = '1.7';   // 1.7 23 Nov 2026: fillAs: a built-in demo is filled through the steps of the Autopilots, signed by its named engineer on a fixed date   // 1.6 23 Nov 2026: each resource failure says what it does to each function it feeds (no effect with its reason, partial loss, total loss, wrong action); the CoFFE and the fault tree place it by that   // 1.5 17 Nov 2026: no ARP table numbers on any table; the two interdependence tables carry their title in the top row, with a white vertical divider; the common resource table has no left-hand column.   // 1.4 17 Nov 2026: "check" for "tick"; the AI reads a design document or the engineer's words and proposes the systems, functions and resources (a person accepts each); the resources are Assumed until compared with the architecture document; what was sent can be taken back out from the page.   // 1.3 17 Nov 2026: a function that does the job is traced up to the aircraft function when it is checked or added here (and the trace the Autopilot made comes off with the check); a resource's providing function is written where the architecture reads it (providedByFunctions).   // 1.2 16 Nov 2026: the Autopilot ASKS for each system and its function, and whether it is a resource system; a resource system is a row of Table Q.4-2, never a column of Table Q.4-1; no resource is checked by the tool.   // 1.1 16 Nov 2026: a field in a row lines up with its label and its button (the site's own bottom margin on fields is taken off inside the Autopilots)
     function g(n) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(n); if (v !== undefined) return v; } } catch (_) {} try { return root[n]; } catch (_) { return undefined; } }
     function arr(v) { return Array.isArray(v) ? v : []; }
     function S(v) { return v == null ? '' : String(v); }
@@ -58,8 +58,12 @@
     function safe(f, d) { try { var v = f(); return v === undefined ? d : v; } catch (_) { return d; } }
     function fn(name) { var f = g(name); return typeof f === 'function' ? f : null; }
     function pc() { var p = g('projectConfig'); return p && typeof p === 'object' ? p : null; }
-    function now() { return new Date().toISOString(); }
-    function who() { return root.SLAutopilotUI && root.SLAutopilotUI.who ? S(safe(function () { return root.SLAutopilotUI.who(); }, '')) : ''; }
+    // While a built-in demo is filled (fillAs), every answer is dated and signed as the demo's engineer, not as whoever opened it.
+    var asOf = null;
+    function fillAs(by, at, fn) { var was = asOf; asOf = { by: S(by), at: S(at) }; try { return fn(); } finally { asOf = was; } }
+    function filling() { return !!asOf; }
+    function now() { return asOf && asOf.at ? asOf.at : new Date().toISOString(); }
+    function who() { if (asOf) return asOf.by; return root.SLAutopilotUI && root.SLAutopilotUI.who ? S(safe(function () { return root.SLAutopilotUI.who(); }, '')) : ''; }
     function save() { try { if (root.SLDataChange && root.SLDataChange.bump) root.SLDataChange.bump(); } catch (_) {} try { if (root.SLAutopilotUI && root.SLAutopilotUI.save) root.SLAutopilotUI.save(); else if (typeof root.scheduleAutosave === 'function') root.scheduleAutosave(); } catch (_) {} }
     function toast(m, kind) { try { if (typeof root.showToast === 'function') root.showToast(m, kind || 'info', 5000); } catch (_) {} }
 
@@ -813,7 +817,7 @@
         root.switchTab = w;
     })(80);
 
-    var api = { VERSION: VERSION, open: open, enabled: enabled, on: on, off: off, render: render,
+    var api = { VERSION: VERSION, open: open, enabled: enabled, on: on, off: off, render: render, fillAs: fillAs, filling: filling,
         model: { proposals: proposals, resStatus: resStatus, resBasis: resBasis, fcs: fcs, fcOf: fcOf, allCols: allCols, cellOf: cellOf, picked: picked, resources: resources, resState: resState, resPicked: resPicked, effectRows: effectRows, craText: craText, craState: craState, craWhy: craWhy, craShared: craShared, CRA_STATES: CRA_STATES, SHARED_MODES: SHARED_MODES, left: left, status: status, MODES: MODES },
         act: { propose: propose, acceptProposal: acceptProposal, dismissProposal: dismissProposal, setCompare: setCompare, cleanProposals: cleanProposals, addResourceFull: addResourceFull, tick: tick, setRole: setRole, proposal: proposal, resTick: resTick, feed: feed, mode: mode, setCra: setCra, setCraSt: setCraSt, setCraWhy: setCraWhy, send: send, addSystem: addSystem, addFunction: addFunction, addResource: addResource },
         tables: { q41: tableQ41, q42: tableQ42, b3: tableB3 }, _ui: ui, _html: html, register: register, setAp: setAp,

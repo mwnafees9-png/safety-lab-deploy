@@ -150,13 +150,16 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
 
         console.log('\n[C] the report');
         const row = r.budRows.find(x => /^FC-EPS01/.test(x['Failure condition']));
-        check('C1 the budgets against the design come from the budget ledger: the verification tree with the real rates, against the PSSA tree\'s budget and the objective', row && row['With the real rates'] === r.sciAch + ' per flight hour' && row.Budget === r.sciAll + ' per flight hour' && row.Result === 'Within the budget' && row.Appendix === 'A', JSON.stringify(row) + ' ' + JSON.stringify(r.led));
-        check('C2 the appendices are the PSSA\'s functions', JSON.stringify(r.secIds) === JSON.stringify(r.apps.map(x => 'fn:' + x)) && r.apps[0] === 'SF-20', JSON.stringify(r.secIds));
+        // 23 Nov 2026: the HL-1 demo opens with the MAC Autopilot sent, which adds the system FHA lines keyed to the system functions
+        // (SFN-EPS1, SFN-EPS2), each with its own appendix; the hand-made lines stay in SF-20, now the third appendix
+        const L = String.fromCharCode(65 + (r.apps || []).indexOf('SF-20'));
+        check('C1 the budgets against the design come from the budget ledger: the verification tree with the real rates, against the PSSA tree\'s budget and the objective', row && row['With the real rates'] === r.sciAch + ' per flight hour' && row.Budget === r.sciAll + ' per flight hour' && row.Result === 'Within the budget' && row.Appendix === L, JSON.stringify(row) + ' ' + JSON.stringify(r.led));
+        check('C2 the appendices are the PSSA\'s functions', JSON.stringify(r.secIds) === JSON.stringify(r.apps.map(x => 'fn:' + x)) && JSON.stringify(r.apps) === '["SFN-EPS1","SFN-EPS2","SF-20"]', JSON.stringify(r.secIds));
         const h3 = r.heads.filter(h => h.l === 3).map(h => h.t), first = h3.slice(0, 5);
         check('C3 each failure condition in order: what is verified, the tree worked out again, the budget against the design, its requirements and their verification, the path to compliance', JSON.stringify(first) === JSON.stringify(['What is being verified', 'The tree worked out again', 'The budget against the design', 'Requirements and their verification', 'Path to compliance']) && r.heads[0].t === 'The function', JSON.stringify(r.heads.slice(0, 8)));
         const i2 = r.heads.findIndex(h => /^FC-EPS02 /.test(h.t)), i3 = r.heads.findIndex(h => /^FC-EPS03 /.test(h.t));
         check('C4 the Minor failure condition is qualitative: shown by its requirements, no tree and no budget', i2 > 0 && /\(qualitative\)$/.test(r.heads[i2].t) && !r.heads.slice(i2, i3 > i2 ? i3 : undefined).some(h => /tree worked out again|budget against the design/.test(h.t)), JSON.stringify(r.heads.slice(i2, i2 + 4)));
-        check('C5 the verification tree is drawn with its numbered caption', r.caps.some(c => /^Figure A\.\d+: FC-EPS01 .*verification tree with the real failure rates/.test(c)), JSON.stringify(r.caps));
+        check('C5 the verification tree is drawn with its numbered caption', r.caps.some(c => new RegExp('^Figure ' + L + '\\.\\d+: FC-EPS01 .*verification tree with the real failure rates').test(c)), JSON.stringify(r.caps));
 
         console.log('\n[Q] the questions');
         check('Q1 the only questions are which evidence closes each requirement (besides the generated cards)', r.qs.length > 0 && r.qs.every(q => /^Which evidence closes REQ-/.test(q) || /^The tree worked out again, the budget against the design$/.test(q)) && r.frontQs.length > 0 && r.frontQs.every(q => /^Which evidence closes REQ-/.test(q) || q === 'The PSSA this verifies'), JSON.stringify(r.qs) + ' front ' + JSON.stringify(r.frontQs));
@@ -170,7 +173,7 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
         check('O1 every output is accepted by a role (never a person)', r.outputs.length === 3 && r.outputs.every(x => r.ROLES.indexOf(x) >= 0), JSON.stringify(r.outputs));
 
         console.log('\n[W] Word');
-        check('W1 Word: the front (purpose, the PSSA it verifies, method, budgets), then Appendix A: SF-20 with its parts', r.wordHeads[0] === '1. Purpose and scope' && r.wordHeads.some(h => /The PSSA it verifies/.test(h)) && r.wordHeads.some(h => /Budgets against the design/.test(h)) && r.wordHeads.some(h => /^Appendix A: SF-20/.test(h)) && r.wordHeads.some(h => /^A\.2\.1 What is being verified/.test(h)), JSON.stringify(r.wordHeads.slice(0, 12)));
+        check('W1 Word: the front (purpose, the PSSA it verifies, method, budgets), then the appendices, SF-20 among them with its parts', r.wordHeads[0] === '1. Purpose and scope' && r.wordHeads.some(h => /The PSSA it verifies/.test(h)) && r.wordHeads.some(h => /Budgets against the design/.test(h)) && r.wordHeads.some(h => new RegExp('^Appendix ' + L + ': SF-20').test(h)) && r.wordHeads.some(h => new RegExp('^' + L + '\\.2\\.1 What is being verified').test(h)), JSON.stringify(r.wordHeads.slice(0, 12)));
     } finally { await browser.close(); srv.close(); }
     check('Z no page errors', errs.length === 0, errs.join(' | '));
     console.log('\n' + pass + ' passed, ' + fail + ' failed');

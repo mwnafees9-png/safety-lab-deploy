@@ -1,4 +1,4 @@
-// zsa_autopilot.js (SLZsaAuto v1.10, 22 Nov 2026: a MAC rule is read through the one reading in misc_fn_modules.js (a member may be a system function or an item; a MAC Autopilot rule is its named combinations); v1.9, 10 Nov 2026: what each kind of equipment and material in a zone brings, and what that does to the equipment around it and the aircraft; v1.8 9 Nov 2026; v1.7 v1.6 v1.5 9 Nov 2026; v1.4 8 Nov 2026; v1.0 4 Nov 2026): the ZSA Autopilot on the ZSA page.
+// zsa_autopilot.js (SLZsaAuto v1.11, 23 Nov 2026: a broken MAC rule is listed once. 22 Nov 2026: a MAC rule is read through the one reading in misc_fn_modules.js (a member may be a system function or an item; a MAC Autopilot rule is its named combinations); v1.9, 10 Nov 2026: what each kind of equipment and material in a zone brings, and what that does to the equipment around it and the aircraft; v1.8 9 Nov 2026; v1.7 v1.6 v1.5 9 Nov 2026; v1.4 8 Nov 2026; v1.0 4 Nov 2026): the ZSA Autopilot on the ZSA page.
 //
 // Waqas: "Put PRAs in the PRA, ZSAs in the ZSA, with same interface as Sys Lab but make the inputs more intuitive like
 // CMAs in safety lab"; "think about it similarly to how we built the planning auto pilot"; "the interface should be so
@@ -44,7 +44,7 @@
 //     over), and keeps a severity an engineer set in the report's Edit (row.severityBy === 'engineer').
 (function (root) {
     'use strict';
-    var VERSION = '1.10';   // 1.10 22 Nov 2026: a MAC rule is read through the one reading in misc_fn_modules.js;   // 1.9 10 Nov 2026: each zone says what its kinds of equipment and its materials bring (zsa_type_hazards.js);   // 1.8 9 Nov 2026: the loss figure drawn with squared connectors in their own lanes (SLCcaReport.flow);   // 1.7 9 Nov 2026: proposed mitigations, path to compliance and conclusion per zone, written or AI drafted and accepted;   // 1.6 9 Nov 2026: every zone its own report, picked from a dropdown, with a register   // 1.5 9 Nov 2026: 3D model pictures per zone, picked beside its questions (spec.shots)
+    var VERSION = '1.11';   // 1.11 23 Nov 2026: a broken MAC rule is listed once, however many of its named combinations the event breaks   // 1.10 22 Nov 2026: a MAC rule is read through the one reading in misc_fn_modules.js;   // 1.9 10 Nov 2026: each zone says what its kinds of equipment and its materials bring (zsa_type_hazards.js);   // 1.8 9 Nov 2026: the loss figure drawn with squared connectors in their own lanes (SLCcaReport.flow);   // 1.7 9 Nov 2026: proposed mitigations, path to compliance and conclusion per zone, written or AI drafted and accepted;   // 1.6 9 Nov 2026: every zone its own report, picked from a dropdown, with a register   // 1.5 9 Nov 2026: 3D model pictures per zone, picked beside its questions (spec.shots)
     // PHASE 2 SWITCH (8 Nov 2026): true hides the ZSA table, its entry form and the "Zone models" panel, because the
     // ZSA report (cca_report.js) holds every field with its own Edit and "Add a zone". Flip it when the report frame is wired.
     var TABLE_RETIRED = true;   // 8 Nov 2026 (v1.4): the report frame is wired, the table is retired
@@ -599,7 +599,8 @@
             var refs = {}; _arr(row && row.housedFunctions).forEach(function (sf) { refs[sf] = 1; }); rts.forEach(function (rt) { _arr(rt.carriesFunctions).forEach(function (sf) { refs[sf] = 1; }); });
             Object.keys(refs).sort(_nat).forEach(function (sf) { var ow = _owners(sf); if (ow.length > 1) P('Function ' + _sfLabel(sf) + ' is shared by ' + _join(ow.map(function (s) { return s.name; })) + ', so the model does not count it lost with this zone alone. Recording which items that perform it pass through the zone settles which of them are here.'); });
             var mac = _arr(_pc().macModels), down = {}; _arr(ev.downSystems).forEach(function (id) { down[id] = 1; });
-            var brs = _arr(ev.breaches);
+            // one row per rule: a rule sent by the MAC Autopilot breaks once per named combination, and its row lists them all
+            var brs = _arr(ev.breaches).filter(function (b, i, all) { return all.findIndex(function (x) { return x.ruleId === b.ruleId; }) === i; });
             if (brs.length) {
                 T(tid('mac'), 'Minimum aircraft configuration rules that one event in ' + title + ' breaks', ['Function that needs it', 'Flight phases', 'What the rule needs', 'What is left', 'Failure conditions it leads to'], brs.map(function (b) {
                     var rule = mac.find(function (r) { return r && r.id === b.ruleId; }) || { clauses: [] };

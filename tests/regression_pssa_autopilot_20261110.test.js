@@ -194,8 +194,12 @@ const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y
         check('H3 the report table lists each budget and the one that applies', r.handRows.length >= 3 && r.handRows[r.handRows.length - 1].From === 'Applies (the stricter)' && /2\.5 × 10/.test(r.handRows[r.handRows.length - 1].Budget), JSON.stringify(r.handRows));
 
         console.log('\n[A] the appendices');
-        check('A1 one appendix per function with a failure condition rated Minor or above; FC-EPS01, 02 and 03 all in SF-20; no picking', JSON.stringify(r.apps) === '["SF-20"]' && r.fn === 'SF-20' && ['FC-EPS01:Catastrophic', 'FC-EPS02:Minor:qual', 'FC-EPS03:Hazardous'].every(x => r.fnFcs.some(y => y.indexOf(x) === 0)) && r.addFc === 0 && r.frontQs.indexOf('Which failure conditions get an appendix?') < 0, JSON.stringify(r.apps) + JSON.stringify(r.fnFcs));
-        check('A2 the register gives the appendix, the function and how each is assessed', r.register.some(x => /^FC-EPS02/.test(x['Failure condition']) && x['Assessed in'] === 'Appendix A, qualitative') && r.register.some(x => /^FC-EPS01/.test(x['Failure condition']) && /^Appendix A, quantitative/.test(x['Assessed in'])) && r.register.every(x => /^SF-20/.test(x.Function)), JSON.stringify(r.register));
+        // 23 Nov 2026: the HL-1 demo opens with the MAC Autopilot sent, which adds the system FHA lines for the loss of each
+        // assembly group, keyed to the system function (SFN-EPS1, SFN-EPS2). Each function gets its own appendix; the hand-made
+        // lines stay in SF-20, which is now the third appendix.
+        const L = String.fromCharCode(65 + (r.apps || []).indexOf('SF-20'));
+        check('A1 one appendix per function with a failure condition rated Minor or above (the two the MAC Autopilot added, then SF-20); FC-EPS01, 02 and 03 all in SF-20; no picking', JSON.stringify(r.apps) === '["SFN-EPS1","SFN-EPS2","SF-20"]' && r.fn === 'SF-20' && ['FC-EPS01:Catastrophic', 'FC-EPS02:Minor:qual', 'FC-EPS03:Hazardous'].every(x => r.fnFcs.some(y => y.indexOf(x) === 0)) && r.addFc === 0 && r.frontQs.indexOf('Which failure conditions get an appendix?') < 0, JSON.stringify(r.apps) + JSON.stringify(r.fnFcs));
+        check('A2 the register gives the appendix, the function and how each is assessed', r.register.some(x => /^FC-EPS02/.test(x['Failure condition']) && x['Assessed in'] === 'Appendix ' + L + ', qualitative') && r.register.some(x => /^FC-EPS01/.test(x['Failure condition']) && new RegExp('^Appendix ' + L + ', quantitative').test(x['Assessed in'])) && r.register.every(x => /^(SF-20|SFN-EPS1|SFN-EPS2) /.test(x.Function)), JSON.stringify(r.register));
         check('A3 the Minor failure condition is qualitative: no tree, no numbers, no item levels', r.minorHeads.some(h => /FC-EPS02 .*\(qualitative\)$/.test(h)) && r.minorHeads.indexOf('The qualitative assessment') >= 0 && !r.minorHeads.some(h => /^(The fault tree|The numbers|Items and their assurance levels)$/.test(h)) && !r.minorFig, JSON.stringify(r.minorHeads));
         check('A4 the appendix starts with the function, then each failure condition with how it is assessed', r.fnHeads[0] === 'The function' && r.h2[0] === 'FC-EPS01 Loss of all generated electrical power (quantitative)', JSON.stringify(r.fnHeads));
 
@@ -232,14 +236,14 @@ const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y
 
         console.log('\n[T] the real tree picture');
         check('T1 the tool\'s own rendering: its gate shape, the IDs, P and rate lines, DAL badges; no chrome', r.svg.indexOf(r.shape.slice(0, 40)) >= 0 && ['G-7101', 'G-7098', 'BE-7099', 'BE-7100'].every(id => r.svg.indexOf('>' + id + '<') >= 0) && /P \d\.\de-\d+/.test(r.svg) && /IDAL|FDAL/.test(r.svg) && !/foreignObject|fta-conn-handle|<select|<input/.test(r.svg));
-        check('T2 numbered caption naming the failure condition', r.caps.length >= 1 && r.caps.some(c => /^Figure A\.\d+: FC-EPS01/.test(c)) && r.caps.every(c => /^Figure A\.\d+: FC-EPS0\d/.test(c)), JSON.stringify(r.caps));
+        check('T2 numbered caption naming the failure condition', r.caps.length >= 1 && r.caps.some(c => new RegExp('^Figure ' + L + '\\.\\d+: FC-EPS01').test(c)) && r.caps.every(c => new RegExp('^Figure ' + L + '\\.\\d+: FC-EPS0\\d').test(c)), JSON.stringify(r.caps));
 
         console.log('\n[R] requirements and the path to compliance');
         check('R1 requirements with their rationale and where each is driven from', r.reqRows.length >= 2 && r.reqRows.every(x => x.Rationale && x['Driven from']), JSON.stringify(r.reqRows.slice(0, 2)));
         check('R2 the path to compliance: one row per requirement, in the same order', r.pathRows.length === r.reqRows.length && r.pathRows.every((p, i) => p.Requirement.indexOf(r.reqRows[i].ID) === 0));
 
         console.log('\n[W] Word');
-        check('W1 Word: the system\'s front, then Appendix A (the function) with its numbered parts and its tree pictures', r.wordHeads[0] === '1. Purpose and scope' && r.wordHeads.some(h => /^Appendix A: SF-20/.test(h)) && r.wordHeads.some(h => /^A\.1 The function/.test(h)) && r.wordHeads.some(h => /^A\.2\.1 What is being evaluated/.test(h)) && r.wordImgs >= 1, JSON.stringify(r.wordHeads.slice(0, 14)));
+        check('W1 Word: the system\'s front, then Appendix A (the function) with its numbered parts and its tree pictures', r.wordHeads[0] === '1. Purpose and scope' && r.wordHeads.some(h => new RegExp('^Appendix ' + L + ': SF-20').test(h)) && r.wordHeads.some(h => /^A\.1 The function/.test(h)) && r.wordHeads.some(h => /^A\.2\.1 What is being evaluated/.test(h)) && r.wordImgs >= 1, JSON.stringify(r.wordHeads.slice(0, 14)));
 
         console.log('\n[K] dark mode');
         const k = await within(pg.evaluate(async () => {

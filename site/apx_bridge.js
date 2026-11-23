@@ -31,7 +31,7 @@
  * ==========================================================================*/
 (function (root) {
     'use strict';
-    var VERSION = '1.7';   // 1.7 23 Nov 2026: a failure condition with more than one CoFFE source: each shown, their sum checked, the driver named, disagreements found   // 1.6 23 Nov 2026: budgets per flight with the rate per flight hour; linked outcomes and their failure conditions; single shared failures; the CMA list; the PASA assumptions, numbered once and never reused   // 1.5 23 Nov 2026: a backup whose change-over can fail on its own goes to the PASA with its two ways (build table, gate, rule.apx.inside)   // 1.4 22 Nov 2026: a sent MAC rule names every function it is stated over (rule.apx.members), for the one reading of a MAC rule in misc_fn_modules.js   // 1.2 17 Nov 2026: what was sent can be taken back out one Autopilot at a time; the PSSA shows the assemblies and the lines the aircraft level added to its system
+    var VERSION = '1.8';   // 1.8 23 Nov 2026: a built-in demo filled through the Autopilots (SLApxAuto.fillAs) is carried to today's stores with the switch off too, so every build shows it   // 1.7 23 Nov 2026: a failure condition with more than one CoFFE source: each shown, their sum checked, the driver named, disagreements found   // 1.6 23 Nov 2026: budgets per flight with the rate per flight hour; linked outcomes and their failure conditions; single shared failures; the CMA list; the PASA assumptions, numbered once and never reused   // 1.5 23 Nov 2026: a backup whose change-over can fail on its own goes to the PASA with its two ways (build table, gate, rule.apx.inside)   // 1.4 22 Nov 2026: a sent MAC rule names every function it is stated over (rule.apx.members), for the one reading of a MAC rule in misc_fn_modules.js   // 1.2 17 Nov 2026: what was sent can be taken back out one Autopilot at a time; the PSSA shows the assemblies and the lines the aircraft level added to its system
     var A = root.SLApxAuto, X = root.SLApx, M = root.SLApxMac, C = root.SLApxCof;
     if (!A || !A.kit || !X || !M || !M.model || !C || !C.model) { if (typeof module !== 'undefined' && module.exports) module.exports = { VERSION: VERSION, missing: true }; return; }
     var K = A.kit, S = K.S, T = K.T, arr = K.arr, safe = K.safe, lc = K.lc, MM = M.model, CM = C.model, AM = A.model;
@@ -118,7 +118,7 @@
         return { n: n };
     }
     function project(fc, which) {
-        if (!A.enabled()) return { ok: false, why: 'The switch is off.' };
+        if (!A.enabled() && !(A.filling && A.filling())) return { ok: false, why: 'The switch is off.' };
         var out = which === 'idp' ? projectIdp(fc) : which === 'mac' ? projectMac(fc) : which === 'cof' ? projectCof(fc) : null;
         safe(function () { assumptions(fc); }, null);
         try { if (root.SLDataChange && root.SLDataChange.bump) root.SLDataChange.bump(); } catch (_) {}
@@ -220,9 +220,9 @@
             var ip = CM.indepList(fc, sol).filter(function (x) { return x.on && !x.single; });
             if (ip.length) b.push({ k: 'table', name: 'apx-ind-' + f, title: 'Independence principles for ' + f, rows: ip.map(function (x) { return { ID: 'PASA-' + x.key, Principle: x.text }; }), lead: '{N} lists the independence the gate relies on. Each goes to the common cause analyses.' });
             var P = CM.pairs(fc, sol);
-            if (P && P.singles && P.singles.length) b.push({ k: 'p', text: 'Finding: a single failure causes ' + f + '. ' + MM.joinAnd(P.singles.map(function (x) { return x.parts[0]; })) + (P.singles.length > 1 ? ' each reach' : ' reaches') + ' more than one branch of the gate.' + (/catastrophic|hazardous/i.test(fc.sev) ? ' That is not allowed for a ' + fc.sev + ' failure condition; the design has to change.' : '') });
+            if (P && P.singles && P.singles.length) b.push({ k: 'p', text: 'Finding: a single failure causes ' + f + '. ' + MM.joinAnd(P.singles.map(function (x) { return x.parts[0]; })) + (P.singles.length > 1 ? ' each cause' : ' causes') + ' it on ' + (P.singles.length > 1 ? 'their' : 'its') + ' own.' + (/catastrophic|hazardous/i.test(fc.sev) ? ' That is not allowed for a ' + fc.sev + ' failure condition; the design has to change.' : '') });
             if (P && P.rows && P.rows.length) {
-                var w = P.shape === 'pairs' ? 2 : P.width, prow = function (x) { var row = { Cases: String(x.n) }; for (var i = 0; i < w; i++) row['Failure ' + (i + 1)] = x.parts[i] || (x.single && i === 1 ? 'Alone: a single failure' : '--'); return row; };
+                var w = P.shape === 'pairs' ? 2 : P.width, prow = function (x) { var row = { Cases: String(x.n) }; for (var i = 0; i < w; i++) row['Failure ' + (i + 1)] = x.parts[i] || (x.alone && i === 1 ? CM.aloneWords(x) : '--'); return row; };
                 b.push({ k: 'table', name: 'apx-q49-' + f, title: 'Potential failure combinations for ' + f + '', rows: P.rows.map(prow), lead: '{N} lists every combination of failures that causes ' + f + ', with the shared resources from the interdependence table added.' });
                 var n = 10; K.resPicked(fc).forEach(function (rr) { var same = P.rows.filter(function (x) { return x.same === rr.key; }); if (same.length) { b.push({ k: 'table', name: 'apx-q4' + n + '-' + f, title: rr.name + ' common source failures for ' + f + '', rows: same.map(prow), lead: '{N} lists the combinations where every failure comes from ' + lc(rr.name) + '. No single failure or event may result in the loss of all of it.' }); n++; } });
                 var cm = CM.cmaList(fc, sol);

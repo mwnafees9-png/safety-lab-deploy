@@ -61,7 +61,7 @@
  * ==========================================================================*/
 (function (root) {
     'use strict';
-    var VERSION = '1.6';   // 1.6 23 Nov 2026: every CoFFE source of a failure condition shown, added together for the check, the driver named, the sources checked against each other   // 1.5 23 Nov 2026: resource failures by what they do; one table for several failure conditions; outcome definitions; the CMA list; budgets per flight   // 1.4 23 Nov 2026: a backup whose change-over can fail on its own is drawn under its loss as its two ways   // 1.3 17 Nov 2026: no ARP table or figure numbers on the captions   // 1.1 17 Nov 2026: the functional failures are the lines the tool added to each system's FHA; each line's effect on its own is written from the CoFFE table
+    var VERSION = '1.7';   // 1.7 23 Nov 2026: the shortest route counts failures by the units that have to be lost (both of a pair = 2), a resource failure that does it alone = 1   // 1.6 23 Nov 2026: every CoFFE source of a failure condition shown, added together for the check, the driver named, the sources checked against each other   // 1.5 23 Nov 2026: resource failures by what they do; one table for several failure conditions; outcome definitions; the CMA list; budgets per flight   // 1.4 23 Nov 2026: a backup whose change-over can fail on its own is drawn under its loss as its two ways   // 1.3 17 Nov 2026: no ARP table or figure numbers on the captions   // 1.1 17 Nov 2026: the functional failures are the lines the tool added to each system's FHA; each line's effect on its own is written from the CoFFE table
     var A = root.SLApxAuto, X = root.SLApx, M = root.SLApxMac;
     if (!A || !A.kit || !X || !M || !M.model) { if (typeof module !== 'undefined' && module.exports) module.exports = { VERSION: VERSION, missing: true }; return; }
     var K = A.kit, E = K.E, S = K.S, T = K.T, arr = K.arr, safe = K.safe, lc = K.lc, MM = M.model, note = M.note, joinAnd = MM.joinAnd;
@@ -243,10 +243,39 @@
         return rows.map(function (r) { return { t: caseText(r.c, ds) + ' resulting in ' + res, span: 1 }; });
     }
     function fcRows(fc, sol) { var rows = summaryRows(fc, sol); return rows ? rows.filter(function (r) { return r.level === sol.FL; }) : []; }
+    // How many failures a case takes (23 Nov 2026, Waqas: "Fix it"). A state of an assembly group is not one failure: losing
+    // both units of a pair is two, two of three channels is two, one unit is one (the first count of lost units the build maps
+    // to that state). A resource failure that does it on its own is one failure, and one such failure can do it to several
+    // groups at once (the Interdependence answer says which), so the count is the smallest mix of resource failures and
+    // lost units that makes the case. A wrong action is one failure.
+    function unitsFor(d, st) {
+        if (d.isM || st === 'M' || st === 'A' || st === 'B') return 1;
+        var p = d.P; if (!p || !Array.isArray(p.map)) return 1;
+        var k = p.map.indexOf(st); return k > 0 ? k : 1;
+    }
+    function failuresIn(fc, sol, c) {
+        var cols = [], evs = [], seen = {};
+        for (var i = 0; i < c.length; i++) {
+            if (c[i] === 'O') continue;
+            var d = sol.ds[i], rs = resEvents(fc, d, c[i]).map(function (r) { return r.id + '|' + r.mode; });
+            rs.forEach(function (k) { if (!seen[k]) { seen[k] = 1; evs.push(k); } });
+            cols.push({ d: d, st: c[i], n: unitsFor(d, c[i]), rs: rs });
+        }
+        var best = { n: cols.reduce(function (a, x) { return a + x.n; }, 0), by: [] };
+        if (!evs.length || evs.length > 12) return best;
+        for (var mask = 1; mask < (1 << evs.length); mask++) {
+            var use = evs.filter(function (_, j) { return mask & (1 << j); }), n = use.length;
+            cols.forEach(function (x) { if (!x.rs.some(function (k) { return use.indexOf(k) !== -1; })) n += x.n; });
+            if (n < best.n) best = { n: n, by: use };
+        }
+        return best;
+    }
     function shortest(fc, sol) {
         var rows = fcRows(fc, sol), alone = MM.aloneMalf(fc); if (!rows.length && !alone.length) return null;
-        var ord = alone.length ? 1 : Math.min.apply(null, rows.map(function (r) { return r.c.replace(/O/g, '').length; }));
-        var routes = (alone.length ? alone.map(function (m) { return m.sysName + ' doing the wrong thing'; }) : []).concat(rows.filter(function (r) { return r.c.replace(/O/g, '').length === ord; }).map(function (r) { return caseText(r.c, sol.ds); }));
+        var resName = function (k) { var i = k.lastIndexOf('|'), r = K.resPicked(fc).filter(function (x) { return x.key === k.slice(0, i); })[0]; return (r ? r.name : k.slice(0, i)) + ' ' + lc(k.slice(i + 1)); };
+        var counted = rows.map(function (r) { return { r: r, f: failuresIn(fc, sol, r.c) }; });
+        var ord = alone.length ? 1 : Math.min.apply(null, counted.map(function (x) { return x.f.n; }));
+        var routes = (alone.length ? alone.map(function (m) { return m.sysName + ' doing the wrong thing'; }) : []).concat(counted.filter(function (x) { return x.f.n === ord; }).map(function (x) { return caseText(x.r.c, sol.ds) + (x.f.by.length ? ' (by ' + joinAnd(x.f.by.map(resName)) + ')' : ''); }));
         return { order: ord, routes: routes, single: ord === 1 && /catastrophic|hazardous/i.test(fc.sev) };
     }
     function gate(fc, sol) { var rows = fcRows(fc, sol); return rows.length ? X.gate(rows.map(function (r) { return r.c; }), sol.cols) : null; }
@@ -314,10 +343,12 @@
     // Every combination of ways that causes the failure condition, and the ones that rest on one resource.
     function pairs(fc, sol) {
         var g = gate(fc, sol); if (!g) return null;
+        // how many failures each code in a row stands for: an event's own loss counts its units, a resource failure is one
+        var units = {}; gateEvents(g).forEach(function (e) { var w = ways(fc, sol, e), d = colById(sol, e.col); units[w.own] = d && !d.isM ? unitsFor(d, e.st) : 1; w.res.forEach(function (r) { units[r.code] = 1; }); });
         var order = K.resPicked(fc).map(function (r) { return r.key; });
         if (g.shape === 'core-any' && g.core.length === 1) {
             var ps = X.resourcePairs(g, function (e) { var w = ways(fc, sol, e); return { own: w.own, res: w.res.map(function (r) { return { id: r.id, code: r.code }; }) }; }, { failure2Order: order });
-            if (ps) return finishRows({ shape: 'pairs', rows: ps.map(function (p) { return { n: p.n, parts: p.a.code === p.b.code ? [p.a.code] : [p.a.code, p.b.code], same: p.same }; }) });
+            if (ps) return finishRows({ shape: 'pairs', rows: ps.map(function (p) { return { n: p.n, parts: p.a.code === p.b.code ? [p.a.code] : [p.a.code, p.b.code], same: p.same }; }) }, units);
         }
         var sets = g.shape === 'core-any' ? g.any.map(function (a) { return g.core.concat([a]); }) : g.sets, rows = [], over = false;
         sets.forEach(function (set) {
@@ -325,15 +356,17 @@
             var count = w.reduce(function (n, x) { return n * x.length; }, 1); if (rows.length + count > COMBO_CAP) { over = true; return; }
             (function go(i, acc) { if (i === w.length) { var r0 = acc[0].res, same = r0 !== null && acc.every(function (x) { return x.res === r0; }) ? r0 : null; rows.push({ n: rows.length + 1, parts: acc.map(function (x) { return x.code; }), same: same }); return; } w[i].forEach(function (x) { go(i + 1, acc.concat([x])); }); })(0, []);
         });
-        return over ? { shape: 'over', rows: [], why: 'There are over ' + COMBO_CAP + ' combinations. The tool does not list part of a table; reduce the columns or the shared resources.' } : finishRows({ shape: 'sets', rows: rows, width: Math.max.apply(null, sets.map(function (x) { return x.length; }).concat([2])) });
+        return over ? { shape: 'over', rows: [], why: 'There are over ' + COMBO_CAP + ' combinations. The tool does not list part of a table; reduce the columns or the shared resources.' } : finishRows({ shape: 'sets', rows: rows, width: Math.max.apply(null, sets.map(function (x) { return x.length; }).concat([2])) }, units);
     }
     // A shared event that reaches two branches makes a "pair" of itself: that is ONE failure. It is listed once, as a single,
     // and every combination it makes larger is dropped (not a minimal cut set). The rest keep their order and are numbered again.
-    function finishRows(P) {
+    // A row alone in the table is a single failure only when it stands for one failure (a resource failure, a wrong action, a
+    // one-unit loss); the loss of both units of a pair alone is two failures, and its independence goes to the CMA.
+    function finishRows(P, units) {
         P.rows.forEach(function (r) { var u = []; r.parts.forEach(function (x) { if (u.indexOf(x) === -1) u.push(x); }); r.parts = u; });
         var singles = P.rows.filter(function (r) { return r.parts.length === 1; }).map(function (r) { return r.parts[0]; });
         if (singles.length) P.rows = P.rows.filter(function (r) { return r.parts.length === 1 ? P.rows.filter(function (q) { return q.parts.length === 1 && q.parts[0] === r.parts[0]; })[0] === r : !r.parts.some(function (x) { return singles.indexOf(x) !== -1; }); });
-        P.rows.forEach(function (r, k) { r.n = k + 1; r.single = r.parts.length === 1; if (r.single) r.same = null; });
+        P.rows.forEach(function (r, k) { r.n = k + 1; r.alone = r.parts.length === 1; r.failures = r.parts.reduce(function (a, x) { return a + ((units && units[x]) || 1); }, 0); r.single = r.alone && r.failures === 1; if (r.alone) r.same = null; });
         P.singles = P.rows.filter(function (r) { return r.single; });
         return P;
     }
@@ -346,9 +379,10 @@
         var r = peek(fc.key) || {}, off = r.indep || {};
         return fcRows(fc, sol).map(function (row, k) {
             var key = 'INDEP-' + String(k + 1).padStart(2, '0'), parts = [];
-            for (var i = 0; i < row.c.length; i++) { var s = row.c[i], d = sol.ds[i]; if (s === 'O') continue; parts.push(s === 'M' ? 'the malfunction of ' + d.sysName : (s === 'F' ? 'the complete loss of ' : 'the partial loss of ') + d.name + ' function'); }
+            var n = 0;
+            for (var i = 0; i < row.c.length; i++) { var s = row.c[i], d = sol.ds[i]; if (s === 'O') continue; n += unitsFor(d, s); parts.push(s === 'M' ? 'the malfunction of ' + d.sysName : (s === 'F' ? 'the complete loss of ' : 'the partial loss of ') + d.name + ' function'); }
             var t = parts.join(' and ') + (parts.length > 1 ? ' do' : ' does') + ' not result from a single failure or event';
-            return { key: key, text: t.charAt(0).toUpperCase() + t.slice(1), on: off[key] !== false, single: parts.length < 2 };
+            return { key: key, text: t.charAt(0).toUpperCase() + t.slice(1), on: off[key] !== false, single: n < 2 };
         });
     }
     // v1.1: what each line does ON ITS OWN, from the table the engineer answered: the case with that one failure and
@@ -497,11 +531,12 @@
         return '<div class="apx-cap">The gate under ' + E(fc.fcId) + '</div><div class="apx-tree"><div class="apx-tul"><div class="apx-tli"><b>' + E(fc.fcId) + '</b> ' + E(fc.desc) + (fc.phases ? ' (' + E(fc.phases) + ')' : '') + ' <span class="apx-gate">OR</span><div class="apx-tul">'
             + (g ? li('<b>' + E(fc.fcId) + '.CoFFE</b> Combined loss resulting in ' + E(lc(outcomeName(fc, 0))) + inner) : '') + alone.map(function (m) { return li('<b>' + E(ffId(fc, m.colId, 'M')) + '</b> ' + E(m.sysName) + ' doing the wrong thing, resulting in ' + E(lc(outcomeName(fc, 0)))); }).join('') + '</div></div></div></div>';
     }
+    function aloneWords(r) { return r.single ? 'Alone: a single failure' : 'Alone: ' + r.failures + ' failures inside it'; }
     function tablePairs(fc, sol) {
         var P = pairs(fc, sol); if (!P) return { main: '', same: '' };
         if (P.shape === 'over') return { main: note('warn', E(P.why)), same: '' };
         var w = P.shape === 'pairs' ? 2 : P.width, hd = ''; for (var i = 1; i <= w; i++) hd += '<th>Failure ' + i + '</th>';
-        var row = function (r) { var tds = ''; for (var k = 0; k < w; k++) tds += '<td class="l">' + E(r.parts[k] || (r.single && k === 1 ? 'Alone: a single failure' : '--')) + '</td>'; return '<tr><td>' + r.n + '</td>' + tds + '</tr>'; };
+        var row = function (r) { var tds = ''; for (var k = 0; k < w; k++) tds += '<td class="l">' + E(r.parts[k] || (r.alone && k === 1 ? aloneWords(r) : '--')) + '</td>'; return '<tr><td>' + r.n + '</td>' + tds + '</tr>'; };
         var PP = 30, pages = Math.ceil(P.rows.length / PP) || 1; ui.ppage = Math.max(0, Math.min(ui.ppage || 0, pages - 1));
         var main = '<div class="apx-cap">Potential failure combinations (fault tree cut sets)</div>' + (pages > 1 ? '<div class="apx-pager" style="justify-content:center"><button class="apx-btn" data-apx-x="ppage|-1"' + (ui.ppage === 0 ? ' disabled' : '') + '>Previous</button><b>Cases ' + (ui.ppage * PP + 1) + ' to ' + Math.min(P.rows.length, ui.ppage * PP + PP) + ' of ' + P.rows.length + '</b><button class="apx-btn" data-apx-x="ppage|1"' + (ui.ppage >= pages - 1 ? ' disabled' : '') + '>Next</button></div>' : '') + '<div class="apx-tw"><table data-sl-worksheet="1" class="apx-arp"><tr><th>Cases</th>' + hd + '</tr>' + P.rows.slice(ui.ppage * PP, ui.ppage * PP + PP).map(row).join('') + '</table></div>';
         var so = 2, same = '';
@@ -620,7 +655,7 @@
         else body += (st.k === 'changed' ? note('warn', 'Something changed since this was sent. Send it again to bring the PASA up to date.') : '')
             + '<div class="apx-eff" style="margin-top:14px"><div><b>Sign with your name</b></div><div><input type="text" data-apx-sign="1" value="' + E(K.ui.sign != null ? K.ui.sign : K.who()) + '" placeholder="One signature covers this CoFFE" aria-label="Sign with your name"></div></div>' + (K.ui.signMiss ? note('bad', E(K.ui.signMiss)) : '')
             + '<button class="apx-btn p big" style="margin-top:12px" data-apx-x="send"' + (l.length ? ' disabled' : '') + '>Send to the PASA</button>';
-        if (T9.singles && T9.singles.length) body = note('bad', '<b>Finding: a single failure causes ' + E(fc.fcId) + '.</b> ' + E(joinAnd(T9.singles.map(function (r) { return r.parts[0]; }))) + (T9.singles.length > 1 ? ' each reach' : ' reaches') + ' more than one branch of the gate, so on ' + (T9.singles.length > 1 ? 'its' : 'its') + ' own it causes the failure condition. ' + (/catastrophic|hazardous/i.test(fc.sev) ? 'That is not allowed for a ' + E(fc.sev) + ' failure condition; the design has to change.' : '')) + body;
+        if (T9.singles && T9.singles.length) body = note('bad', '<b>Finding: a single failure causes ' + E(fc.fcId) + '.</b> ' + E(joinAnd(T9.singles.map(function (r) { return r.parts[0]; }))) + (T9.singles.length > 1 ? ' each cause' : ' causes') + ' it on ' + (T9.singles.length > 1 ? 'their' : 'its') + ' own. ' + (/catastrophic|hazardous/i.test(fc.sev) ? 'That is not allowed for a ' + E(fc.sev) + ' failure condition; the design has to change.' : '')) + body;
         return card('Common resource pairs, then send', '', body) + (T9.main ? K.preview('', T9.main) : '') + (T9.same ? K.preview('', T9.same) : '') + (T9.cma ? K.preview('', T9.cma) : '');
     }
     function render(i, fc) {
@@ -659,7 +694,7 @@
     }
 
     var api = { VERSION: VERSION,
-        model: { coveredByAll: coveredByAll, ownStarted: ownStarted, sourcesFor: sourcesFor, combined: combined, disagreements2: disagreements2, sourcesHtml: sourcesHtml, resEvents: resEvents, craOpen: craOpen, finishRows: finishRows, cmaList: cmaList, outFc: outFc, outDef: outDef, linkedOutcomes: linkedOutcomes, coveredBy: coveredBy, linkedGate: linkedGate, linkedChecks: linkedChecks, budgetEvents: budgetEvents, checkGate: checkGate, mathWords: mathWords, ways: ways, colById: colById, evInside: evInside, cofCols: cofCols, ready: ready, solved: solved, next: next, outcomes: outcomes, outcomeName: outcomeName, named: named, macSays: macSays, disagreements: disagreements, caseText: caseText, codeOf: codeOf, ffId: ffId, ffRows: ffRows, summary: summaryRows, conclusions: conclusions, fcRows: fcRows, shortest: shortest, gate: gate, gateEvents: gateEvents, mathCheck: mathCheck, target: target, pairs: pairs, indepList: indepList, status: status, ownEffects: ownEffects, left: left, peek: peek, oldVerdicts: oldVerdicts, resName: resName, levelName: levelName, fmt: fmt, evWords: evWords, colById: colById },
+        model: { aloneWords: aloneWords, failuresIn: failuresIn, unitsFor: unitsFor, coveredByAll: coveredByAll, ownStarted: ownStarted, sourcesFor: sourcesFor, combined: combined, disagreements2: disagreements2, sourcesHtml: sourcesHtml, resEvents: resEvents, craOpen: craOpen, finishRows: finishRows, cmaList: cmaList, outFc: outFc, outDef: outDef, linkedOutcomes: linkedOutcomes, coveredBy: coveredBy, linkedGate: linkedGate, linkedChecks: linkedChecks, budgetEvents: budgetEvents, checkGate: checkGate, mathWords: mathWords, ways: ways, colById: colById, evInside: evInside, cofCols: cofCols, ready: ready, solved: solved, next: next, outcomes: outcomes, outcomeName: outcomeName, named: named, macSays: macSays, disagreements: disagreements, caseText: caseText, codeOf: codeOf, ffId: ffId, ffRows: ffRows, summary: summaryRows, conclusions: conclusions, fcRows: fcRows, shortest: shortest, gate: gate, gateEvents: gateEvents, mathCheck: mathCheck, target: target, pairs: pairs, indepList: indepList, status: status, ownEffects: ownEffects, left: left, peek: peek, oldVerdicts: oldVerdicts, resName: resName, levelName: levelName, fmt: fmt, evWords: evWords, colById: colById },
         act: { setOutFc: setOutFc, setOutDef: setOutDef, setOutcome: setOutcome, addOutcome: addOutcome, removeOutcome: removeOutcome, setResultName: setResultName, answer: answer, undo: undo, clearAnswers: clearAnswers, setBudget: setBudget, setIndep: setIndep, send: send, convert: convert },
         tables: { q43: tableQ43, q46: tableQ46, q47: tableQ47, q48: tableQ48, gate: gateHtml, pairs: tablePairs }, _ui: ui };
     A.register('cof', { name: 'CoFFE', steps: ['Failure condition', 'The system failures and their FHA lines', 'Name the outcomes', 'Answer the quick questions', 'The full CoFFE table', 'Summary and result', 'Fault tree, budgets and independence', 'Common resource pairs and send'], render: render, click: click, change: change, status: status });

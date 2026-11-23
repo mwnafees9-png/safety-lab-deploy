@@ -91,7 +91,8 @@ const near = (a, b, tol) => a != null && b != null && Math.abs(a - b) <= Math.ab
         await pg.goto('http://127.0.0.1:' + srv.address().port + '/index.html'); await tick(5000);
         await pg.evaluate(() => { document.documentElement.classList.remove('sl-auth-gate-blocked'); const g = document.getElementById('sl-auth-gate'); if (g) g.remove(); if (window.__slDismissBootSplash) window.__slDismissBootSplash(); });
         await pg.addStyleTag({ content: '#signup-modal{display:none!important} .modal-overlay{display:none!important}' });
-        await pg.evaluate(() => window.loadHL1Demo()); await tick(9000);
+        // 23 Nov 2026: the linking mechanics are tested on the three hand-traced lines, so the demo opens without the Autopilots' lines
+        await pg.evaluate(() => { window.SL_HL1_APX_OFF = true; return window.loadHL1Demo(); }); await tick(9000);
         await pg.waitForFunction(() => { try { return SLEnv.get('acFhaData').length > 10 && SLEnv.get('ftaPages').length > 10 && !!window.SLFcTrees && !!window.SLPasaAuto; } catch (_) { return false; } }, null, { timeout: 120000 });   // a loaded machine: wait for the demo, never guess
         await pg.evaluate(() => switchTab('pasa')); await tick(1500);
 
