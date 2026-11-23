@@ -225,6 +225,7 @@ function mutate(file, body) {
             const A = window.SLApxAuto, f = () => A.model.fcOf(K);
             A.model.resPicked(f()).forEach(r => { if (!A.model.resState(f(), r).modes.length) A.act.mode(f(), r.key, 'Total loss', true); });
             A.model.effectRows(f()).forEach(x => { const st = A.model.resState(f(), x.r); A.model.picked(f()).forEach(c => { if (st.feeds[c.colId] && !A.model.craText(f(), x.r, x.mode, c.colId)) A.act.setCra(f(), x.r.key + '|' + x.mode + '|' + c.colId, 'Function lost'); }); if (!A.model.craText(f(), x.r, x.mode, '')) A.act.setCra(f(), x.r.key + '|' + x.mode + '|', 'The failure condition happens'); });
+            A.model.effectRows(f()).forEach(x => { const st = A.model.resState(f(), x.r); A.model.picked(f()).forEach(c => { if (st.feeds[c.colId] && !A.model.craState(f(), x.r, x.mode, c.colId)) A.act.setCraSt(f(), x.r.key + '|' + x.mode + '|' + c.colId, x.mode === 'Partial loss' ? 'partial' : 'total'); }); }); 
             const left = A.model.left(f()), res = A.act.send(f(), 'Test Engineer'), rec = projectConfig.apx.idp[K], cols = A.model.picked(f());
             return { left, res, status: A.model.status(f()), n: cols.length, stamped: cols.filter(c => rec.cols[c.colId] && rec.cols[c.colId].by === 'Test Engineer' && rec.cols[c.colId].at).length, sent: rec.sent };
         }, K);
@@ -278,7 +279,7 @@ function mutate(file, body) {
             const A = window.SLApxAuto, f = () => A.model.fcOf(K), out = {}, wait = ms => new Promise(r => setTimeout(r, ms));
             A.model.resPicked(f()).forEach(r => { if (!A.model.resState(f(), r).modes.length) A.act.mode(f(), r.key, 'Total loss', true); });
             A.model.effectRows(f()).forEach(x => { const st = A.model.resState(f(), x.r); A.model.picked(f()).forEach(c => { if (st.feeds[c.colId] && !A.model.craText(f(), x.r, x.mode, c.colId)) A.act.setCra(f(), x.r.key + '|' + x.mode + '|' + c.colId, 'Function lost'); }); if (!A.model.craText(f(), x.r, x.mode, '')) A.act.setCra(f(), x.r.key + '|' + x.mode + '|', 'The failure condition happens'); });
-            out.send = A.act.send(f(), 'Test Engineer'); out.sentAs = projectConfig.apx.idp[K].sent;
+            A.model.effectRows(f()).forEach(x => { const st = A.model.resState(f(), x.r); A.model.picked(f()).forEach(c => { if (st.feeds[c.colId] && !A.model.craState(f(), x.r, x.mode, c.colId)) A.act.setCraSt(f(), x.r.key + '|' + x.mode + '|' + c.colId, x.mode === 'Partial loss' ? 'partial' : 'total'); }); }); out.send = A.act.send(f(), 'Test Engineer'); out.sentAs = projectConfig.apx.idp[K].sent;
             const mine = () => Object.keys(projectConfig.interdep.cells).filter(k => k.indexOf(K + '§') === 0 && projectConfig.interdep.cells[k].apx).length;
             out.before = mine(); A._ui.step = 6; A.kit.draw();
             const b1 = document.querySelector('#interdep-host [data-apx-take$="|ask"]'); out.btn = !!b1; b1.click(); await wait(200);

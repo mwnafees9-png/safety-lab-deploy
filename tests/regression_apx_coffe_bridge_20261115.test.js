@@ -99,6 +99,8 @@ function mutate(file, body) {
             const A = SLApxAuto, M = SLApxMac, C = SLApxCof, f = A.model.fcOf(K);
             // the engineer ticks two shared resources and says which functions each feeds (the tool ticks none: apx_autopilots.js 1.2)
             A.model.resources().slice(0, 2).forEach((r, k) => { A.act.resTick(f, r.key); A.model.picked(f).forEach((c, i) => { if (k === 0 || i < 2) A.act.feed(f, r.key, c.colId); }); });
+            // 23 Nov 2026: each resource failure says what it does to each function it feeds (apx_autopilots.js 1.6)
+            A.model.resources().slice(0, 2).forEach(r => { A.act.mode(f, r.key, 'Total loss', true); A.act.mode(f, r.key, 'Partial loss', true); A.model.picked(f).forEach(c => { if (A.model.resState(f, r).feeds[c.colId]) { A.act.setCraSt(f, r.key + '|Total loss|' + c.colId, 'total'); A.act.setCraSt(f, r.key + '|Partial loss|' + c.colId, 'partial'); } }); });
             M.model.lossBase(f).forEach(c => M.act.setPattern(f, c.colId, '', 'pairs', 'hand', '')); M.act.setEv(f, 'Landing performance analysis LPA-01');
             window.__truth = c => { const non = c.replace(/O/g, '').length; return c[0] === 'F' && non >= 2; };
             let n = 0; for (;;) { const s = M.model.solved(f); if (s.done) break; const c = SLApx.nextQuestion(s.cols, s.m1, { lo: 0, hi: 1, among: s.cases }); M.act.answer(f, c, window.__truth(c)); if (++n > 500) break; }
@@ -165,13 +167,13 @@ function mutate(file, body) {
         check('5 one independence principle per combination, in the book\'s words', g.ip.length === 3 && g.ip.every(t => /^The complete loss of .* function and the partial loss of .* function do not result from a single failure or event$/.test(t)), g.ip);
         await jump(6);
         const fig = await pg.evaluate(() => { const h = document.querySelector('#interdep-host'), t = h.querySelector('.apx-tree'); return { cap: Array.from(h.querySelectorAll('.apx-cap')).map(c => c.innerText.replace(/\s+/g, ' '))[0], txt: t ? t.innerText : '', visible: !!t && t.offsetParent !== null && !t.querySelector('details:not([open])') && !t.closest('.sl-fold'), math: h.innerText }; });
-        check('5 the gate is drawn open on the page: the failure condition, OR, its .CoFFE gate, AND', /^The gate under FC-07/.test(fig.cap) && fig.visible && /FC-07\.CoFFE/.test(fig.txt) && /\bOR\b/.test(fig.txt) && /\bAND\b/.test(fig.txt) && /Math check:/.test(fig.math) && /2\.997E-10/.test(fig.math), fig.txt.slice(0, 300));
+        check('5 the gate is drawn open on the page: the failure condition, OR, its .CoFFE gate, AND', /^The gate under FC-07/.test(fig.cap) && fig.visible && /FC-07\.CoFFE/.test(fig.txt) && /\bOR\b/.test(fig.txt) && /\bAND\b/.test(fig.txt) && /Math check, FC-07:/.test(fig.math) && /2\.997E-10 per flight/.test(fig.math), fig.txt.slice(0, 300));
 
         // ---- 6: the pairs ----------------------------------------------------------------------------------------------------------------
         const pr = await pg.evaluate((K) => {
             const A = SLApxAuto, C = SLApxCof, f = A.model.fcOf(K), s = C.model.solved(f), P = C.model.pairs(f, s), gt = C.model.gate(f, s);
-            const ways = e => { const d = C.model.colById(s, e.col); return 1 + A.model.resPicked(f).filter(r => A.model.resState(f, r).feeds[d.colId]).length; };
-            const f1 = ways(gt.core[0]), f2set = {}; gt.any.forEach(e => { const d = C.model.colById(s, e.col); A.model.resPicked(f).filter(r => A.model.resState(f, r).feeds[d.colId]).forEach(r => { f2set[r.key + '>' + d.colId] = 1; }); });
+            const fed = d => A.model.resPicked(f).filter(r => A.model.resState(f, r).feeds[d.colId]);
+            const f1 = 1 + fed(C.model.colById(s, gt.core[0].col)).length, f2set = {}; gt.any.forEach(e => { const d = C.model.colById(s, e.col); fed(d).forEach(r => { f2set[r.key + '|T>' + d.colId] = 1; f2set[r.key + '|P>' + d.colId] = 1; }); });
             const f2 = Object.keys(f2set).length + gt.any.length;
             return { shape: P.shape, n: P.rows.length, want: f1 * f2, same: P.rows.filter(x => x.same).length, numbered: P.rows.every((x, i) => x.n === i + 1) };
         }, K);
@@ -189,8 +191,9 @@ function mutate(file, body) {
             out.otherFc = (acFhaData || []).find(r => r.subId === f().subId && String(r.fcId) !== f().fcId) || null; out.otherFc = out.otherFc ? out.otherFc.fcId : null;
             A.model.resPicked(f()).forEach(r => { if (!A.model.resState(f(), r).modes.length) A.act.mode(f(), r.key, 'Total loss', true); });
             A.model.effectRows(f()).forEach(x => { const st = A.model.resState(f(), x.r); A.model.picked(f()).forEach(c => { if (st.feeds[c.colId]) A.act.setCra(f(), x.r.key + '|' + x.mode + '|' + c.colId, 'Function lost'); }); A.act.setCra(f(), x.r.key + '|' + x.mode + '|', 'The failure condition happens'); });
-            out.idp = A.act.send(f(), 'Test Engineer');
+            A.model.effectRows(f()).forEach(x => { const st = A.model.resState(f(), x.r); A.model.picked(f()).forEach(c => { if (st.feeds[c.colId] && !A.model.craState(f(), x.r, x.mode, c.colId)) A.act.setCraSt(f(), x.r.key + '|' + x.mode + '|' + c.colId, x.mode === 'Partial loss' ? 'partial' : 'total'); }); }); out.idp = A.act.send(f(), 'Test Engineer');
             const s = M.model.solved(f()); M.model.rules(s).forEach(x => M.act.setWhy(f(), x.c, 'Not enough stopping force left'));
+            const oc = C.model.outcomes(f()); for (let i = 0; i < oc.length - 1; i++) { C.act.setOutDef(f(), i, i === 0 ? 'overrun above 30 knots' : 'overrun at 30 knots or less'); if (i > 0) C.act.setOutFc(f(), i, 'none'); }
             out.mac = M.act.send(f(), 'Test Engineer'); out.cof = C.act.send(f(), 'Test Engineer');
             const cells = projectConfig.interdep.cells, mine = Object.keys(cells).filter(k => k.indexOf(K + '§') === 0);
             out.cells = { n: mine.length, asserted: mine.filter(k => cells[k].state === 'asserted').length, cleared: mine.filter(k => cells[k].state === 'cleared').length, by: mine.every(k => cells[k].by === 'Test Engineer' && cells[k].apx === true), cols: A.model.allCols().length, picked: A.model.picked(f()).length, locked: A.model.picked(f()).filter(c => A.model.cellOf(f(), c).src === 'data').length, derived: A.model.allCols().filter(c => A.kit.derived(f(), c)).length };
@@ -227,7 +230,7 @@ function mutate(file, body) {
         check('10 Table Q.4-1 there: AC function, AC FC ID, AC FC description, then one X per ticked function and no other column', pasa.q41 && pasa.q41.keys.slice(0, 3).join('|') === 'AC Function|AC FC ID|AC FC Description' && pasa.q41.keys.length === 3 + pasa.picked && pasa.q41.xs === pasa.picked && /^Interdependence table for FC-07$/.test(pasa.q41.title), pasa.q41);
         check('10 no report table title carries a number from the book: the report numbers its own tables in sequence', pasa.titles.length >= 10 && !pasa.titles.some(t => /Q\.4|ARP4761A|Table B3|Figure/.test(t)), pasa.titles);
         check('10 Table Q.4-6 there has all 81 cases, first all failed, last all operational', pasa.q46 && pasa.q46.n === 81 && /^1 F F F F Loss of deceleration/.test(pasa.q46.first) && /^81 O O O O No overrun/.test(pasa.q46.last), pasa.q46);
-        check('10 the result, the pairs, the MAC rules with their reasons and the budget math are there', pasa.q48 === 3 && pasa.q49 === pr.n && pasa.mac.length > 0 && pasa.mac.every(w => /stopping force/.test(w)) && /2\.997E-10 per flight hour, within the 1\.0E-07 objective/.test(pasa.bud || ''), { q48: pasa.q48, q49: pasa.q49, bud: pasa.bud });
+        check('10 the result, the pairs, the MAC rules with their reasons and the budget math are there, per flight and then per flight hour', pasa.q48 === 3 && pasa.q49 === pr.n && pasa.mac.length > 0 && pasa.mac.every(w => /stopping force/.test(w)) && /= 2\.997E-10 per flight\. Over a [0-9.]+ h flight that is [0-9.]+E-10 per flight hour, within the 1\.0E-07 per flight hour objective/.test(pasa.bud || ''), { q48: pasa.q48, q49: pasa.q49, bud: pasa.bud });
         check('10 the appendix has its MAC and CoFFE parts', pasa.heads.some(h => /Minimum acceptable configuration \(MAC\)/.test(h)) && pasa.heads.some(h => /Combined functional failure effects \(CoFFE\)/.test(h)), pasa.heads);
         const chg = await pg.evaluate((K) => { const A = SLApxAuto, C = SLApxCof, B = SLApxBridge, f = A.model.fcOf(K), gr = SLFcTrees.groups('ac').find(g => String(g.gov.internalId) === K); C.act.setResultName(f, 'Stopping Result'); const ax = B.pasa(gr); const blocks = SLPasaAuto.fnSection(f.subId, {}), arr0 = Array.isArray(blocks) ? blocks : (blocks && blocks.blocks) || []; const fin = arr0.filter(b => b && b.k === 'p' && /changed after being sent/.test(b.text || '')).length; const st = C.model.status(f).k; C.act.send(f, 'Test Engineer'); return { changed: ax.changed, cof: ax.cof, fin, st }; }, K);
         check('10 a change after sending takes that part out of the appendix and is a finding there until it is sent again', chg.st === 'changed' && chg.changed.join() === 'CoFFE' && chg.cof === null && chg.fin === 1, chg);

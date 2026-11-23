@@ -31,7 +31,7 @@
  * ==========================================================================*/
 (function (root) {
     'use strict';
-    var VERSION = '1.5';   // 1.5 23 Nov 2026: a backup whose change-over can fail on its own goes to the PASA with its two ways (build table, gate, rule.apx.inside)   // 1.4 22 Nov 2026: a sent MAC rule names every function it is stated over (rule.apx.members), for the one reading of a MAC rule in misc_fn_modules.js   // 1.2 17 Nov 2026: what was sent can be taken back out one Autopilot at a time; the PSSA shows the assemblies and the lines the aircraft level added to its system
+    var VERSION = '1.6';   // 1.6 23 Nov 2026: budgets per flight with the rate per flight hour; linked outcomes and their failure conditions; single shared failures; the CMA list; the PASA assumptions, numbered once and never reused   // 1.5 23 Nov 2026: a backup whose change-over can fail on its own goes to the PASA with its two ways (build table, gate, rule.apx.inside)   // 1.4 22 Nov 2026: a sent MAC rule names every function it is stated over (rule.apx.members), for the one reading of a MAC rule in misc_fn_modules.js   // 1.2 17 Nov 2026: what was sent can be taken back out one Autopilot at a time; the PSSA shows the assemblies and the lines the aircraft level added to its system
     var A = root.SLApxAuto, X = root.SLApx, M = root.SLApxMac, C = root.SLApxCof;
     if (!A || !A.kit || !X || !M || !M.model || !C || !C.model) { if (typeof module !== 'undefined' && module.exports) module.exports = { VERSION: VERSION, missing: true }; return; }
     var K = A.kit, S = K.S, T = K.T, arr = K.arr, safe = K.safe, lc = K.lc, MM = M.model, CM = C.model, AM = A.model;
@@ -120,6 +120,7 @@
     function project(fc, which) {
         if (!A.enabled()) return { ok: false, why: 'The switch is off.' };
         var out = which === 'idp' ? projectIdp(fc) : which === 'mac' ? projectMac(fc) : which === 'cof' ? projectCof(fc) : null;
+        safe(function () { assumptions(fc); }, null);
         try { if (root.SLDataChange && root.SLDataChange.bump) root.SLDataChange.bump(); } catch (_) {}
         return out;
     }
@@ -213,17 +214,50 @@
             var ev = function (e) { var d = CM.colById(sol, e.col); return CM.ffId(fc, d.isM ? d.colId : d.id, e.st) + ' ' + CM.evWords(d, e.st); };
             b.push({ k: 'p', text: 'The gate under ' + f + ': ' + f + ' happens when ' + (g.shape === 'core-any' ? MM.joinAnd(g.core.map(ev)) + ' happens together with any one of: ' + g.any.map(ev).join('; ') : 'any one of these combinations happens: ' + g.sets.map(function (s) { return s.map(ev).join(' and '); }).join('; or ')) + (alone.length ? '; or when ' + MM.joinAnd(alone.map(function (m) { return m.sysName; })) + ' does the wrong thing, alone' : '') + '.' });
             var mc = CM.mathCheck(fc, sol), bud = r.budgets || {};
-            b.push({ k: 'table', name: 'apx-bud-' + f, title: 'Probability budgets for the events under ' + f, rows: CM.gateEvents(g).map(function (e) { var k = e.col + '|' + e.st; return { Event: ev(e), 'Budget per flight hour': bud[k] ? CM.fmt(bud[k]) : 'Not given yet' }; }), lead: '{N} lists the budget given to each event.' + (sol.ds.some(function (d) { return MM.coWays && MM.coWays(d); }) ? ' A loss that can happen two ways (both units lost, or the unit in use lost with its change-over failing) has one budget that covers both.' : '') + (mc && mc.p != null ? ' Together they give ' + CM.fmt(mc.p) + ' per flight hour' + (mc.target != null ? ', ' + (mc.ok ? 'within' : 'over') + ' the ' + CM.fmt(mc.target) + ' objective' : '') + ', taking the events as independent.' : ' The math is checked once every event has one.') });
+            var lk = CM.linkedChecks(fc, sol);
+            b.push({ k: 'table', name: 'apx-bud-' + f, title: 'Probability budgets for the events under ' + f, rows: CM.budgetEvents(fc, sol).map(function (x) { var row = { Event: ev(x.e), 'Budget per flight': bud[x.k] ? CM.fmt(bud[x.k]) : 'Not given yet' }; if (lk.length) row['Used by'] = MM.joinAnd(x.fcs); return row; }), lead: '{N} lists the budget given to each event, as a probability per flight.' + (sol.ds.some(function (d) { return MM.coWays && MM.coWays(d); }) ? ' A loss that can happen two ways (both units lost, or the unit in use lost with its change-over failing) has one budget that covers both.' : '') + (mc && mc.p != null ? ' For ' + f + ': ' + CM.mathWords(mc, g, bud, fc.sev) + ' The events are taken as independent.' : ' The math is checked once every event has one.') });
+            lk.forEach(function (l) { b.push({ k: 'p', text: 'The outcome "' + l.name + '" is ' + l.fc.fcId + (l.fc.sev ? ' (' + l.fc.sev + ')' : '') + '. From this table, ' + l.fc.fcId + ' happens when ' + (l.g ? gateWords(l.g, ev) : 'no mix causes it') + '.' + (l.mc && l.mc.p != null ? ' ' + CM.mathWords(l.mc, l.g, bud, l.fc.sev) + (l.mc.ok === false ? ' Finding: the budgets do not meet ' + l.fc.fcId + '\'s objective.' : '') : '') + ' The same budgets serve both failure conditions, so each event meets the strictest.' }); });
             var ip = CM.indepList(fc, sol).filter(function (x) { return x.on && !x.single; });
             if (ip.length) b.push({ k: 'table', name: 'apx-ind-' + f, title: 'Independence principles for ' + f, rows: ip.map(function (x) { return { ID: 'PASA-' + x.key, Principle: x.text }; }), lead: '{N} lists the independence the gate relies on. Each goes to the common cause analyses.' });
             var P = CM.pairs(fc, sol);
+            if (P && P.singles && P.singles.length) b.push({ k: 'p', text: 'Finding: a single failure causes ' + f + '. ' + MM.joinAnd(P.singles.map(function (x) { return x.parts[0]; })) + (P.singles.length > 1 ? ' each reach' : ' reaches') + ' more than one branch of the gate.' + (/catastrophic|hazardous/i.test(fc.sev) ? ' That is not allowed for a ' + fc.sev + ' failure condition; the design has to change.' : '') });
             if (P && P.rows && P.rows.length) {
-                var w = P.shape === 'pairs' ? 2 : P.width, prow = function (x) { var row = { Cases: String(x.n) }; for (var i = 0; i < w; i++) row['Failure ' + (i + 1)] = x.parts[i] || '--'; return row; };
+                var w = P.shape === 'pairs' ? 2 : P.width, prow = function (x) { var row = { Cases: String(x.n) }; for (var i = 0; i < w; i++) row['Failure ' + (i + 1)] = x.parts[i] || (x.single && i === 1 ? 'Alone: a single failure' : '--'); return row; };
                 b.push({ k: 'table', name: 'apx-q49-' + f, title: 'Potential failure combinations for ' + f + '', rows: P.rows.map(prow), lead: '{N} lists every combination of failures that causes ' + f + ', with the shared resources from the interdependence table added.' });
                 var n = 10; K.resPicked(fc).forEach(function (rr) { var same = P.rows.filter(function (x) { return x.same === rr.key; }); if (same.length) { b.push({ k: 'table', name: 'apx-q4' + n + '-' + f, title: rr.name + ' common source failures for ' + f + '', rows: same.map(prow), lead: '{N} lists the combinations where every failure comes from ' + lc(rr.name) + '. No single failure or event may result in the loss of all of it.' }); n++; } });
+                var cm = CM.cmaList(fc, sol);
+                if (cm && cm.rows.length) b.push({ k: 'table', name: 'apx-cma-' + f, title: 'Multisystem and multifunction combinations for the CMA, for ' + f, rows: cm.rows.map(prow), lead: '{N} lists the combinations that do not rest on one resource. The Common Mode Analysis assesses them for common causes' + (cm.principles.length ? ', against ' + MM.joinAnd(cm.principles.map(function (x) { return 'PASA-' + x.key; })) : '') + '.' });
             } else if (P && P.shape === 'over') b.push({ k: 'p', text: P.why });
         }
         return b;
+    }
+    function gateWords(g, ev) { return g.shape === 'core-any' ? MM.joinAnd(g.core.map(ev)) + ' happens together with any one of: ' + g.any.map(ev).join('; ') : 'any one of these combinations happens: ' + g.sets.map(function (x) { return x.map(ev).join(' and '); }).join('; or '); }
+    // A failure condition that is a lesser outcome of another failure condition's CoFFE table: its part of that table.
+    function linkedInBlocks(fc2) {
+        var cb = CM.coveredBy(fc2); if (!cb || !sentRec('cof', cb.fc)) return null;
+        var fc = cb.fc, sol = CM.solved(fc); if (!sol || sol.error || !sol.done) return null;
+        var g = CM.linkedGate(fc, sol, cb.i), bud = (CM.peek ? CM.peek(fc.key) : null) || ((pc().apx || {}).cof || {})[fc.key] || {}, b = bud.budgets || {};
+        var ev = function (e) { var d = CM.colById(sol, e.col); return CM.ffId(fc, d.isM ? d.colId : d.id, e.st) + ' ' + CM.evWords(d, e.st); };
+        var out = [{ k: 'p', text: fc2.fcId + ' is the outcome "' + cb.name + '" of the CoFFE table for ' + fc.fcId + ' (signed by ' + sentRec('cof', fc).sent.by + '). One table covers both. From it, ' + fc2.fcId + ' happens when ' + (g ? gateWords(g, ev) : 'no mix causes it') + '.' }];
+        if (g) { var mc = CM.checkGate(g, b, fc2); out.push({ k: 'p', text: mc.missing ? 'Its events do not all have a budget yet in ' + fc.fcId + '\'s CoFFE.' : mc.error ? mc.error : CM.mathWords(mc, g, b, fc2.sev) + (mc.ok === false ? ' Finding: the budgets do not meet ' + fc2.fcId + '\'s objective.' : '') }); }
+        return out;
+    }
+    // ---- the PASA assumptions: what each state means (MAC), what each outcome means (CoFFE), why a resource failure has no
+    // effect on a function (Interdependence). Each has a permanent ID (PASA-ASMP-nn), given the first time it is seen and never
+    // reused; its wording follows the answer.
+    function asmpId(key) { var s = K.store(); if (!s.asmp || typeof s.asmp !== 'object') s.asmp = {}; if (!s.asmp[key]) { if (!s.seq || typeof s.seq !== 'object') s.seq = {}; s.seq.asmp = (s.seq.asmp || 0) + 1; s.asmp[key] = s.seq.asmp; } return 'PASA-ASMP-' + String(s.asmp[key]).padStart(2, '0'); }
+    function assumptions(fc) {
+        var out = [], add = function (key, text, from) { out.push({ ID: asmpId(key), Assumption: text, From: from }); };
+        if (sentRec('mac', fc)) { var ms = MM.solved(fc); if (ms && !ms.error) ms.ds.forEach(function (d) {
+            if (!d.g) return;
+            if (d.states.indexOf('A') !== -1) add('mac|' + d.g.id + '|D', 'Partly working for ' + d.name + ' means: ' + d.units[0] + ' lost, or ' + d.units[1] + ' lost; each is assessed on its own.', 'MAC Autopilot');
+            else if (d.states.indexOf('D') !== -1) add('mac|' + d.g.id + '|D', 'Partly working for ' + d.name + ' means: ' + MM.unitWords(d, 'D').replace(/^.*?: /, '') + ' lost.', 'MAC Autopilot');
+            if (d.co) add('mac|' + d.g.id + '|co', d.co.yes ? 'The ' + lc(d.co.name) + ' can fail on its own: not working for ' + d.name + ' is both ' + d.units.join(' and ') + ' lost, or ' + d.units[0] + ' lost with the ' + lc(d.co.name) + ' failing.' : 'The change-over to ' + d.units[1] + ' cannot fail on its own: not working for ' + d.name + ' is both lost.', 'MAC Autopilot');
+        }); }
+        if (sentRec('cof', fc)) { var o = CM.outcomes(fc); for (var i = 0; i < o.length - 1; i++) { var df = CM.outDef(fc, i); if (df) add('cof|' + fc.key + '|out|' + i, (i === 0 ? (o[0] || fc.desc) : o[i]) + ': ' + df + '.', 'CoFFE Autopilot'); } }
+        if (sentRec('idp', fc)) AM.effectRows(fc).forEach(function (x) { var st = K.resState(fc, x.r); K.picked(fc).forEach(function (c) { if (!st.feeds[c.colId] || K.craState(fc, x.r, x.mode, c.colId) !== 'none') return; var w = K.craWhy(fc, x.r, x.mode, c.colId); if (w) add('idp|' + fc.key + '|' + x.r.key + '|' + x.mode + '|' + c.colId, x.r.name + ' ' + lc(x.mode) + ' has no effect on ' + c.sysName + ' (' + lc(c.fnName) + '): ' + w + '.', 'Interdependence Autopilot'); }); });
+        out.sort(function (a, b) { return Number(a.ID.slice(10)) - Number(b.ID.slice(10)); });
+        return out;
     }
     // What the PASA appendix shows for one failure condition: null for a part whose Autopilot was not sent.
     function pasa(gr) {
@@ -234,7 +268,10 @@
         if (sentRec('idp', fc)) { out.idp = safe(function () { return idpBlocks(fc); }, null); out.res = safe(function () { return resBlocks(fc); }, null); }
         if (sentRec('mac', fc)) out.mac = safe(function () { return macBlocks(fc); }, null);
         if (sentRec('cof', fc)) out.cof = safe(function () { return cofBlocks(fc); }, null);
-        return out.idp || out.mac || out.cof || out.changed.length ? out : null;
+        else { var li = safe(function () { return linkedInBlocks(fc); }, null); if (li) out.cof = li; }
+        var as = safe(function () { return assumptions(fc); }, []) || [];
+        out.asmp = as.length ? [{ k: 'table', name: 'apx-asmp-' + fc.fcId, title: 'PASA assumptions for ' + fc.fcId, rows: as, lead: '{N} lists the assumptions ' + fc.fcId + ' rests on. Each has to be shown true later, in the SSA or by test.' }] : null;
+        return out.idp || out.mac || out.cof || out.asmp || out.changed.length ? out : null;
     }
     // ---- the PSSA: what the aircraft level added to this system (apx_mac.js: the assemblies, the FHA lines) -----------------
     function linksTo(sy, fcId) {

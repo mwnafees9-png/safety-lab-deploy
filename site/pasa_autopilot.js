@@ -54,7 +54,7 @@
 // Every number comes from SLTopBasis and the trees. window.SLPasaAuto.
 (function (root) {
     'use strict';
-    var VERSION = '2.5';   // 2.5 15 Nov 2026: an appendix shows what the Interdependence, MAC and CoFFE Autopilots sent (apx_bridge.js). // 2.2 11 Nov 2026: a gate whose inputs are all held tighter than their shares says what they use of its budget
+    var VERSION = '2.6';   // 2.6 23 Nov 2026: an appendix shows the PASA assumptions the Autopilots record. // 2.5 15 Nov 2026: an appendix shows what the Interdependence, MAC and CoFFE Autopilots sent (apx_bridge.js). // 2.2 11 Nov 2026: a gate whose inputs are all held tighter than their shares says what they use of its budget
     function g(n) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(n); if (v !== undefined) return v; } } catch (_) {} try { return root[n]; } catch (_) { return undefined; } }
     function arr(v) { return Array.isArray(v) ? v : []; }
     function S(v) { return v == null ? '' : String(v); }
@@ -584,6 +584,7 @@
         // CoFFE
         if (AX && AX.mac && AX.mac.length) { b.push(H(3, 'Minimum acceptable configuration (MAC)')); AX.mac.forEach(function (x) { b.push(x); }); }
         if (AX && AX.cof && AX.cof.length) { b.push(H(3, 'Combined functional failure effects (CoFFE)')); AX.cof.forEach(function (x) { b.push(x); }); }
+        if (AX && AX.asmp && AX.asmp.length) { b.push(H(3, 'Assumptions')); AX.asmp.forEach(function (x) { b.push(x); }); }   // 23 Nov 2026: the PASA assumptions the Autopilots record (apx_bridge.js)
         else if (coffeOn()) {
             b.push(H(3, 'Combined functional failure effects (CoFFE)'));
             var ks = coffeCasesOf(gr);

@@ -48,7 +48,7 @@
  * ==========================================================================*/
 (function (root) {
     'use strict';
-    var VERSION = '1.5';   // 1.5 17 Nov 2026: no ARP table numbers on any table; the two interdependence tables carry their title in the top row, with a white vertical divider; the common resource table has no left-hand column.   // 1.4 17 Nov 2026: "check" for "tick"; the AI reads a design document or the engineer's words and proposes the systems, functions and resources (a person accepts each); the resources are Assumed until compared with the architecture document; what was sent can be taken back out from the page.   // 1.3 17 Nov 2026: a function that does the job is traced up to the aircraft function when it is checked or added here (and the trace the Autopilot made comes off with the check); a resource's providing function is written where the architecture reads it (providedByFunctions).   // 1.2 16 Nov 2026: the Autopilot ASKS for each system and its function, and whether it is a resource system; a resource system is a row of Table Q.4-2, never a column of Table Q.4-1; no resource is checked by the tool.   // 1.1 16 Nov 2026: a field in a row lines up with its label and its button (the site's own bottom margin on fields is taken off inside the Autopilots)
+    var VERSION = '1.6';   // 1.6 23 Nov 2026: each resource failure says what it does to each function it feeds (no effect with its reason, partial loss, total loss, wrong action); the CoFFE and the fault tree place it by that   // 1.5 17 Nov 2026: no ARP table numbers on any table; the two interdependence tables carry their title in the top row, with a white vertical divider; the common resource table has no left-hand column.   // 1.4 17 Nov 2026: "check" for "tick"; the AI reads a design document or the engineer's words and proposes the systems, functions and resources (a person accepts each); the resources are Assumed until compared with the architecture document; what was sent can be taken back out from the page.   // 1.3 17 Nov 2026: a function that does the job is traced up to the aircraft function when it is checked or added here (and the trace the Autopilot made comes off with the check); a resource's providing function is written where the architecture reads it (providedByFunctions).   // 1.2 16 Nov 2026: the Autopilot ASKS for each system and its function, and whether it is a resource system; a resource system is a row of Table Q.4-2, never a column of Table Q.4-1; no resource is checked by the tool.   // 1.1 16 Nov 2026: a field in a row lines up with its label and its button (the site's own bottom margin on fields is taken off inside the Autopilots)
     function g(n) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(n); if (v !== undefined) return v; } } catch (_) {} try { return root[n]; } catch (_) { return undefined; } }
     function arr(v) { return Array.isArray(v) ? v : []; }
     function S(v) { return v == null ? '' : String(v); }
@@ -84,7 +84,7 @@
     function rec(fcKey) {
         var s0 = store(), r = s0.idp[fcKey];
         if (!r || typeof r !== 'object') r = s0.idp[fcKey] = {};
-        ['cols', 'off', 'res', 'cra'].forEach(function (k) { if (!r[k] || typeof r[k] !== 'object') r[k] = {}; });
+        ['cols', 'off', 'res', 'cra', 'craSt', 'craWhy'].forEach(function (k) { if (!r[k] || typeof r[k] !== 'object') r[k] = {}; });
         return r;
     }
     function touched(fcKey) { var r = rec(fcKey); if (r.sent) { r.changedSince = { at: now() }; r.wasSent = r.sent; delete r.sent; } save(); }
@@ -155,6 +155,27 @@
     }
     function resPicked(fc) { return resources().filter(function (r) { return resState(fc, r).on; }); }
     var MODES = ['Partial loss', 'Total loss', 'Degraded', 'Erroneous'];
+    // 23 Nov 2026 (ARP4761A Figure Q.4-1, Table B3; Waqas: "yes lets get this done now"). What a resource failure does to
+    // each system function it feeds, in the terms the CoFFE uses: no effect, partial loss, total loss, or a wrong action.
+    // It decides where the resource failure goes in the fault tree: a total loss of the function under that function's
+    // total loss (ELEC_WBS under FF1.1), a partial loss under its partial loss (ELEC_GSS under FF2.2), a wrong action
+    // under its malfunction. A loss of supply (partial or total loss) is one event per function it reaches, as the book
+    // writes HYD_WBS, HYD_GSS; a degraded or erroneous resource is ONE shared event under every function it reaches, as
+    // the book writes AGS.MF under both spoilers and reversers, so it is never counted as independent failures. "No
+    // effect" needs its reason (the book's PASA-ASMP-03: wheel braking also uses wheel speed); the reason becomes a PASA
+    // assumption. The tool never picks: a phrase the engineer picked that says it outright is read as that answer.
+    var SHARED_MODES = ['Degraded', 'Erroneous'];
+    var CRA_STATES = [['none', 'No effect'], ['partial', 'Partial loss'], ['total', 'Total loss'], ['wrong', 'Wrong action']];
+    var PHRASE_STATE = { 'No effect': 'none', 'No effect. Loss of redundancy': 'none', 'Loss of redundancy': 'none', 'Partial loss of this function': 'partial', 'Total loss of this function': 'total', 'Wrong output': 'wrong' };
+    function craKey(r, mode, colId) { return r.key + '|' + mode + '|' + (colId || ''); }
+    function craState(fc, r, mode, colId) {
+        var rr = peek(fc.key) || {}, k = craKey(r, mode, colId), set = rr.craSt && rr.craSt[k];
+        if (set === 'none' || set === 'partial' || set === 'total' || set === 'wrong') return set;
+        return PHRASE_STATE[craText(fc, r, mode, colId)] || '';
+    }
+    function craWhy(fc, r, mode, colId) { var rr = peek(fc.key) || {}; return T((rr.craWhy || {})[craKey(r, mode, colId)] || ''); }
+    function craShared(mode) { return SHARED_MODES.indexOf(mode) !== -1; }
+    function cellDone(fc, r, mode, colId) { var st = craState(fc, r, mode, colId); return !!craText(fc, r, mode, colId) && !!st && (st !== 'none' || !!craWhy(fc, r, mode, colId)); }
     function craText(fc, r, mode, colId) {
         var mine = ((peek(fc.key) || {}).cra || {})[r.key + '|' + mode + '|' + (colId || '')];
         if (mine != null) return mine;
@@ -165,7 +186,7 @@
     function effectRows(fc) { var out = []; resPicked(fc).forEach(function (r) { resState(fc, r).modes.forEach(function (m) { out.push({ r: r, mode: m }); }); }); return out; }
     function unfinished(fc) {
         var cols = picked(fc);
-        return effectRows(fc).filter(function (x) { var st = resState(fc, x.r); return !craText(fc, x.r, x.mode, '') || cols.some(function (c) { return st.feeds[c.colId] && !craText(fc, x.r, x.mode, c.colId); }); });
+        return effectRows(fc).filter(function (x) { var st = resState(fc, x.r); return !craText(fc, x.r, x.mode, '') || cols.some(function (c) { return st.feeds[c.colId] && !cellDone(fc, x.r, x.mode, c.colId); }); });
     }
     function left(fc) {
         var out = [];
@@ -210,7 +231,7 @@
             by[k].forEach(function (x, i) {
                 var st = resState(fc, x.r);
                 body += '<tr>' + (i === 0 ? '<td class="l" rowspan="' + by[k].length + '">' + E(x.r.name) + '</td>' : '') + '<td class="l">' + E(x.mode) + '</td>'
-                    + cols.map(function (c) { return '<td class="l">' + (st.feeds[c.colId] ? E(craText(fc, x.r, x.mode, c.colId)) : '--') + '</td>'; }).join('')
+                    + cols.map(function (c) { var w = craState(fc, x.r, x.mode, c.colId) === 'none' ? craWhy(fc, x.r, x.mode, c.colId) : ''; return '<td class="l">' + (st.feeds[c.colId] ? E(craText(fc, x.r, x.mode, c.colId) + (w ? '. ' + w : '')) : '--') + '</td>'; }).join('')
                     + '<td class="l">' + E(craText(fc, x.r, x.mode, '')) + '</td></tr>';
             });
         });
@@ -325,6 +346,8 @@
     function feed(fc, key, colId) { var r = resources().filter(function (x) { return x.key === key; })[0]; if (!r) return; var st = resState(fc, r), me = resRec(fc, r); me.feeds[colId] = !st.feeds[colId]; touched(fc.key); }
     function mode(fc, key, m, onNow) { var r = resources().filter(function (x) { return x.key === key; })[0]; if (!r) return; var me = resRec(fc, r), i = me.modes.indexOf(m); if (onNow && i === -1) me.modes.push(m); if (!onNow && i !== -1) me.modes.splice(i, 1); me.modes.sort(function (a, b) { return MODES.indexOf(a) - MODES.indexOf(b); }); touched(fc.key); }
     function setCra(fc, k, text) { rec(fc.key).cra[k] = T(text); touched(fc.key); }
+    function setCraSt(fc, k, v) { if (v && !CRA_STATES.some(function (x) { return x[0] === v; })) return false; var r = rec(fc.key); if (v) r.craSt[k] = v; else delete r.craSt[k]; touched(fc.key); return true; }
+    function setCraWhy(fc, k, t) { rec(fc.key).craWhy[k] = T(t); touched(fc.key); }
     function send(fc, name) {
         name = T(name); if (!name) return { ok: false, why: 'Type your name to sign before sending.' };
         var l = left(fc); if (l.length) return { ok: false, why: l[0] };
@@ -344,6 +367,7 @@
     var CSS = ''
         + '.apx{font-size:14px;line-height:1.45;color:var(--color-text-primary,#101216)}'
         + '.apx-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 12px}'
+        + '.apx-crast{margin:8px 0 0;padding:8px 10px;border:1.5px solid var(--color-border,rgba(20,23,28,.3));border-radius:10px}.apx-crast.open{border-color:#B26A00;border-width:2px}.apx-crast .apx-sw button{padding:6px 10px}'
         + '.apx-sw{display:inline-grid;grid-auto-flow:column;grid-auto-columns:1fr;border:1.5px solid var(--color-border-strong,#14171C);border-radius:11px;overflow:hidden}'
         + '.apx-sw button{font:inherit;font-weight:600;border:0;background:transparent;color:inherit;padding:8px 16px;cursor:pointer;border-right:1.5px solid var(--color-border-strong,#14171C)}.apx-sw button:last-child{border-right:0}'
         + '.apx-sw button.on{background:var(--color-text-primary,#101216);color:var(--color-surface-1,#fff)}.apx-aps{display:grid;margin:0 0 12px;width:100%}.apx-aps button{font-size:15.5px;padding:11px 16px}'
@@ -480,6 +504,13 @@
         return '<select data-apx-cra="' + E(key) + '"><option value="">' + E(placeholder) + '</option>' + opts.map(function (o) { return '<option' + (o === cur ? ' selected' : '') + '>' + E(o) + '</option>'; }).join('') + '<option value="__own"' + (own ? ' selected' : '') + '>Write my own</option></select>'
             + (own || ui.own === key ? '<input type="text" style="margin-top:6px" data-apx-craown="' + E(key) + '" value="' + E(own ? cur : '') + '" placeholder="In your words" aria-label="In your words">' : '');
     }
+    function stateSwitch(fc, r, mode, c) {
+        var k = craKey(r, mode, c.colId), cur = craState(fc, r, mode, c.colId), why = craWhy(fc, r, mode, c.colId);
+        return '<div class="apx-crast' + (cur ? '' : ' open') + '"><div style="font-size:12.5px;margin:0 0 4px"><b>In the CoFFE and the fault tree, this is:</b></div><div class="apx-sw" role="group" aria-label="What it does to ' + E(c.sysName) + '">'
+            + CRA_STATES.map(function (o) { return '<button type="button" class="' + (cur === o[0] ? 'on' : '') + '" data-apx-crast="' + E(k + '§' + o[0]) + '" aria-pressed="' + (cur === o[0]) + '">' + o[1] + '</button>'; }).join('') + '</div>'
+            + (cur === 'none' ? '<input type="text" style="margin-top:6px" data-apx-crawhy="' + E(k) + '" value="' + E(why) + '" placeholder="Why it has no effect (it goes to the PASA as an assumption)" aria-label="Why it has no effect">' : '')
+            + (cur && cur !== 'none' ? '<div style="font-size:12px;margin-top:4px">' + (craShared(mode) ? 'One shared event under every function it reaches.' : 'Its own event under this function\'s ' + (cur === 'wrong' ? 'wrong action' : cur + ' loss') + '.') + '</div>' : '') + '</div>';
+    }
     function stepEffects(fc) {
         var rows = effectRows(fc);
         if (!rows.length) return card('What does each failure do?', 'Say how each checked resource can fail first.', '');
@@ -487,10 +518,10 @@
         var x = rows[ui.eff], st = resState(fc, x.r), cols = picked(fc), k = x.r.key + '|' + x.mode + '|';
         var body = '<div class="apx-pager"><button class="apx-btn" data-apx-eff="-1"' + (ui.eff === 0 ? ' disabled' : '') + '>Previous</button><b>' + (ui.eff + 1) + ' of ' + rows.length + '</b><button class="apx-btn" data-apx-eff="1"' + (ui.eff === rows.length - 1 ? ' disabled' : '') + '>Next failure</button></div><div class="apx-eff">'
             + cols.map(function (c) {
-                return '<div><b>' + E(c.sysName) + '</b><div style="font-size:12.5px">' + E(c.fnName) + '</div></div><div>' + (st.feeds[c.colId] ? effectSelect(k + c.colId, craText(fc, x.r, x.mode, c.colId), EFFECTS, 'Pick what happens') : '-- <span style="font-size:12.5px">(not fed by ' + E(x.r.name) + ', so nothing to say)</span>') + '</div>';
+                return '<div><b>' + E(c.sysName) + '</b><div style="font-size:12.5px">' + E(c.fnName) + '</div></div><div>' + (st.feeds[c.colId] ? effectSelect(k + c.colId, craText(fc, x.r, x.mode, c.colId), EFFECTS, 'Pick what happens') + stateSwitch(fc, x.r, x.mode, c) : '-- <span style="font-size:12.5px">(not fed by ' + E(x.r.name) + ', so nothing to say)</span>') + '</div>';
             }).join('')
             + '<div style="padding-top:8px"><b>For the whole aircraft</b></div><div style="padding-top:8px">' + effectSelect(k, craText(fc, x.r, x.mode, ''), acEffects(x.r), 'Pick the aircraft-level effect') + '</div></div>';
-        return card('If ' + E(x.r.name) + ' has a ' + E(lc(x.mode)) + ', what happens?', 'Pick what happens to each system function it feeds, then what that adds up to for the aircraft.', body) + preview('What the PASA will show', tableB3(fc));
+        return card('If ' + E(x.r.name) + (craShared(x.mode) ? ' is ' : ' has a ') + E(lc(x.mode)) + ', what happens?', 'Pick what happens to each system function it feeds, then what that adds up to for the aircraft.', body) + preview('What the PASA will show', tableB3(fc));
     }
     // v1.4: where an answer comes from. The systems, functions and resources come from a person's review of the
     // architecture: by hand, or the AI reads a design document or the engineer's words and proposes them, and a person
@@ -673,6 +704,7 @@
         else if (d.apxRes) resTick(fc, d.apxRes);
         else if (d.apxFeed) { var fd = d.apxFeed.split('|'); feed(fc, fd[0], fd.slice(1).join('|')); }
         else if (d.apxEff) ui.eff += Number(d.apxEff);
+        else if (d.apxCrast) { var cs = d.apxCrast.split('§'); setCraSt(fc, cs[0], cs[1]); }
         else if (d.apxAddfn) { var a = d.apxAddfn.split('|'), r1 = addFunction(a[0], val('[data-apx-newfn="' + a[0] + '"]')); if (!r1.ok) { toast(r1.why, 'warning'); return; } if (r1.existed) toast('That function is already in this system. It is checked here instead of being added again.'); ui.open[a[0]] = true; var c1 = cellOf(fc, colOf('fn:' + r1.funcId) || { colId: 'fn:' + r1.funcId, funcId: r1.funcId }); if (!c1.on) { rec(fc.key).cols['fn:' + r1.funcId] = { role: a[1] === 'fails' ? 'fails' : 'does', how: 'loss' }; if (a[1] !== 'fails') traceUp(fc, r1.funcId); } touched(fc.key); }
         else if (d.apxKind) { var kk = d.apxKind.split('|'); ui.kind[kk[0]] = kk[1]; }
         else if (d.apxAddsys) {
@@ -716,6 +748,7 @@
         else if (d.apxMode) { var m = d.apxMode.split('|'); mode(fc, m[0], m[1], !!t.checked); draw(); }
         else if (d.apxCra != null && d.apxCra !== '') { if (t.value === '__own') { ui.own = d.apxCra; draw(); var inp = _host.querySelector('[data-apx-craown="' + d.apxCra.replace(/"/g, '\\"') + '"]'); if (inp) inp.focus(); return; } ui.own = null; setCra(fc, d.apxCra, t.value); draw(); }
         else if (d.apxCraown != null && d.apxCraown !== '') { ui.own = null; setCra(fc, d.apxCraown, t.value); draw(); }
+        else if (d.apxCrawhy != null && d.apxCrawhy !== '') { setCraWhy(fc, d.apxCrawhy, t.value); draw(); }
         else if (d.apxSign) { ui.sign = t.value; }
     }
     function onToggle(e) { var t = e.target; if (t && t.dataset && t.dataset.apxSys != null && _host && _host.contains(t)) ui.open[t.dataset.apxSys] = !!t.open; }
@@ -781,10 +814,10 @@
     })(80);
 
     var api = { VERSION: VERSION, open: open, enabled: enabled, on: on, off: off, render: render,
-        model: { proposals: proposals, resStatus: resStatus, resBasis: resBasis, fcs: fcs, fcOf: fcOf, allCols: allCols, cellOf: cellOf, picked: picked, resources: resources, resState: resState, resPicked: resPicked, effectRows: effectRows, craText: craText, left: left, status: status, MODES: MODES },
-        act: { propose: propose, acceptProposal: acceptProposal, dismissProposal: dismissProposal, setCompare: setCompare, cleanProposals: cleanProposals, addResourceFull: addResourceFull, tick: tick, setRole: setRole, proposal: proposal, resTick: resTick, feed: feed, mode: mode, setCra: setCra, send: send, addSystem: addSystem, addFunction: addFunction, addResource: addResource },
+        model: { proposals: proposals, resStatus: resStatus, resBasis: resBasis, fcs: fcs, fcOf: fcOf, allCols: allCols, cellOf: cellOf, picked: picked, resources: resources, resState: resState, resPicked: resPicked, effectRows: effectRows, craText: craText, craState: craState, craWhy: craWhy, craShared: craShared, CRA_STATES: CRA_STATES, SHARED_MODES: SHARED_MODES, left: left, status: status, MODES: MODES },
+        act: { propose: propose, acceptProposal: acceptProposal, dismissProposal: dismissProposal, setCompare: setCompare, cleanProposals: cleanProposals, addResourceFull: addResourceFull, tick: tick, setRole: setRole, proposal: proposal, resTick: resTick, feed: feed, mode: mode, setCra: setCra, setCraSt: setCraSt, setCraWhy: setCraWhy, send: send, addSystem: addSystem, addFunction: addFunction, addResource: addResource },
         tables: { q41: tableQ41, q42: tableQ42, b3: tableB3 }, _ui: ui, _html: html, register: register, setAp: setAp,
-        kit: { takeOut: takeOut, doTakeOut: doTakeOut, traceUp: traceUp, fnRow: fnRow, derived: derived, isResSys: isResSys, providerText: providerText, g: g, arr: arr, S: S, E: E, T: T, lc: lc, safe: safe, fn: fn, pc: pc, now: now, who: who, save: save, toast: toast, store: store, card: card, preview: preview, abbr: abbr, style: style, fcs: fcs, fcOf: fcOf, curFc: curFc, systems: systems, allCols: allCols, colOf: colOf, cellOf: cellOf, picked: picked, resources: resources, resState: resState, resPicked: resPicked, providerNames: providerNames, acFnName: acFnName, acFnLabel: acFnLabel, fcWord: fcWord, status: status, apStatus: apStatus, peek: peek, ui: ui, draw: function () { draw(); }, val: function (sel) { return val(sel); }, rerender: function () { rerender(); } } };
+        kit: { craState: craState, craWhy: craWhy, craShared: craShared, effectRows: effectRows, craText: craText, takeOut: takeOut, doTakeOut: doTakeOut, traceUp: traceUp, fnRow: fnRow, derived: derived, isResSys: isResSys, providerText: providerText, g: g, arr: arr, S: S, E: E, T: T, lc: lc, safe: safe, fn: fn, pc: pc, now: now, who: who, save: save, toast: toast, store: store, card: card, preview: preview, abbr: abbr, style: style, fcs: fcs, fcOf: fcOf, curFc: curFc, systems: systems, allCols: allCols, colOf: colOf, cellOf: cellOf, picked: picked, resources: resources, resState: resState, resPicked: resPicked, providerNames: providerNames, acFnName: acFnName, acFnLabel: acFnLabel, fcWord: fcWord, status: status, apStatus: apStatus, peek: peek, ui: ui, draw: function () { draw(); }, val: function (sel) { return val(sel); }, rerender: function () { rerender(); } } };
     try { root.SLApxAuto = api; } catch (_) {}
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
