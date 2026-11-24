@@ -53,6 +53,9 @@ async function paywallScenario(src) {
     window, document: { getElementById: id => (id === 'sl-paywall-screen' && gateUp ? gate : null) },
     isPaywalled: () => paywalled, GATE_ID: 'sl-paywall-screen',
     _renderPaywallScreen: () => { rendered++; gateUp = true; }, _renderTrialOrGrandfatherBanner: () => {},
+    // 23 Nov 2026: _check now hands every customer install to the license screen first (_licenseRules, covered by
+    // regression_customer_install_trial_20261123); with that rule off, this still pins the wait-for-the-verdict path.
+    _licenseRules: () => false, _clearHostedScreens: () => {},
   };
   gate.remove = function () { this.removed = true; gateUp = false; };
   vm.createContext(ctx);

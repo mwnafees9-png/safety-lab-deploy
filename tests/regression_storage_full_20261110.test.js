@@ -44,7 +44,7 @@ function mutate(file, body) {
 }
 {
     const HTML = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8');
-    check('1  local_store.js 1.0 loads right after slab_config.js; helpers 3.75, tab_guard 1.4, auth_gate 62.80', /slab_config\.js\?v=1\.5" defer><\/script>\s*<!--[^>]*-->\s*<script src="local_store\.js\?v=1\.0" defer>/.test(HTML) && HTML.indexOf('helpers_modules.js?v=3.75') > 0 && HTML.indexOf('tab_guard.js?v=1.4') > 0 && HTML.indexOf('auth_gate.js?v=62.80') > 0);
+    check('1  local_store.js 1.0 loads right after slab_config.js; helpers 3.75, tab_guard 1.4, auth_gate 62.80', /slab_config\.js\?v=1\.5" defer><\/script>\s*<!--[^>]*-->\s*<script src="local_store\.js\?v=1\.0" defer>/.test(HTML) && HTML.indexOf('helpers_modules.js?v=3.76') > 0 && HTML.indexOf('tab_guard.js?v=1.4') > 0 && HTML.indexOf('auth_gate.js?v=62.80') > 0);
 }
 const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej(new Error('timed out after ' + ms / 1000 + ' s: ' + what)), ms))]);
 (async function main() {

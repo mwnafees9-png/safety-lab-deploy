@@ -24,6 +24,9 @@
  * The core decision is a pure function (window.SLLicenseVerify) so the test wall can
  * execute it in Node with an ephemeral keypair.
  *
+ * 1.5 (23 Nov 2026): the "load your license" screen follows every license verdict, not only the first, because on a
+ *   customer install it is the only screen for "no valid license": the hosted pricing screen, the trial banner and the
+ *   personal trial clock do not exist where the signed license is the authority (misc_fn_modules.js slSignedLicenseRules).
  * 1.2 (6 Sep 2026, desktop parity):
  *   · trial licenses — payload.trial:true (a normal, short-dated license Safety Lab signs
  *     for an evaluation; the app shows "Trial · N days left"). Waqas: "temp licenses for trials".
@@ -271,11 +274,22 @@
       });
     } catch (_) {}
   }
-  ready.then(function (res) {
-    if (!res || res.valid || !res.authoritative) return;
-    if (W.__SLAB_CONFIG_FATAL__) return;          // the config screen owns a refused install
-    if (!customerMode()) return;                  // never on the demo cloud
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { renderLicenseScreen(res); });
-    else renderLicenseScreen(res);
-  }).catch(function () {});
+  // 23 Nov 2026: the license screen follows EVERY verdict (the first, the re-check with the signed-in identity, a newly
+  // loaded license), not only the first: on a customer install it is the only screen for "no valid license" (the
+  // hosted pricing screen never shows there), so a verdict that turns invalid later must bring it up, and a valid one
+  // takes it down.
+  function gateFor(res) {
+    if (!res) return;
+    var go = function () {
+      if (W.__SLAB_CONFIG_FATAL__) return;   // the configuration screen owns a refused config
+      if (res.valid || !res.authoritative || !customerMode()) {
+        if (res.valid) { var g = document.getElementById('slab-license-gate'); if (g) g.remove(); }
+        return;
+      }
+      renderLicenseScreen(res);
+    };
+    try { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go); else go(); } catch (_) {}
+  }
+  try { if (typeof W.addEventListener === 'function') W.addEventListener('slab-license-changed', function () { gateFor(W.SLLicense); }); } catch (_) {}
+  ready.then(gateFor).catch(function () {});
 })();

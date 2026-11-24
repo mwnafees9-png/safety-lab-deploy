@@ -4143,7 +4143,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- SEC-1 (29 Sep 2026): must precede slab_license.js and auth_gate.js. -->
     <script src="license_token.js?v=1.0" defer></script>
     <!-- 6 Sep 2026 — offline signed-license verification (needs SLConfig; must precede the tier readers). -->
-    <script src="slab_license.js?v=1.4" defer></script>
+    <script src="slab_license.js?v=1.5" defer></script>
     <script src="fn_wrap.js?v=1.0" defer></script>
     <!-- 13 Sep 2026 (R19) — the ONE global error catcher: records uncaught errors and unhandled rejections, tells the person once in plain language, never blocks. Loads before every app module so boot errors are caught too. -->
     <script src="error_watch.js?v=1.0" defer></script>
@@ -4264,7 +4264,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
     <!-- 12 Nov 2026 (live team data): content_guard.js (SLContentGuard) is the one rule every writer asks before a save: would this remove a large part of the project? -->
     <script src="content_guard.js?v=1.0" defer></script>
-    <script src="helpers_modules.js?v=3.75" defer></script>
+    <script src="helpers_modules.js?v=3.76" defer></script>
     <script src="cloud_writer.js?v=1.5" defer></script>
     <script src="severity_axes.js?v=1.36" defer></script>
     <!-- 5 Sep 2026 — levers 2 + 3: escapes per phase; aircraft / crew levels derived from the MAC and the Task Analysis. -->
@@ -4274,8 +4274,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- P2 batch 6 — residual function layer (182 validated segments, 310 functions). NOTE: CutsetExplosionError intentionally overrides fta_engine.js's page-side copy, exactly as the monolith did. -->
     <!-- 16 Oct 2026: the shared AI inputs file ("safetylab-ai-inputs" v1, the same in Safety Lab, Sys Lab and Cert Lab); the source document store hashes with it. -->
     <script src="ai_inputs_exchange.js?v=1.0" defer></script>
-    <script src="misc_fn_modules.js?v=67.02" defer></script>
-    <script src="safety_lab.js?v=65.81" defer></script>
+    <script src="misc_fn_modules.js?v=67.03" defer></script>
+    <script src="safety_lab.js?v=65.82" defer></script>
     <!-- Phase 66.34 — read access to the app's top-level lexical globals. MUST load
          after the declarations exist. Top-level `let` is NOT on window; anything that
          reached for window.selectedNodeData got undefined and failed silently. -->

@@ -1,3 +1,4 @@
+// 23 Nov 2026: no pricing screen and no trial banner where the signed license is the authority (slSignedLicenseRules); the license screen owns that case.
 // 13 Sep 2026 (R19 hygiene): store writers announce their own writes with scheduleAutosave; see tests/regression_writers_announce.test.js
 // 16 Oct 2026 (AI Assistant page): SafetyLabSourceDocs.add stamps who added a document and its text hash and keeps a same-name copy's controlled flag; new setControlled() and replaceAll() (the page's writes, through scheduleAutosave and so SLChangeAck).
 // 13 Oct 2026 (fix G): Change Type offers SEQ, and NOT only when the project allows it and the gate has at most one input. See tests/regression_fta_handbuild_20261013b.test.js
@@ -5203,7 +5204,12 @@ window._bulkSel = new Set();
         document.head.appendChild(s);
     }
 
+    // 23 Nov 2026: where the signed license is the authority there is no pricing screen and no trial banner, ever. A customer
+    // install without a valid license gets slab_license.js's "load your license" screen and nothing else.
+    function _licenseRules() { try { return typeof slSignedLicenseRules === 'function' && slSignedLicenseRules(); } catch (_) { return false; } }
+    function _clearHostedScreens() { ['sl-paywall-banner', GATE_ID].forEach(function (id) { const el = document.getElementById(id); if (el) el.remove(); }); }
     function _renderPaywallScreen() {
+        if (_licenseRules()) { _clearHostedScreens(); return; }
         _ensureStyles();
         if (document.getElementById(GATE_ID)) return;
         const email = (function() { try { return localStorage.getItem('safetyLab.signup.email') || ''; } catch(_) { return ''; } })();
@@ -5254,6 +5260,7 @@ window._bulkSel = new Set();
     }
 
     function _renderTrialOrGrandfatherBanner() {
+        if (_licenseRules()) { _clearHostedScreens(); return; }
         _ensureStyles();
         // Remove any existing banner before rendering a fresh one (state may have changed).
         const existing = document.getElementById('sl-paywall-banner');
@@ -5314,6 +5321,7 @@ window._bulkSel = new Set();
     // verdict (first check, re-check after sign-in, a newly loaded license) decides again; and the
     // paywall comes down when the answer is no longer "paywalled".
     function _check() {
+        if (_licenseRules()) { _clearHostedScreens(); return; }   // the license screen (slab_license.js) owns this case
         if (typeof isPaywalled === 'function' && isPaywalled()) {
             _renderPaywallScreen();
         } else {

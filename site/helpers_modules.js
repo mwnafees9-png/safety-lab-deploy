@@ -8505,6 +8505,13 @@ function onSignupEmailChange() {
         if (btn) btn.textContent = 'Continue';
         return;
     }
+    if (typeof slSignedLicenseRules === 'function' && slSignedLicenseRules()) {
+        // 23 Nov 2026: a customer install. No tier choice and no trial: the organization's license covers the account.
+        if (banner) { banner.className = 'signup-detect-banner'; banner.style.display = 'block'; banner.innerHTML = '<strong>Your organization\'s license covers this account.</strong> ' + _authSendBlurb(); }
+        if (picker) picker.style.display = 'none';
+        if (btn) btn.textContent = _authSendLabel();
+        return;
+    }
     if (isCompedEmail(email)) {
         // Comped partner domain — clean sign-in, no tier or pricing language surfaced.
         if (banner) {
@@ -8586,7 +8593,10 @@ async function submitSignup() {
     setSignupEmail(email);
     try { endTrial(); } catch(_) {}
     let landed = '';
-    if (isCompedEmail(email)) {
+    if (typeof slSignedLicenseRules === 'function' && slSignedLicenseRules()) {
+        // 23 Nov 2026: a customer install. The signed license decides the tier; no tier is guessed and no trial starts.
+        landed = 'covered by your organization\'s license';
+    } else if (isCompedEmail(email)) {
         setLicenseTier(((typeof compedTierFor === 'function' && compedTierFor(email)) || 'pro-plus'));
         landed = 'welcome aboard';
     } else if (isEduEmail(email)) {

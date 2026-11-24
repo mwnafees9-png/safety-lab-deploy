@@ -1,3 +1,45 @@
+## 23 Nov 2026, latest: NO PERSONAL TRIAL CLOCK ON A CUSTOMER INSTALL. Radia's desktop showed "Trial, 1 day left" over a valid enterprise license.
+
+**Why (Waqas's brief).** "Fix needed: the old personal trial clock is running on customer installs." On Radia's own server, the desktop app showed Greg Ryan "Trial, 1 day left", a Subscribe button and the EDU tier. Their signed license SL-LIC-2026-RADIA-T5 is a valid enterprise license that ends 4 Dec.
+
+**Why Greg's sign-in took the fallback.** Their desktop is 0.21.27 (web edb28b7). In that build `_initSupabaseClient` had no Files only guard, so in Files only mode `createClient('')` threw, the function returned no client, and `submitSignup` took the local fallback. The fallback's tier picker defaults to "trial", so it ran `setLicenseTier('pro-plus')` and `startTrial('pro-plus')`. The clock lives in this computer's localStorage (`safetyLab.license.trialStartedAt`, `trialTarget`), so it stayed when they moved to their own server, and from then on `getEffectiveTier` returned EDU for the 10 days. I checked the bundled app in the desktop repo: `git show fe7ff4f:app/helpers_modules.js` has the guard-less `_initSupabaseClient` and the `startTrial("pro-plus")` fallback; `app/misc_fn_modules.js` has `getTrialDaysRemaining` with no license check.
+- The current code closes that doorway: dcf23a9 ("Files only opens with no sign-in"), in desktop 0.21.30 and later, means Files only never asks for a sign-in. An own-server install always builds a client unless the configuration is refused (`__SLAB_CONFIG_FATAL__`) or the SDK file is missing, and in both of those cases the fallback is still reachable. So the fallback itself is now trial-free on a customer install (rule 2).
+- Even 0.21.31, the latest desktop, carries the unguarded trial clock and the fallback trial. **Radia needs the next desktop release (0.21.32), pulled from the web commit carrying this fix.**
+
+**The rule (misc_fn_modules.js 67.03, `slSignedLicenseRules()`).** True on self-hosted, Files only (browser-only) and desktop. Those are known from `SLConfig.mode` as soon as the configuration loads, so the rule holds before the asynchronous license verdict exists (the 22 Oct lesson). It is also true on any install whose signed license the verdict made the authority. Where it is true:
+1. `getTrialDaysRemaining` returns 0, so `isOnTrial` is false, and `isInGrandfatherWindow` is false.
+2. `startTrial` is a no-op that returns 0 and writes nothing. In the fallback sign-up (helpers_modules.js 3.76), `submitSignup` sets no tier and starts no trial ("covered by your organization's license"), and `onSignupEmailChange` shows "Your organization's license covers this account." with no tier picker.
+3. A stored clock is cleared. This happens at load, when the license ready promise resolves, and on every `slab-license-changed` verdict. The load-time clear was needed: the test caught that slab_license.js often finishes its verdict before misc_fn_modules.js runs, so listening for the event alone missed it.
+4. The trial banner and the pricing screen never render (safety_lab.js 65.82: `_renderPaywallScreen`, `_renderTrialOrGrandfatherBanner` and `_check` remove both and return). With no valid license, slab_license.js (1.5) shows the "load your license" screen, which now follows EVERY verdict: a later invalid verdict brings it up and a valid one takes it down. It still never covers a refused configuration.
+- The hosted demo cloud is unchanged: same clock, same banner, same pricing screen, same grandfather window.
+
+**Other callers of the trial predicates, checked.**
+- helpers getEffectiveTier (`isOnTrial`, `isInGrandfatherWindow`): it now falls through to `getLicenseTier`, which returns the license tier.
+- isPaywalled: it already returns the license answer first when authoritative, and its trial lines are hosted only.
+- misc showUpgradeRequiredToast (`getTrialTargetTier` and `isOnTrial`): it only words the toast, and on a customer install there is no trial.
+- safety_lab: the window exports (467–501), and the banner and paywall (guarded above).
+- helpers `_syncEntitlementFromServer`: it writes trialStartedAt from the server's trial_ends_at, but it is hosted only and returns early when the license is authoritative.
+- The endTrial callers (sign-in and sign-out paths) and startTrial in the fallback are covered by the rule.
+- The signOut key list (safety_lab 5297) is unchanged.
+
+**Tests.** The new tests/regression_customer_install_trial_20261123 has 28 checks and runs the real page:
+- S checks the rule by mode in a sandbox, plus the pins.
+- A covers Files only and then the desktop. Each uses a valid enterprise license whose WebCrypto verify is slowed by 2.5 s, so the page runs before the verdict. It also has a stored clock 9 days old (1 day left) and an early sign-up date. The checks:
+  - the tier is enterprise, never EDU, and there is no trial before or after the verdict;
+  - the clock is cleared, and a clock written later still doesn't count;
+  - there is no grandfather window inside its June dates, and startTrial is a no-op;
+  - no banner or pricing screen appears, even when asked for directly with the predicates forced;
+  - the fallback sign-up sets no tier or trial and offers no picker;
+  - a later invalid verdict brings the license screen and not the pricing screen.
+- B is the hosted demo with the same clock: still on trial, 1 day left, EDU, the banner reads "Trial, 1 day left", the grandfather window works, startTrial writes a 10-day clock, and the pricing screen renders.
+- Mutations: clock, start, grand, clear, banner, pricing, signup, gatefollow and mode each turn the suite red.
+- Re-run: paywall 23/23, signin_options, files_only_start (pins), signout, continue_session, desktop_sync_defects, storage_full and cascade_scope (pins).
+- regression_desktop_parity checks the source for `if (W.__SLAB_CONFIG_FATAL__) return;`, and gateFor keeps that line.
+
+**Not named in any served file.** The code comments say "a customer install".
+
+**Open.** The apx Autopilot pages for Radia (?apx=1, and the desktop has no address bar). The fault trees from the CoFFE gate. System FHA lines numbered FC-001. The CMA Autopilot doesn't read projectConfig.apx.cma. site/landing-1.html (keep or delete). The untracked files in this repo stop pull-web.sh (it needs a clean tree).
+
 ## 23 Nov 2026, latest: THE AEOLUS HL-1 AT FULL SCALE: 24 SYSTEMS, 60 FAILURE CONDITIONS, EVERY AUTOPILOT DONE.
 
 **Why (Waqas).** "lets fill those out in full, human factors, a full scale demo that any customer can use please, please expand the size of the demo"; confirmed: grow the aircraft and the HF depth both; task times typed as assumptions labeled as such.

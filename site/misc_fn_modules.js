@@ -1,3 +1,4 @@
+// 23 Nov 2026: slSignedLicenseRules(): no personal trial clock and no grandfather window where the signed license is the authority; a clock already stored on such a machine is cleared when the license verdict comes in.
 // 6 Nov 2026: the strictest-DAL smoothing smooths the reverted DAL (_dalIfReverted), claims now reduce (support_modules allocateDAL).
 // 16 Oct 2026 (AI Assistant page): _slabGuardSourceDoc keeps controlled, addedBy, revision, the text hash and processedVia through a save (the controlled flag the ITAR fence reads used to be dropped on save).
 // 13 Oct 2026 (fix G): spawns fta_worker.js v1.9 with the engine v1.11 (SEQ gate, NOT gate with prime implicants).
@@ -83,7 +84,18 @@ function getTrialTargetTier() {
         return (t && LICENSE_TIER_RANK.hasOwnProperty(t)) ? t : null;
     } catch(_) { return null; }
 }
+// 23 Nov 2026: ONE RULE. Wherever the signed license is the authority (a customer install: self-hosted, Files only or
+// desktop, known as soon as the configuration loads; or any install whose signed license the verdict made the authority),
+// the personal trial clock and the grandfather window do not exist. The license decides the tier, and slab_license.js
+// shows the "load your license" screen when there is no valid one. The mode is checked first, so the rule holds before
+// the asynchronous license verdict exists (the 22 Oct timing lesson).
+function slSignedLicenseRules() {
+    try { const m = window.SLConfig && window.SLConfig.mode; if (m === 'self-hosted' || m === 'browser-only' || m === 'desktop') return true; } catch (_) {}
+    try { const L = window.SLLicense; if (L && L.authoritative) return true; } catch (_) {}
+    return false;
+}
 function getTrialDaysRemaining() {
+    if (slSignedLicenseRules()) return 0;
     const started = getTrialStartedAt();
     if (!started) return 0;
     const remainingMs = TRIAL_DURATION_MS - (Date.now() - started);
@@ -93,6 +105,7 @@ function isOnTrial() { return getTrialDaysRemaining() > 0; }
 function startTrial(targetTier) {
     // Call once at signup. `targetTier` is the paid tier the user is trialing toward
     // (used by upsell prompts to suggest the right "Upgrade to X" CTA when the trial ends).
+    if (slSignedLicenseRules()) return 0;   // no trial clock where the signed license decides
     if (!targetTier || !LICENSE_TIER_RANK.hasOwnProperty(targetTier)) targetTier = 'pro';
     try {
         localStorage.setItem('safetyLab.license.trialStartedAt', String(Date.now()));
@@ -106,6 +119,14 @@ function endTrial() {
         localStorage.removeItem('safetyLab.license.trialTarget');
     } catch(_) {}
 }
+// A machine that already carries a trial clock (signed in before this rule) is cleaned up when the license verdict
+// comes in, so nothing of the hosted trial is left on a customer install.
+function _slClearTrialUnderLicense() { try { if (slSignedLicenseRules()) endTrial(); } catch (_) {} }
+// slab_license.js loads first and its verdict often lands before this file runs, so the event alone can be missed:
+// clear now (the mode already decides on a customer install), on the ready promise, and on every later verdict.
+try { if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') window.addEventListener('slab-license-changed', _slClearTrialUnderLicense); } catch (_) {}
+try { _slClearTrialUnderLicense(); } catch (_) {}
+try { const _slReady = typeof window !== 'undefined' && window.__slabSignedLicenseReady; if (_slReady && typeof _slReady.then === 'function') _slReady.then(_slClearTrialUnderLicense, function () {}); } catch (_) {}
 
 function getSignupDate() {
     try {
@@ -122,6 +143,7 @@ function setSignupDate(ts) {
 }
 
 function isInGrandfatherWindow() {
+    if (slSignedLicenseRules()) return false;
     const signupAt = getSignupDate();
     if (!signupAt) return false;
     // Only signups made BEFORE enforcement start qualify for grandfather treatment.
