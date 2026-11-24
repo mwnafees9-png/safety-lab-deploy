@@ -1,8 +1,8 @@
 /* ============================================================================
  * apx_coffe.js (SLApxCof v1.0, 15 Nov 2026): the CoFFE Autopilot (combined functional failure effects). Step 4 of 5 of
  * the Interdependence, MAC and CoFFE Autopilots. It registers on the page the three share (apx_autopilots.js), takes its
- * columns from the MAC Autopilot (apx_mac.js) and does its math in apx_engine.js. Behind the same switch only our team
- * sees; it saves in projectConfig.apx.cof.
+ * columns from the MAC Autopilot (apx_mac.js) and does its math in apx_engine.js. On for everyone since
+ * 24 Nov 2026; it saves in projectConfig.apx.cof.
  *
  * Waqas, 15 Nov 2026: "while you are at it understand the CoFFE analysis too please"; the tables are "exactly" those of
  * the ARP4761A contiguous example: Tables Q.4-3, Q.4-4 and Q.4-5 (each system functional failure against its system FHA
@@ -61,7 +61,7 @@
  * ==========================================================================*/
 (function (root) {
     'use strict';
-    var VERSION = '1.7';   // 1.7 23 Nov 2026: the shortest route counts failures by the units that have to be lost (both of a pair = 2), a resource failure that does it alone = 1   // 1.6 23 Nov 2026: every CoFFE source of a failure condition shown, added together for the check, the driver named, the sources checked against each other   // 1.5 23 Nov 2026: resource failures by what they do; one table for several failure conditions; outcome definitions; the CMA list; budgets per flight   // 1.4 23 Nov 2026: a backup whose change-over can fail on its own is drawn under its loss as its two ways   // 1.3 17 Nov 2026: no ARP table or figure numbers on the captions   // 1.1 17 Nov 2026: the functional failures are the lines the tool added to each system's FHA; each line's effect on its own is written from the CoFFE table
+    var VERSION = '1.8';   // 1.8 24 Nov 2026: on for everyone (wording: the earlier CoFFE questions)   // 1.7 23 Nov 2026: the shortest route counts failures by the units that have to be lost (both of a pair = 2), a resource failure that does it alone = 1   // 1.6 23 Nov 2026: every CoFFE source of a failure condition shown, added together for the check, the driver named, the sources checked against each other   // 1.5 23 Nov 2026: resource failures by what they do; one table for several failure conditions; outcome definitions; the CMA list; budgets per flight   // 1.4 23 Nov 2026: a backup whose change-over can fail on its own is drawn under its loss as its two ways   // 1.3 17 Nov 2026: no ARP table or figure numbers on the captions   // 1.1 17 Nov 2026: the functional failures are the lines the tool added to each system's FHA; each line's effect on its own is written from the CoFFE table
     var A = root.SLApxAuto, X = root.SLApx, M = root.SLApxMac;
     if (!A || !A.kit || !X || !M || !M.model) { if (typeof module !== 'undefined' && module.exports) module.exports = { VERSION: VERSION, missing: true }; return; }
     var K = A.kit, E = K.E, S = K.S, T = K.T, arr = K.arr, safe = K.safe, lc = K.lc, MM = M.model, note = M.note, joinAnd = MM.joinAnd;
@@ -603,7 +603,7 @@
         if (!macDone) body += note('warn', 'The MAC is not finished for this failure condition, so no answer is outlined and you answer every question yourself. Finish the MAC Autopilot to get its answers here.');
         var dis = disagreements(fc, sol); if (dis.length) body += note('bad', dis.length + ' answer' + (dis.length > 1 ? 's disagree' : ' disagrees') + ' with the MAC. That is a finding: either the MAC or the performance data needs a second look. For example: ' + E(caseText(dis[0], sol.ds)) + '.');
         var ov = !Object.keys(sol.a1).length ? oldVerdicts(fc) : [];
-        if (ov.length) body += note('', '<b>This failure condition has ' + ov.length + ' signed verdict' + (ov.length > 1 ? 's' : '') + ' from today\'s CoFFE page.</b> The tool can bring them in as answers you then check. <button class="apx-btn" data-apx-x="convert" style="margin-left:6px">Bring them in</button>');
+        if (ov.length) body += note('', '<b>This failure condition has ' + ov.length + ' signed verdict' + (ov.length > 1 ? 's' : '') + ' from the earlier CoFFE questions.</b> The tool can bring them in as answers you then check. <button class="apx-btn" data-apx-x="convert" style="margin-left:6px">Bring them in</button>');
         if (r.converted) body += note('', r.converted.n + ' earlier verdict' + (r.converted.n === 1 ? ' was' : 's were') + ' brought in' + (r.converted.skipped ? '; ' + r.converted.skipped + ' could not be matched to a column here' : '') + (r.converted.clash ? '; ' + r.converted.clash + ' contradicted another answer and ' + (r.converted.clash === 1 ? 'was' : 'were') + ' left out' : '') + '.');
         if (!nq) body += note('good', '<b>All ' + N + ' cases are done.</b> You answered ' + asked + ' quick question' + (asked === 1 ? '' : 's') + '; logic filled ' + logic + ' cases.');
         else if (nq.phase === 1) {

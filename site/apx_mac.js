@@ -1,7 +1,7 @@
 /* ============================================================================
  * apx_mac.js (SLApxMac v1.0, 15 Nov 2026): the MAC Autopilot. Step 3 of 5 of the Interdependence, MAC and CoFFE
  * Autopilots. It registers itself on the page the three share (apx_autopilots.js) and does its math in apx_engine.js.
- * Behind the same switch only our team sees; it saves in projectConfig.apx.
+ * On for everyone since 24 Nov 2026; it saves in projectConfig.apx.
  *
  * Waqas, 15 Nov 2026:
  *   "for MAC why aren't we make them choose configuration first for the systems performing the function": the build of
@@ -63,7 +63,7 @@
  * ==========================================================================*/
 (function (root) {
     'use strict';
-    var VERSION = '1.3';   // 1.3 23 Nov 2026: the change-over question for a group built as one unit backing up the other   // 1.1 17 Nov 2026: the build step asks first; assemblies are written onto their system; every loss gets its line in the system's FHA by itself, severity left blank
+    var VERSION = '1.4';   // 1.4 24 Nov 2026: on for everyone (wording: the earlier MAC model)   // 1.3 23 Nov 2026: the change-over question for a group built as one unit backing up the other   // 1.1 17 Nov 2026: the build step asks first; assemblies are written onto their system; every loss gets its line in the system's FHA by itself, severity left blank
     var A = root.SLApxAuto, X = root.SLApx;
     if (!A || !A.kit || !X) { if (typeof module !== 'undefined' && module.exports) module.exports = { VERSION: VERSION, missing: true }; return; }
     var K = A.kit, E = K.E, S = K.S, T = K.T, arr = K.arr, safe = K.safe, lc = K.lc;
@@ -669,7 +669,7 @@
             + '<div class="apx-prog4"><div><b>' + sol.cases.length + '</b>mixes in total</div><div><b>' + asked + '</b>questions you answered</div><div><b>' + (logic + mir) + '</b>filled by logic' + (mir ? ' and mirror' : '') + '</div><div><b>' + sol.open.length + '</b>left</div></div>';
         if (r.asked === 'again') body += note('warn', 'The build or the checked systems changed, so the questions are asked again. The earlier answers are kept on file.');
         var cv = !byYou ? conversion(fc) : null;
-        if (cv && cv.rules.length) body += note(cv.ok ? '' : 'warn', '<b>This aircraft function has ' + cv.rules.length + ' earlier MAC rule' + (cv.rules.length > 1 ? 's' : '') + ' from today\'s MAC page.</b> ' + (cv.ok ? 'The tool can bring ' + (cv.rules.length > 1 ? 'them' : 'it') + ' in exactly, as answers you then check: ' + E(cv.sets.map(function (s) { return caseText(s.c, sol.ds); }).join('; ')) + '. <button class="apx-btn" data-apx-x="convert" style="margin-left:6px">Bring it in</button>' : E(cv.notes.join(' '))));
+        if (cv && cv.rules.length) body += note(cv.ok ? '' : 'warn', '<b>This aircraft function has ' + cv.rules.length + ' earlier MAC rule' + (cv.rules.length > 1 ? 's' : '') + ' from the earlier MAC model.</b> ' + (cv.ok ? 'The tool can bring ' + (cv.rules.length > 1 ? 'them' : 'it') + ' in exactly, as answers you then check: ' + E(cv.sets.map(function (s) { return caseText(s.c, sol.ds); }).join('; ')) + '. <button class="apx-btn" data-apx-x="convert" style="margin-left:6px">Bring it in</button>' : E(cv.notes.join(' '))));
         if (sol.open.length) {
             var c = X.nextQuestion(sol.cols, sol.m1, { lo: 0, hi: 1, among: sol.cases }), un = uneven(c, sol.ds);
             body += '<p style="font-size:17px;font-weight:700;margin:6px 0 8px">With the red blocks switched off:</p>' + scenario(sol, c, false)

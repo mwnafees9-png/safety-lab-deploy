@@ -23,7 +23,7 @@
  */
 (function (root) {
     'use strict';
-    var VERSION = '1.0';
+    var VERSION = '1.2';   // 1.2 24 Nov 2026: a MAC rule's or a CoFFE case's comment opens its Autopilot at its failure condition (the earlier pages are retired)
     function _g(n) {
         try { var E = root.SLEnv; if (E && typeof E.get === 'function') { var v = E.get(n); if (v !== undefined) return v; } } catch (_) {}
         try { return root[n]; } catch (_) { return undefined; }
@@ -84,12 +84,15 @@
         },
         mac: {
             label: 'MAC Rules', tab: 'mac',
+            // 24 Nov 2026: the MAC tab is the MAC Autopilot; it opens at the failure condition the rule stands for, where the rule's comment button is
+            post: function (t) { try { var r = _macRules().find(function (x) { return x && String(x.id) === String(t.id); }), fc = r && typeof root._macFcForRule === 'function' ? root._macFcForRule(r) : null, A = root.SLApxAuto; if (fc && A && A._ui) { A._ui.fc = S(fc.internalId); A.setAp('mac'); if (A.kit && A.kit.draw) A.kit.draw(); } } catch (_) {} },
             title: function (t) { var r = _macRules().find(function (x) { return x && String(x.id) === String(t.id); }); return r ? (S(r.subId) + ' · ' + S(r.phase || 'All phases')) : S(t.id); },
             anem: function (t) { return 'MAC rule ' + t.id + ' (change it with update_mac {id:"' + t.id + '", fields}; the changed rule comes back unsigned for the engineer to sign)'; }
         },
         coffe: {
-            label: 'CoFFE', tab: 'pasa',
-            post: function (t) { try { _coffeSelectedFc = S(t.id).split('§')[0]; } catch (_) {} _call('renderCoffePanel'); },
+            // 24 Nov 2026: the CoFFE tab is the CoFFE Autopilot; a case's comment opens it at that case's failure condition
+            label: 'CoFFE', tab: 'coffe',
+            post: function (t) { var k = S(t.id).split('§')[0], A = root.SLApxAuto; try { if (A && A._ui) { A._ui.fc = k; A.setAp('cof'); if (A.kit && A.kit.draw) A.kit.draw(); return; } } catch (_) {} try { _coffeSelectedFc = k; } catch (_) {} _call('renderCoffePanel'); },
             title: function (t) { var p = S(t.id).split('§'), r = _fhaAny(p[0]); return (r ? _fcLabel(r) : p[0]) + ' · ' + _clip((p[1] || '').replace(/∧/g, ' and '), 80); },
             anem: function (t) { return 'the CoFFE case "' + t.id + '" (table coffe, _id "' + t.id + '"; fields verdict "yes"|"no" and note; it is kept as ANEM\'s proposal until the engineer signs it)'; }
         },

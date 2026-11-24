@@ -1905,7 +1905,7 @@
     }
 
     // 5 Sep 2026 (lever 3) — the escapes clause the FHA prompts carry, from the mission profile.
-    /* 5 Nov 2026 (Waqas, on Radia's FHA: "it completely left out Cruise ... till Brian went in and had to update it
+    /* 5 Nov 2026 (Waqas, on a customer's FHA: "it completely left out Cruise ... till Brian went in and had to update it
        manually"). Three things, each on its own not enough:
          · the exact mission profile goes into every FHA turn, so the model never works from a phase list it assumed;
          · the phase-coverage follow-up runs until no phase is left or a pass adds nothing (it ran once);
@@ -14478,7 +14478,7 @@
         if (_chunk && typeof _chunk.gapsOf === 'function' && actions.length) {
             let _gaps = [];
             try { _gaps = _chunk.gapsOf(actions) || []; } catch (_) { _gaps = []; }
-            // 5 Nov 2026 (Radia: Cruise left out): the follow-up runs until no phase is left, up to three passes, and
+            // 5 Nov 2026 (a customer's FHA: Cruise left out): the follow-up runs until no phase is left, up to three passes, and
             // stops early when a pass adds nothing
             const _gapCount = g => g.reduce((n, x) => n + ((x.missing || []).length) + ((x.twice || []).length), 0);
             for (let _pass = 0; _pass < 3 && _gaps.length && !_permanentErr && !_userStopped; _pass++) {

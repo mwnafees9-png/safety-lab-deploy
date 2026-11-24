@@ -42,7 +42,7 @@ function mutate(file, body) {
     try {
         const pg = await (await brw.newContext({ viewport: { width: 1400, height: 1000 } })).newPage();
         pg.on('pageerror', e => errs.push(String(e).slice(0, 300))); pg.on('dialog', d => d.dismiss().catch(() => {}));
-        await pg.goto('http://127.0.0.1:' + srv.address().port + '/index.html?apx=1'); await tick(5000);
+        await pg.goto('http://127.0.0.1:' + srv.address().port + '/index.html'); await tick(5000);
         await pg.evaluate(() => { document.documentElement.classList.remove('sl-auth-gate-blocked'); const g = document.getElementById('sl-auth-gate'); if (g) g.remove(); if (window.__slDismissBootSplash) window.__slDismissBootSplash(); });
         await pg.addStyleTag({ content: '#signup-modal{display:none!important} .modal-overlay{display:none!important}' });
         await pg.evaluate(async () => { await loadSampleProject(); }); await tick(4000);

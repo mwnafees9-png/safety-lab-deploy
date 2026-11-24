@@ -1,5 +1,5 @@
 /* fha_phase_cover.js: every flight phase accounted for, on the FHA table itself (5 Nov 2026).
-   Waqas, on Radia's FHA: "it completely left out Cruise ... till Brian went in and had to update it manually".
+   Waqas, on a customer's FHA: "it completely left out Cruise ... till Brian went in and had to update it manually".
    The ruling it holds (4 Sep 2026): every failure condition applies to every flight phase; rows come from effects. So
    for each failure condition (its rows grouped by condition id), every phase of the project's mission profile is either
    on one of its rows ("All phases" counts for all), or marked "Does not apply" with the reason, by a person. A phase

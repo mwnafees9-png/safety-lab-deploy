@@ -1,6 +1,6 @@
 /* ============================================================================
  * apx_bridge.js (SLApxBridge v1.0, 15 Nov 2026): what the Interdependence, MAC and CoFFE Autopilots send, carried to the
- * PASA and to the files that read today's stores. Step 5 of 5. Behind the same switch only our team sees.
+ * PASA and to the files that read today's stores. Step 5 of 5. On for everyone since 24 Nov 2026.
  *
  * Waqas, 15 Nov 2026: the Autopilots ask, "the PASA only shows the results"; they "will be upgrading the current
  * MAC/CoFFE and Interdependence interface and replacing them, so we have to absolutely nail this"; weighted MAC rules:
@@ -24,14 +24,15 @@
  * ARP4761A tables (Q.4-1, Q.4-2, B3, the MAC rules, Q.4-3 to Q.4-11, the gate, the budgets and the independence
  * principles) as report tables, so they print and export with the report.
  *
- * THE OLD SCREENS. With the switch on, the MAC model tab opens the MAC Autopilot and the CoFFE tab opens the CoFFE
- * Autopilot (today's MAC page stays one click away for comparison). With the switch off nothing here runs.
+ * THE EARLIER SCREENS (24 Nov 2026, Waqas: on for every customer, "new pages only"). The MAC model tab opens the MAC
+ * Autopilot and the CoFFE tab opens the CoFFE Autopilot, always; the earlier MAC page is not reachable any more. The
+ * stores it edited stay: they are what the Autopilots write into and what thirty-odd files read.
  *
  * API (window.SLApxBridge): project, unproject, pasa, check. Tests: tests/regression_apx_bridge_20261115.test.js.
  * ==========================================================================*/
 (function (root) {
     'use strict';
-    var VERSION = '1.8';   // 1.8 23 Nov 2026: a built-in demo filled through the Autopilots (SLApxAuto.fillAs) is carried to today's stores with the switch off too, so every build shows it   // 1.7 23 Nov 2026: a failure condition with more than one CoFFE source: each shown, their sum checked, the driver named, disagreements found   // 1.6 23 Nov 2026: budgets per flight with the rate per flight hour; linked outcomes and their failure conditions; single shared failures; the CMA list; the PASA assumptions, numbered once and never reused   // 1.5 23 Nov 2026: a backup whose change-over can fail on its own goes to the PASA with its two ways (build table, gate, rule.apx.inside)   // 1.4 22 Nov 2026: a sent MAC rule names every function it is stated over (rule.apx.members), for the one reading of a MAC rule in misc_fn_modules.js   // 1.2 17 Nov 2026: what was sent can be taken back out one Autopilot at a time; the PSSA shows the assemblies and the lines the aircraft level added to its system
+    var VERSION = '1.9';   // 1.9 24 Nov 2026: the MAC and CoFFE tabs always open the Autopilots; the earlier MAC page and its way back are retired; what the PASA shows for a failure condition is kept until the project changes   // 1.8 23 Nov 2026: a built-in demo filled through the Autopilots (SLApxAuto.fillAs) is carried to today's stores with the switch off too, so every build shows it   // 1.7 23 Nov 2026: a failure condition with more than one CoFFE source: each shown, their sum checked, the driver named, disagreements found   // 1.6 23 Nov 2026: budgets per flight with the rate per flight hour; linked outcomes and their failure conditions; single shared failures; the CMA list; the PASA assumptions, numbered once and never reused   // 1.5 23 Nov 2026: a backup whose change-over can fail on its own goes to the PASA with its two ways (build table, gate, rule.apx.inside)   // 1.4 22 Nov 2026: a sent MAC rule names every function it is stated over (rule.apx.members), for the one reading of a MAC rule in misc_fn_modules.js   // 1.2 17 Nov 2026: what was sent can be taken back out one Autopilot at a time; the PSSA shows the assemblies and the lines the aircraft level added to its system
     var A = root.SLApxAuto, X = root.SLApx, M = root.SLApxMac, C = root.SLApxCof;
     if (!A || !A.kit || !X || !M || !M.model || !C || !C.model) { if (typeof module !== 'undefined' && module.exports) module.exports = { VERSION: VERSION, missing: true }; return; }
     var K = A.kit, S = K.S, T = K.T, arr = K.arr, safe = K.safe, lc = K.lc, MM = M.model, CM = C.model, AM = A.model;
@@ -118,7 +119,6 @@
         return { n: n };
     }
     function project(fc, which) {
-        if (!A.enabled() && !(A.filling && A.filling())) return { ok: false, why: 'The switch is off.' };
         var out = which === 'idp' ? projectIdp(fc) : which === 'mac' ? projectMac(fc) : which === 'cof' ? projectCof(fc) : null;
         safe(function () { assumptions(fc); }, null);
         try { if (root.SLDataChange && root.SLDataChange.bump) root.SLDataChange.bump(); } catch (_) {}
@@ -271,9 +271,36 @@
         out.sort(function (a, b) { return Number(a.ID.slice(10)) - Number(b.ID.slice(10)); });
         return out;
     }
+    // What the PASA shows is worked out from the saved project (every store but the PASA's own answers, which it does not
+    // read). The PASA builds every appendix to number its tables, on every answer; with the Autopilots on for everyone that
+    // was the CoFFE tables of every failure condition each time (24 Nov 2026: 1.8 s on the HL-1 demo). Kept now until
+    // the saved project itself changes: the key is the project, so nothing it shows can be stale.
+    var _pasaMemo = { gen: -2, sig: null, map: {} };
+    function projectSig() {
+        var D = root.SLDataChange, G = D && D.gen ? D.gen() : -1;
+        if (G !== -1 && _pasaMemo.gen === G && _pasaMemo.sig !== null) return _pasaMemo.sig;
+        var sig = null;
+        try {
+            var St = root.SLStores; if (!St || typeof St.snapshot !== 'function') return null;
+            var snap = St.snapshot();
+            // an empty record the Autopilots fill in as they draw (rec()) says nothing, so it does not count as a change
+            sig = JSON.stringify(snap, function (k, v) { if (k === 'pasaAuto' && this && this === snap.projectConfig) return undefined; if (v && typeof v === 'object' && !Array.isArray(v) && Object.getPrototypeOf(v) === Object.prototype) { for (var z in v) { if (Object.prototype.hasOwnProperty.call(v, z)) return v; } return undefined; } return v; });
+        } catch (_) { sig = null; }
+        if (sig !== _pasaMemo.sig) _pasaMemo.map = {};
+        _pasaMemo.gen = G; _pasaMemo.sig = sig;
+        return sig;
+    }
     // What the PASA appendix shows for one failure condition: null for a part whose Autopilot was not sent.
     function pasa(gr) {
-        if (!A.enabled()) return null;
+        var fc0 = fcOfGroup(gr); if (!fc0) return null;
+        var sig = projectSig();
+        if (sig === null) return pasa0(gr);
+        if (Object.prototype.hasOwnProperty.call(_pasaMemo.map, fc0.key)) return _pasaMemo.map[fc0.key];
+        var out = pasa0(gr);
+        if (projectSig() === sig) _pasaMemo.map[fc0.key] = out;
+        return out;
+    }
+    function pasa0(gr) {
         var fc = fcOfGroup(gr); if (!fc) return null;
         var out = { idp: null, res: null, mac: null, cof: null, changed: [] };
         ['idp', 'mac', 'cof'].forEach(function (w) { var p = pc(), r = p && p.apx && p.apx[w] && p.apx[w][fc.key]; if (r && !r.sent && r.changedSince) out.changed.push(w === 'idp' ? 'Interdependence' : w === 'mac' ? 'MAC' : 'CoFFE'); });
@@ -292,7 +319,7 @@
         return out;
     }
     function pssa(sy) {
-        if (!A.enabled() || !sy) return null;
+        if (!sy) return null;
         var b = [], asm = arr(sy.assemblies).filter(function (a) { return a && a.apx; }), nm = T(sy.name || sy.id);
         var fnName = function (id) { var f = arr(sy.functions).filter(function (x) { return x && S(x.funcId) === S(id); })[0]; return f ? T(f.funcName || id) : S(id); };
         if (asm.length) b.push({ k: 'table', name: 'apx-asm-' + S(sy.id), title: 'The assemblies of the ' + nm + ', as set at the aircraft level', rows: asm.map(function (a) { return { ID: a.id, Assembly: a.name, Side: a.side === 'LH' ? 'Left' : a.side === 'RH' ? 'Right' : 'Center or not sided', Group: a.group || 'The system as one group', Build: (M.PATTERNS[a.build] || {}).label || a.build, 'System function': fnName(a.funcId) }; }), lead: '{N} lists the assemblies the aircraft-level minimum acceptable configuration (MAC) was answered for. The fault trees of this system start from the same assemblies, under the same IDs.' });
@@ -301,7 +328,7 @@
         return b.length ? { front: b } : null;
     }
     function pssaFc(sy, gr) {
-        if (!A.enabled() || !sy || !gr) return null;
+        if (!sy || !gr) return null;
         var ls = linksTo(sy, gr.fcId), b = []; if (!ls.length) return null;
         ls.forEach(function (x) {
             var e = safe(function () { return MM.allEvents(x.fc).filter(function (y) { return y.k === x.k; })[0]; }, null);
@@ -310,32 +337,22 @@
         });
         return b;
     }
-    function state(gr) { var fc = fcOfGroup(gr); if (!fc || !A.enabled()) return null; return { key: fc.key, idp: K.apStatus('idp', fc).k, mac: K.apStatus('mac', fc).k, cof: K.apStatus('cof', fc).k }; }
+    function state(gr) { var fc = fcOfGroup(gr); if (!fc) return null; return { key: fc.key, idp: K.apStatus('idp', fc).k, mac: K.apStatus('mac', fc).k, cof: K.apStatus('cof', fc).k }; }
 
-    // ---- the old screens: with the switch on, the MAC and CoFFE tabs open the Autopilots ----------------------------------------
+    // ---- the earlier screens: the MAC and CoFFE tabs open the Autopilots (24 Nov 2026: always) --------------------------------
     (function wrapNav(tries) {
         if (typeof document === 'undefined') return;
         if (typeof root.switchTab !== 'function') { if (tries > 0) setTimeout(function () { wrapNav(tries - 1); }, 150); return; }
         if (root.switchTab._apxBridge) return;
         var orig = root.switchTab, w = function (tabId) {
-            try { if (A.enabled() && !A._ui.old && (tabId === 'mac' || tabId === 'coffe')) { A.open(tabId === 'mac' ? 'mac' : 'cof'); return undefined; } } catch (_) {}
+            try { if (tabId === 'mac' || tabId === 'coffe') { A.open(tabId === 'mac' ? 'mac' : 'cof'); return undefined; } } catch (_) {}
             var r = orig.apply(this, arguments);
-            try { if (A.enabled() && tabId === 'mac') placeBack(); if (A.enabled() && (tabId === 'pasa' || tabId === 'interdep')) check(); } catch (_) {}
+            try { if (tabId === 'pasa' || tabId === 'interdep') check(); } catch (_) {}
             return r;
         };
         w._apxBridge = true; Object.keys(orig).forEach(function (k) { try { w[k] = orig[k]; } catch (_) {} });
         root.switchTab = w;
     })(80);
-    // today's MAC page (opened for comparison) carries the way back to the Autopilot
-    function placeBack() {
-        var v = document.getElementById('view-mac'); if (!v || v.querySelector(':scope > [data-apx-macback]')) return;
-        K.style();
-        var b = document.createElement('div'); b.className = 'apx'; b.setAttribute('data-apx-macback', '1');
-        b.innerHTML = '<div class="apx-bar"><div class="apx-sw" role="group" aria-label="Which page"><button type="button" data-apx-macnew="1">New Autopilot (preview)</button><button type="button" class="on">Today\'s page</button></div><span style="font-size:12.5px">Only our team sees this switch.</span></div>';
-        b.addEventListener('click', function (e) { var t = e.target && e.target.closest ? e.target.closest('[data-apx-macnew]') : null; if (t) A.open('mac'); });
-        v.insertBefore(b, v.firstChild);
-    }
-
     var api = { VERSION: VERSION, project: project, unproject: unproject, pssa: pssa, pssaFc: pssaFc, linksTo: linksTo, pasa: pasa, state: state, check: check, ruleId: ruleId, macSets: macSets, blocks: { idp: idpBlocks, res: resBlocks, mac: macBlocks, cof: cofBlocks } };
     try { root.SLApxBridge = api; } catch (_) {}
     if (typeof module !== 'undefined' && module.exports) module.exports = api;

@@ -2,7 +2,7 @@
  * demo/hl1_apx.js (23 Nov 2026): the Aeolus HL-1 demo with the Interdependence, MAC and CoFFE Autopilots done for all
  * sixty aircraft failure conditions and sent to the PASA (1.1: the full-scale aircraft, thirty more).
  *
- * Waqas, 23 Nov 2026: Radia wants "the aeolus demos fully populated with the autopilots"; "demo in all the builds need to
+ * Waqas, 23 Nov 2026: a customer wants "the aeolus demos fully populated with the autopilots"; "demo in all the builds need to
  * upgraded with all the latest information".
  *
  * NOTHING HERE IS A RESULT. This file holds only what an engineer types into the three Autopilots: how each system

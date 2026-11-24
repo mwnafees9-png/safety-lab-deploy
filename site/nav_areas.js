@@ -50,7 +50,7 @@
 // ============================================================================
 (function (root) {
     'use strict';
-    var VERSION = '1.9';   // 1.9 10 Nov 2026: the system's SSA link opens its SSA Autopilot (ssa_autopilot.js);   // 1.8 10 Nov 2026: interdependence and CoFFE live in the PASA Autopilot; MAC, MF&MS and resources beside the fault trees (cascading effects too, its link staying in Common cause); the system PSSA tab is the PSSA Autopilot
+    var VERSION = '2.4';   // 2.4 24 Nov 2026: the Interdependence, MAC and CoFFE Autopilots' link (snav-apx) in the PASA section; interdep, coffe and mac belong to it   // 1.9 10 Nov 2026: the system's SSA link opens its SSA Autopilot (ssa_autopilot.js);   // 1.8 10 Nov 2026: interdependence and CoFFE live in the PASA Autopilot; MAC, MF&MS and resources beside the fault trees (cascading effects too, its link staying in Common cause); the system PSSA tab is the PSSA Autopilot
     // A section: key, label, icon, scope ('aircraft' | 'system' | 'foot'), items (menu link ids, or a group
     // { group, label, ids }), and pages: every page (switchTab id) that belongs to it, with the link that stands
     // for it in the bar (a page that has no link of its own, such as the AFHA's Functions tab, lights its area's link).
@@ -60,11 +60,13 @@
           pages: { 'ac-func': 'snav-afha', 'ac-fcim': 'snav-afha', 'ac-asm': 'snav-afha' } },
         // the fault trees and diagram tools of a level are links made here (DYN below): their pages decide their
         // section from the tree home on screen (SLTreeHomes.navArea)
-        { key: 'pasa', label: 'PASA', ic: '🌳', scope: 'aircraft', items: ['snav-pasa', 'snav-ac-req', 'snav-fta', 'sl-nav-diag-pasa'],
+        { key: 'pasa', label: 'PASA', ic: '🌳', scope: 'aircraft', items: ['snav-pasa', 'snav-apx', 'snav-ac-req', 'snav-fta', 'sl-nav-diag-pasa'],
           // 10 Nov 2026: interdependence and CoFFE are answered in the PASA Autopilot; the MAC model, MF&MS and the resource list
           // sit beside the fault trees (cascading effects is reached there too, and keeps its link in Common cause, where its
           // program plan lane switches it on and off)
-          pages: { interdep: 'snav-pasa', coffe: 'snav-pasa', resources: 'snav-fta', mac: 'snav-fta', mfms: 'snav-fta' } },
+          // 24 Nov 2026: the Interdependence, MAC and CoFFE Autopilots are on for everyone, one page with its own link (the MAC
+          // and CoFFE tabs open it)
+          pages: { interdep: 'snav-apx', coffe: 'snav-apx', mac: 'snav-apx', resources: 'snav-fta', mfms: 'snav-fta' } },
         { key: 'cca', label: 'Common cause', ic: '🔗', scope: 'aircraft', items: ['snav-zsa', 'snav-pra', 'snav-cma', 'snav-cea', 'snav-stpa'],
           pages: { zonal: 'snav-zsa', routing: 'snav-zsa', phys: 'snav-zsa', ipledger: 'snav-cma', cra: 'snav-cma' } },
         { key: 'asa', label: 'ASA', ic: '✈', scope: 'aircraft', items: ['snav-asa', 'sl-nav-trees-asa', 'snav-ccmr', 'snav-mmel', 'snav-sse'] },

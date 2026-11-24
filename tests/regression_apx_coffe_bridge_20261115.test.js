@@ -22,8 +22,8 @@
  *      file, not deleted; a rule sent for one failure condition does not speak for another of the same function
  *   9  taking it back out restores today's stores exactly
  *  10  the PASA appendix shows the tables of the book as report tables; a change after sending is a finding there
- *  11  with the switch on the MAC and CoFFE tabs open the Autopilots; today's MAC page stays one click away; with the
- *      switch off the bridge does nothing
+ *  11  the MAC and CoFFE tabs open the Autopilots; (24 Nov 2026: on for everyone, "new pages only") the earlier MAC
+ *      page is not reachable and no way back to it is offered; the retired switch (off()) changes nothing
  *  13  (17 Nov 2026) the PSSA of a system shows its assemblies and the FHA lines the aircraft level added; one Autopilot
  *      can be taken back out on its own; the pages say "check"
  *  12  no page errors
@@ -81,7 +81,7 @@ function mutate(file, body) {
     try {
         const pg = await (await br.newContext({ viewport: { width: 1400, height: 1000 } })).newPage();
         pg.on('pageerror', e => errs.push(String(e).slice(0, 300))); pg.on('dialog', d => d.dismiss().catch(() => {}));
-        await pg.goto('http://127.0.0.1:' + srv.address().port + '/index.html?apx=1'); await tick(5000);
+        await pg.goto('http://127.0.0.1:' + srv.address().port + '/index.html'); await tick(5000);
         await pg.evaluate(() => { document.documentElement.classList.remove('sl-auth-gate-blocked'); const g = document.getElementById('sl-auth-gate'); if (g) g.remove(); if (window.__slDismissBootSplash) window.__slDismissBootSplash(); });
         await pg.addStyleTag({ content: '#signup-modal{display:none!important} .modal-overlay{display:none!important}' });
         await pg.evaluate(async () => { await loadSampleProject(); }); await tick(4000);
@@ -270,29 +270,28 @@ function mutate(file, body) {
             out.left = !!document.querySelector('#view-pasa [data-paq-apx]') || 'not open';
             switchTab('mac'); await wait(1200); out.mac = { ap: A._ui.ap, auto: vis('view-interdep') && !!document.querySelector('#interdep-host .apx'), oldPage: vis('view-mac') };
             switchTab('coffe'); await wait(1200); out.cof = { ap: A._ui.ap, auto: vis('view-interdep') };
-            A.setAp('mac'); A.kit.draw(); document.querySelector('#interdep-host [data-apx-view="old"]').click(); await wait(1500); out.old = { oldPage: vis('view-mac'), back: !!document.querySelector('#view-mac [data-apx-macback]') };
-            const b = document.querySelector('#view-mac [data-apx-macnew]'); if (b) b.click(); await wait(1200); out.backTo = { ap: A._ui.ap, auto: vis('view-interdep') };
+            A.setAp('mac'); A.kit.draw(); await wait(300);
+            out.noWayBack = { view: document.querySelectorAll('#interdep-host [data-apx-view]').length, back: document.querySelectorAll('[data-apx-back],[data-apx-macback],[data-apx-macnew]').length, text: /Today's page|our team|preview/i.test(document.getElementById('interdep-host').innerText) };
+            switchTab('mac'); await wait(1200); out.macAgain = { oldPage: vis('view-mac'), auto: vis('view-interdep') };
             return out;
         });
         check('11 the PASA page offers the three Autopilots', nav.entry.join('|') === 'Interdependence Autopilot|MAC Autopilot|CoFFE Autopilot', nav.entry);
-        check('11 with the switch on, the MAC model tab opens the MAC Autopilot and the CoFFE tab the CoFFE Autopilot', nav.mac.ap === 'mac' && nav.mac.auto && !nav.mac.oldPage && nav.cof.ap === 'cof' && nav.cof.auto, nav);
-        check('11 today\'s MAC page is one click away, with the way back', nav.old.oldPage && nav.old.back && nav.backTo.ap === 'mac' && nav.backTo.auto, nav);
+        check('11 the MAC model tab opens the MAC Autopilot and the CoFFE tab the CoFFE Autopilot', nav.mac.ap === 'mac' && nav.mac.auto && !nav.mac.oldPage && nav.cof.ap === 'cof' && nav.cof.auto, nav);
+        check('11 the earlier MAC page is not reachable: no switch back, no way back, no "preview" or "our team" words, and the MAC tab again opens the Autopilot', nav.noWayBack.view === 0 && nav.noWayBack.back === 0 && !nav.noWayBack.text && !nav.macAgain.oldPage && nav.macAgain.auto, nav);
 
         // ---- 9: taking it back out ----------------------------------------------------------------------------------------------------------------
         const un = await pg.evaluate(([K, s0]) => { const A = SLApxAuto, B = SLApxBridge, f = A.model.fcOf(K); B.unproject(f); const now = JSON.stringify({ i: projectConfig.interdep || null, m: projectConfig.macModels || null, c: projectConfig.coffe || null }); const a = JSON.parse(s0), b = JSON.parse(now); const ids = x => (x.m || []).map(r => r.id).sort().join(); const canon = o => JSON.stringify(Object.keys(o).sort().map(k => [k, o[k]])); return { same: now === s0, mac: ids(a) === ids(b), macRules: JSON.stringify((a.m || []).slice().sort((x, y) => x.id < y.id ? -1 : 1)) === JSON.stringify((b.m || []).slice().sort((x, y) => x.id < y.id ? -1 : 1)), cells: canon((a.i || {}).cells || {}) === canon((b.i || {}).cells || {}), ver: canon((a.c || {}).verdicts || {}) === canon((b.c || {}).verdicts || {}), cra: canon(((a.i || {}).cra) || {}) === canon(((b.i || {}).cra) || {}) }; }, [K, snap0]);
         check('9 taking it back out restores today\'s cells, common resource text, MAC rules (the earlier one back in) and verdicts exactly', un.mac && un.macRules && un.cells && un.ver && un.cra, un);
 
-        // ---- 11: switch off -----------------------------------------------------------------------------------------------------------------------
+        // ---- 11: the retired switch ------------------------------------------------------------------------------------------------------------
         const off = await pg.evaluate(async (K) => {
-            const A = SLApxAuto, B = SLApxBridge, f = A.model.fcOf(K), gr = SLFcTrees.groups('ac').find(g => String(g.gov.internalId) === K), wait = ms => new Promise(r => setTimeout(r, ms));
-            const before = JSON.stringify({ i: projectConfig.interdep || null, m: projectConfig.macModels || null, c: projectConfig.coffe || null });
-            A.off(); const out = { pasa: B.pasa(gr), p1: B.project(f, 'idp'), p2: B.project(f, 'mac'), p3: B.project(f, 'cof') };
-            out.same = JSON.stringify({ i: projectConfig.interdep || null, m: projectConfig.macModels || null, c: projectConfig.coffe || null }) === before;
+            const A = SLApxAuto, B = SLApxBridge, gr = SLFcTrees.groups('ac').find(g => String(g.gov.internalId) === K), wait = ms => new Promise(r => setTimeout(r, ms));
+            A.off(); const out = { on: A.enabled(), pasa: !!B.pasa(gr), stored: localStorage.getItem('sl_apx') };
             switchTab('mac'); await wait(1200); const v = document.getElementById('view-mac'); out.macOld = !!v && v.offsetParent !== null;
             switchTab('pasa'); await wait(1200); out.entry = !!document.querySelector('#view-pasa [data-apx-entry]');
-            A.on(); return out;
+            return out;
         }, K);
-        check('11 with the switch off the bridge writes nothing and shows nothing; the MAC tab is today\'s page', off.pasa === null && off.same && off.macOld && !off.entry, off);
+        check('11 the retired switch changes nothing: off() leaves the Autopilots on, the PASA still shows what was sent and offers them, the MAC tab is still the Autopilot', off.on === true && off.pasa && !off.macOld && off.entry && off.stored === null, off);
         check('12 no page errors', errs.length === 0, errs.join(' | '));
         await pg.context().close();
     } catch (e) { check('browser run completed', false, e && e.stack ? e.stack : String(e)); }

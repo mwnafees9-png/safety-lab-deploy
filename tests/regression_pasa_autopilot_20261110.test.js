@@ -246,8 +246,12 @@ const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y
             out.missingShown = Array.from(document.querySelectorAll('#ac-req-body [data-rt-miss="rationale"]')).length > 0;
             out.drivenShown = Array.from(document.querySelectorAll('#ac-req-body [data-rt-df]')).some(e => /Driven from/.test(e.textContent));
             acReqData.pop(); switchTab('pasa'); await wait(800);
-            switchTab('mac'); await wait(400); out.beside = !!document.querySelector('#view-mac > [data-pasa-beside]') && document.getElementById('view-mac').style.display !== 'none';
-            switchTab('interdep'); await wait(400); out.interdepToPasa = document.getElementById('view-pasa').style.display !== 'none';
+            // 24 Nov 2026: the Interdependence, MAC and CoFFE Autopilots are on for everyone; the MAC tab opens the MAC Autopilot, the
+            // Interdependence tab the Interdependence Autopilot (no more landing on the PASA); MF&MS keeps its own page with the bar
+            const vis = id => { const v = document.getElementById(id); return !!v && v.offsetParent !== null; };
+            switchTab('mac'); await wait(600); out.beside = vis('view-interdep') && !vis('view-mac') && SLApxAuto._ui.ap === 'mac';
+            switchTab('mfms'); await wait(400); out.besideMfms = !!document.querySelector('#view-mfms > [data-pasa-beside]');
+            switchTab('interdep'); await wait(400); out.interdepToPasa = vis('view-interdep') && !vis('view-pasa');
             return out;
         }), 180000, 'the PASA run');
 
@@ -325,7 +329,7 @@ const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y
         check('M1 the front: not ready while appendix questions are open, the list says which', r.aiFrontBefore.ready === false && r.aiFront.left.every(x => /appendix/.test(x)), JSON.stringify(r.aiFrontBefore.left.slice(0, 3)) + ' / ' + JSON.stringify(r.aiFront.left.slice(0, 3)));
 
         console.log('\n[P] the pages beside the fault trees');
-        check('P1 the MAC model is its own page with the bar that joins it to the fault trees, MF&MS, cascading effects and resources; the old interdependence page opens the PASA', r.beside && r.interdepToPasa);
+        check('P1 the MAC tab opens the MAC Autopilot and the Interdependence tab the Interdependence Autopilot (24 Nov 2026: on for everyone); MF&MS keeps the bar that joins it to the fault trees', r.beside && r.interdepToPasa && r.besideMfms, JSON.stringify({ beside: r.beside, interdep: r.interdepToPasa, mfms: r.besideMfms }));
 
         console.log('\n[K] dark mode');
         const k = await within(pg.evaluate(async () => {

@@ -91,8 +91,11 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
             const crow = (ccmrLatentSweep(true) || [])[0];
             const tCcmr = crow ? { kind: 'ccmr', id: String(crow.pageId) + '|' + String(crow.lid) } : null; U.ccmr = tCcmr ? has(document.getElementById('ccmr-host'), tCcmr) : 'no latent rows';
             // MAC
-            switchTab('mac'); await wait(300); try { renderMacPage(); } catch (_) {}
-            const rule = projectConfig.macModels[0]; const tMac = { kind: 'mac', id: String(rule.id) }; U.mac = has(document.getElementById('mac-host'), tMac);
+            // 24 Nov 2026: the MAC tab is the MAC Autopilot (the earlier MAC page is retired); a rule's comment button is on the
+            // MAC Autopilot at the failure condition the rule stands for
+            const rule = projectConfig.macModels[0]; const tMac = { kind: 'mac', id: String(rule.id) }; const ruleFc = _macFcForRule(rule);
+            switchTab('mac'); await wait(400); SLApxAuto._ui.fc = String(ruleFc.internalId); SLApxAuto.setAp('mac'); SLApxAuto.kit.draw(); await wait(200);
+            U.mac = has(document.getElementById('interdep-host'), tMac);
             // CoFFE
             const vk = Object.keys(projectConfig.coffe.verdicts)[0]; const fcIid = vk.split('§')[0];
             // 10 Nov 2026 (the PASA Autopilot): the CoFFE page is gone; its cases are answered in the PASA, whose report carries the live
@@ -138,7 +141,8 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
             // jumps
             const J = {};
             const jumpTo = async (t, tab) => { const c = Review.commentsForTarget ? Review.commentsForTarget(t)[0] : reviewCommentsData.find(x => Review.targetMatches(x, t)); reviewJumpFromComment(c.commentId); await wait(800); const v = document.getElementById('view-' + tab); const ok = !!(v && v.style.display !== 'none' && getComputedStyle(v).display !== 'none'); const p = document.getElementById('review-panel'); if (p && p.classList) p.classList.remove('open'); try { closeReviewPanel(); } catch (_) {} return ok; };
-            J.mac = await jumpTo(tMac, 'mac'); J.markov = await jumpTo(tMk, 'markov'); J.msg3 = await jumpTo(tFf, 'ram-msg3'); J.ftaNode = await jumpTo(tNode, 'fta') && String(activeFTAPageId) === String(pg.id);
+            switchTab('dashboard'); await wait(300); SLApxAuto._ui.fc = null;
+            J.mac = await jumpTo(tMac, 'interdep') && SLApxAuto._ui.ap === 'mac' && String(SLApxAuto._ui.fc) === String(ruleFc.internalId) && !!document.querySelector('#interdep-host [data-comment-target="mac:' + rule.id + '"]'); J.markov = await jumpTo(tMk, 'markov'); J.msg3 = await jumpTo(tFf, 'ram-msg3'); J.ftaNode = await jumpTo(tNode, 'fta') && String(activeFTAPageId) === String(pg.id);
             R.j = J;
             // [A] ANEM
             await window.slLoadAI(); await until(() => window.SafetyLabAI && window.SafetyLabAI._commentsTest, 20000);

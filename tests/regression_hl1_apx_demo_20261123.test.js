@@ -5,7 +5,7 @@
  * "please expand the size of the demo"): twenty-four systems and sixty failure conditions; the ten human factors steps and
  * the three program plans filled too.
  *   0  the files: demo/hl1_apx.js, hl1_hf.js and hl1_plans.js hold inputs only and are loaded by the demo; the kill switch; pins
- *   1  with the team switch OFF (every build): all thirty failure conditions are answered and sent in all three Autopilots,
+ *   1  as every customer opens it (24 Nov 2026: the Autopilots are on for everyone, no address switch): all thirty failure conditions are answered and sent in all three Autopilots,
  *      signed by the demo's engineer on a fixed date, and carried to today's stores (MAC rules, CoFFE verdicts, interdependence)
  *   2  every table meets its objectives; no Catastrophic or Hazardous failure condition has a single-failure route; the only
  *      single failures are the two resource ones on Major failure conditions (FC-20 bleed air, FC-24 115 VAC)
@@ -13,7 +13,7 @@
  *      Autopilots added is classified
  *   4  FC-06 has two CoFFE sources (its own table and FC-05's middle outcome), added together
  *   5  the count of failures: both units of a pair = 2, one unit = 1, one resource failure that takes out several groups = 1
- *   6  with the switch ON the PASA shows the Interdependence, MAC and CoFFE parts; the kill switch opens the demo without them
+ *   6  the PASA shows the Interdependence, MAC and CoFFE parts; the kill switch opens the demo without them
  *   8  the HF Autopilot: all ten steps answered and signed by the demo's human factors engineer on a fixed date; every task
  *      time is labeled as an assumption; no pilot over the 80 per cent line in any phase; every flight deck control and display
  *      asked the four 25.1302 questions and reach and view
@@ -40,7 +40,7 @@ function mutate(file, body) {
     const hf = fs.readFileSync(path.join(SITE, 'demo', 'hl1_hf.js'), 'utf8'), pl = fs.readFileSync(path.join(SITE, 'demo', 'hl1_plans.js'), 'utf8');
     check('0 demo/hl1_hf.js and demo/hl1_plans.js: the answers and fill(), the task times labeled as assumptions; no em dash', /const ALLOC = \{/.test(hf) && /Assumed pending simulator evidence/.test(hf) && /function fill\(\)/.test(hf) && /const ANSWERS = \{/.test(pl) && /function fill\(\)/.test(pl) && !/\u2014/.test(hf + pl));
     check('0 the demo loads the three after its engines run, plans first, behind a kill switch, each at its own cache key', /var APX_SRC = 'demo\/hl1_apx\.js\?v=\d+', HF_SRC = 'demo\/hl1_hf\.js\?v=\d+', PLANS_SRC = 'demo\/hl1_plans\.js\?v=\d+'/.test(ldr) && /if \(!window\.SL_HL1_APX_OFF\) \{\s*var fills = \[\['sl-hl1-plans', PLANS_SRC[^\n]*\['sl-hl1-apx', APX_SRC[^\n]*\['sl-hl1-hf', HF_SRC/.test(ldr) && ldr.indexOf("window.SL_SHOWCASE_HL1.postLoad()") < ldr.indexOf("var fills = "));
-    check('0 pins: hl1_showcase 12, the demo 8, autopilot_ui 1.6, hf_autopilot 2.2, plan_autopilot 2.5, apx_autopilots 1.7, apx_coffe 1.7, apx_bridge 1.8, zsa_autopilot 1.11, pra_autopilot 2.11', ["demo_showcase_hl1.js?v=8'", 'autopilot_ui.js?v=1.6"', 'hf_autopilot.js?v=2.2"', 'plan_autopilot.js?v=2.5"', 'hl1_showcase.js?v=12"', 'apx_autopilots.js?v=1.7"', 'apx_coffe.js?v=1.7"', 'apx_bridge.js?v=1.8"', 'zsa_autopilot.js?v=1.11"', 'pra_autopilot.js?v=2.11"'].every(x => idx.indexOf(x) > 0));
+    check('0 pins: hl1_showcase 12, the demo 8, autopilot_ui 1.6, hf_autopilot 2.2, plan_autopilot 2.5, apx_autopilots 1.8, apx_coffe 1.8, apx_bridge 1.9, zsa_autopilot 1.11, pra_autopilot 2.11', ["demo_showcase_hl1.js?v=8'", 'autopilot_ui.js?v=1.6"', 'hf_autopilot.js?v=2.2"', 'plan_autopilot.js?v=2.5"', 'hl1_showcase.js?v=12"', 'apx_autopilots.js?v=1.8"', 'apx_coffe.js?v=1.8"', 'apx_bridge.js?v=1.9"', 'zsa_autopilot.js?v=1.11"', 'pra_autopilot.js?v=2.11"'].every(x => idx.indexOf(x) > 0));
     let pw; try { pw = require('playwright'); } catch (_) { console.log('  SKIP  browser checks'); return done(); }
     const TYPES = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.wasm': 'application/wasm' };
     const srv = http.createServer((q, r) => {
@@ -62,7 +62,7 @@ function mutate(file, body) {
         return pg;
     };
     try {
-        // ---- the switch off: what every customer build sees -------------------------------------------------------------
+        // ---- as every customer opens it (no ?apx in the address) -------------------------------------------------------------
         let pg = await openDemo('');
         const R = await pg.evaluate(() => {
             const A = SLApxAuto, M = SLApxMac, C = SLApxCof, pc = A.kit.pc(), o = {}, fcs = A.model.fcs();
@@ -96,7 +96,7 @@ function mutate(file, body) {
             secs.forEach(sx => { const t = sx.blocks.find(b => b.type === 'table' && /-mac$/.test(b.id)); if (!t) return; const keys = t.rows.map(r => r.join('|')); if (new Set(keys).size !== keys.length) o.zdup.push(sx.code); });
             return o;
         });
-        check('1 the switch is off, and the demo still fills: all sixty failure conditions, no problems', R.on === false && R.fill && R.fill.ok === true && R.fill.sent === 60 && R.n === 60, R.fill);
+        check('1 opened as every customer opens it (the Autopilots on, no address switch), the demo fills: all sixty failure conditions, no problems', R.on === true && R.fill && R.fill.ok === true && R.fill.sent === 60 && R.n === 60, R.fill);
         check('1 all three Autopilots sent for every failure condition, signed by M. Chen on 23 Nov 2026', R.sent.every(n => n === 60), R.sent);
         check('1 carried to today\'s stores: sixty MAC rules, the CoFFE verdicts and the interdependence cells', R.rules === 60 && R.verdicts > 60 && R.cells > 1000, { rules: R.rules, verdicts: R.verdicts, cells: R.cells });
         const bad = R.per.filter(x => !x.ok);
@@ -124,10 +124,10 @@ function mutate(file, body) {
         check('5 hydraulic system A partly losing both the reversers and the ground spoilers is one failure, named', R.count.res.n === 1 && R.count.res.by === 1, R.count.res);
         check('3 the zonal report lists each broken MAC rule once', R.zdup.length === 0, R.zdup);
         await pg.context().close();
-        // ---- the switch on: the PASA parts ---------------------------------------------------------------------------------
-        pg = await openDemo('?apx=1');
+        // ---- the PASA parts ---------------------------------------------------------------------------------
+        pg = await openDemo('');
         const ON = await pg.evaluate(() => { const g = (SLFcTrees.groups('ac') || []).find(x => x && x.gov && x.gov.fcId === 'FC-01'), px = SLApxBridge.pasa(g); return { on: SLApxAuto.enabled(), idp: !!(px && px.idp), mac: !!(px && px.mac), cof: !!(px && px.cof), txt: JSON.stringify(px && px.cof || []).slice(0, 20000) }; });
-        check('6 with the switch on, the PASA for FC-01 has the Interdependence, MAC and CoFFE parts, the shortest route counted in failures', ON.on && ON.idp && ON.mac && ON.cof && /Shortest route to [^.]*: 2 failures together/.test(ON.txt), ON.txt.slice(0, 400));
+        check('6 the PASA for FC-01 has the Interdependence, MAC and CoFFE parts, the shortest route counted in failures', ON.on && ON.idp && ON.mac && ON.cof && /Shortest route to [^.]*: 2 failures together/.test(ON.txt), ON.txt.slice(0, 400));
         await pg.context().close();
         pg = await openDemo('', true);
         const OFF = await pg.evaluate(() => { const pc = SLApxAuto.kit.pc(); return { fill: window.__slHl1ApxFill || null, rules: (pc.macModels || []).filter(r => r.apx).length }; });

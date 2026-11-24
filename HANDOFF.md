@@ -1,3 +1,44 @@
+## 24 Nov 2026: THE INTERDEPENDENCE, MAC AND CoFFE AUTOPILOTS ARE ON FOR EVERY CUSTOMER. The team-only switch and the earlier pages are retired.
+
+**Why (Waqas).** "go ahead and get the new autopilots on the Radia build too please"; asked who sees them: "Every customer"; asked whether the earlier pages stay reachable: "New pages only". The 15 Nov ruling stands: the Autopilots ask, "the PASA only shows the results".
+
+**What changed.**
+- **The switch is retired (apx_autopilots.js 1.8).** `enabled()` is always true. `on()` and `off()` do nothing, so an old caller is harmless. `?apx=` in the address is not read, and a stored `sl_apx` from the preview is cleared on load.
+- **The Interdependence page.** The Interdependence tab is the Autopilot page for everyone. support_modules.js 66.66 no longer sends it to the PASA. It has no "New Autopilot (preview) / Today's page" bar and no "only our team" words. The page heading is "Interdependence, MAC and CoFFE Autopilots", and the menu has an entry for it right after the PASA Autopilot (`snav-apx`).
+- **The MAC and CoFFE tabs (apx_bridge.js 1.9).** They always open their Autopilots. The earlier MAC page and its way back are gone. Its stores stay, because the Autopilots write into them and thirty-odd files read them. The MAC Autopilot still converts an earlier MAC rule exactly. The CoFFE Autopilot brings in earlier signed verdicts (wording now says "the earlier MAC model" and "the earlier CoFFE questions": apx_mac.js 1.4, apx_coffe.js 1.8).
+- **The PASA no longer asks what the Autopilots ask (pasa_autopilot.js 2.7).** For each failure condition:
+  - The interdependence question is a pointer card: who feeds it now, how many system functions are still open, and an "Open the Interdependence Autopilot" button that opens it at that failure condition.
+  - With a CoFFE chosen, the case questions are one pointer card: how many cases are answered, and an "Open the CoFFE Autopilot" button.
+  - The open-items list names the Autopilot that asks.
+  - What stays in the PASA, because the Autopilots don't ask it: tracing a feeding system's failure condition, where each shared resource is dispositioned, and whether a system tree is ready to be linked.
+  - The beside-the-trees bar says "MAC Autopilot".
+- **CoFFE only when chosen.** With the PASA's CoFFE answer "no", the appendix carries no CoFFE section and none of the CoFFE Autopilot's assumptions, even when the Autopilot was sent. This also fixes a 23 Nov slip: the PASA's own CoFFE section had been chained to the assumptions line and only showed when there were no assumptions.
+- **Comments (comment_kinds.js 1.2).** A comment on a MAC rule opens the MAC Autopilot at the failure condition the rule stands for, and the MAC Autopilot shows each rule's comment button there. A comment on a CoFFE case opens the CoFFE Autopilot at its failure condition. The CoFFE Autopilot has no per-case comment buttons yet.
+
+**Speed.**
+- **The cause.** The PASA builds every appendix to number its tables, on every click. With the Autopilots on, that meant building the CoFFE tables of all 60 HL-1 failure conditions each time: +1.8 s per click and a timed-out test.
+- **The cache (apx_bridge.js).** What the PASA shows for a failure condition is now kept until the saved project changes. The key is the whole project (`SLStores.snapshot()`) minus the PASA's own answers, which the bridge doesn't read, and minus empty placeholder records. So nothing it shows can be stale.
+- **The result.** A PASA click on HL-1 now takes about 2.0 s, against 2.6 s before today. The first appendix after loading pays once.
+- **Off-screen drawing.** The Interdependence page now waits until it is on screen to draw, like every other page (lazy_render.js). A draw asked for on purpose finds the page itself.
+
+**Tests.**
+- **New: tests/regression_apx_for_everyone_20261124 (19 checks, HL-1 demo).** It opens the way a customer would, from a computer that still has the preview switch stored, with `?apx=0` in the address. It covers the pages, the menu, the PASA pointers and that they open the right failure condition, CoFFE yes and no, the cache (kept through a PASA-only answer, rebuilt and correct after a system is renamed), and the MAC comment jump.
+- **Mutations:** switchback, bar, macold, pasaasks, coffeno, stale and cmtjump each turn it red.
+- **Updated for the new behavior:**
+  - apx_interdependence: the retired switch, and no way back to the old page;
+  - apx_coffe_bridge: no earlier MAC page, and `off()` changes nothing;
+  - pasa_nav_entry: the menu entry, and the Interdependence tab no longer goes to the PASA;
+  - pasa_autopilot P1: the MAC tab opens the Autopilot;
+  - mac_one_reading 7: the earlier MAC page is not reachable;
+  - comments_everywhere: the MAC rule's button and jump are on the MAC Autopilot;
+  - hl1_apx_demo: the pins, and no switch.
+- `?apx=1` removed from the Autopilot tests' addresses, so they prove the pages work with no switch.
+- The whole wall was run in the cloud before handing over.
+
+**Customer name out of served files.** Four code comments named the customer: ai_assistant.js (two), fha_phase_cover.js, and demo/hl1_apx.js (mine, 23 Nov). They now say "a customer". These are comment-only edits, so no version bumps.
+
+**Desktop.** This needs a web ship and then a desktop release (Windows only, as with 0.21.32).
+
 ## 23 Nov 2026, latest: NO PERSONAL TRIAL CLOCK ON A CUSTOMER INSTALL. Radia's desktop showed "Trial, 1 day left" over a valid enterprise license.
 
 **Why (Waqas's brief).** "Fix needed: the old personal trial clock is running on customer installs." On Radia's own server, the desktop app showed Greg Ryan "Trial, 1 day left", a Subscribe button and the EDU tier. Their signed license SL-LIC-2026-RADIA-T5 is a valid enterprise license that ends 4 Dec.

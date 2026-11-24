@@ -10,8 +10,9 @@
  * the switch is on.
  *   1  index.html: apx_engine.js, then apx_autopilots.js, both before pasa_autopilot.js
  *   2  wording: American English, no em dashes, "AC" for aircraft (never "AP"), black table headers
- *   3  switch off: the Interdependence tab still lands on the PASA and no Autopilot is drawn; nothing is written
- *   4  switch on (K350 demo): the Autopilot draws, today's header text is hidden, the tables are not folded away
+ *   3  (24 Nov 2026: on for everyone, "new pages only") the retired switch: with ?apx=0 and a stored sl_apx the Autopilot
+ *      is still on, the Interdependence tab draws it, the stored switch is cleared; opening it writes nothing
+ *   4  (K350 demo) the Autopilot draws, today's header text is hidden, the tables are not folded away
  *   5  FC-07: what the project's data says is ticked and locked; unticking it is refused with the reason, and it stays
  *   6  ticking a function adds exactly that column to Table Q.4-1; unticking removes it; unticked ones are never shown
  *   7  (v1.2) the step ASKS for each system and its function and whether it is a resource system; a resource system is a
@@ -20,14 +21,14 @@
  *      function lands in the architecture; a new resource lands in the resources and in Table Q.4-2
  *   8  sending needs a name and a finished table; once sent, every shown answer carries the name and the date
  *   9  a change after sending says so ("changed since it was sent") until it is sent again
- *  10  today's interdependence tables are not touched until it is sent; once sent they carry it (apx_bridge.js); the
- *      switch back shows today's page
+ *  10  today's interdependence tables are not touched until it is sent; once sent they carry it (apx_bridge.js); there
+ *      is no switch back to the earlier page
  *  12  (v1.4) "check" for "tick"; the AI proposes systems, functions and resources from a document, a person accepts;
  *      resources are Assumed until compared with the architecture document; what was sent can be taken back out
  *  11  no page errors
  * MUTATION PROOFS (SL_APXI_MUTATE): autoadd (the AI's proposals are added by themselves), noassumed (a hand-added resource is not Assumed), noask (taking out does not ask first), notrace (a ticked function is not traced up to the aircraft function), rescol (a resource provider is a column again), preticked (the tool ticks a resource from the register), nokind (a system is added without asking its kind), offline (a field sits off the line of its label and button), nolock (a project-fed system can be unticked), leak (every function is shown in the
- *   table), nosign (sending with no name), unfinished (sending an unfinished table), noswitch (the Autopilot shows with
- *   the switch off), nostamp (answers are sent without the name), oldwrite (today's table is written to). Each must
+ *   table), nosign (sending with no name), unfinished (sending an unfinished table), switchback (the retired switch
+ *   brought back), nostamp (answers are sent without the name), oldwrite (today's table is written to). Each must
  *   turn this red.
  * Run: node tests/regression_apx_interdependence_20261115.test.js
  */
@@ -53,7 +54,7 @@ function mutate(file, body) {
     if (MUT === 'leak') rep("function picked(fc) { return allCols().filter(function (c) { return cellOf(fc, c).on; }); }", "function picked(fc) { return allCols(); }");
     if (MUT === 'nosign') rep("if (!name) return { ok: false, why: 'Type your name to sign before sending.' };", "");
     if (MUT === 'unfinished') rep("var l = left(fc); if (l.length) return { ok: false, why: l[0] };", "");
-    if (MUT === 'noswitch') rep("function enabled() { var l = ls(); try { return !!(l && l.getItem(KEY) === '1'); } catch (_) { return false; } }", "function enabled() { return true; }");
+    if (MUT === 'switchback') rep("function enabled() { return true; }", "function enabled() { var l = ls(); try { return !!(l && l.getItem(KEY) === '1'); } catch (_) { return false; } }");
     if (MUT === 'nostamp') rep("src: x.src, by: name, at: at };", "src: x.src };");
     if (MUT === 'oldwrite') rep("        touched(fc.key);\n    }\n    function setRole", "        try { var p0 = pc(); p0.interdep = p0.interdep || {}; p0.interdep.cells = p0.interdep.cells || {}; p0.interdep.cells[fc.key + '\\u00A7' + colId] = { state: 'asserted' }; } catch (_) {}\n        touched(fc.key);\n    }\n    function setRole");
     return body;
@@ -67,7 +68,7 @@ function mutate(file, body) {
     check('2 no em dashes in the Autopilot', src.indexOf(String.fromCharCode(0x2014)) === -1);
     check('2 American English', !/\b(colour|behaviour|analysed|analysing|centre|organis|summaris|recognis|minimis|licence|labelled|cancelled)\b/i.test(src));
     check('2 the abbreviation is AC Aircraft, never AP', src.indexOf("['AC', 'Aircraft']") !== -1 && !/\['AP',/.test(src) && !/>AP (Function|FC|Systems)/.test(src));
-    check('2 the switch is read from one place', (src.match(/getItem\(KEY\)/g) || []).length === 1);
+    check('2 the switch is retired: enabled() is always true and the address is not read for it', /function enabled\(\) \{ return true; \}/.test(src) && !/\[\?&\]apx=/.test(src));
 
     // ---- the browser ----------------------------------------------------------------------------------------------------
     let pw; try { pw = require('playwright'); } catch (_) { console.log('  SKIP  browser checks (playwright is not installed)'); done(); return; }
@@ -82,8 +83,9 @@ function mutate(file, body) {
     await new Promise(r => srv.listen(0, '127.0.0.1', r));
     const URL0 = 'http://127.0.0.1:' + srv.address().port + '/index.html';
     const br = await pw.chromium.launch(), errs = [], tick = ms => new Promise(r => setTimeout(r, ms));
-    async function boot(q) {
-        const pg = await (await br.newContext({ viewport: { width: 1400, height: 1000 } })).newPage();
+    async function boot(q, init) {
+        const cx = await br.newContext({ viewport: { width: 1400, height: 1000 } }); if (init) await cx.addInitScript(init);
+        const pg = await cx.newPage();
         pg.on('pageerror', e => errs.push(String(e).slice(0, 300))); pg.on('dialog', d => d.dismiss().catch(() => {}));
         await pg.goto(URL0 + q); await tick(5000);
         await pg.evaluate(() => { document.documentElement.classList.remove('sl-auth-gate-blocked'); const g = document.getElementById('sl-auth-gate'); if (g) g.remove(); if (window.__slDismissBootSplash) window.__slDismissBootSplash(); });
@@ -92,27 +94,28 @@ function mutate(file, body) {
         return pg;
     }
     try {
-        // ---- 3: switch off -----------------------------------------------------------------------------------------------
-        let pg = await boot('?apx=0');
+        // ---- 3: the retired switch ---------------------------------------------------------------------------------------
+        let pg = await boot('?apx=0', () => { try { if (!sessionStorage.getItem('t.seed')) { sessionStorage.setItem('t.seed', '1'); localStorage.setItem('sl_apx', '1'); } } catch (_) {} });
         const off = await pg.evaluate(async () => {
+            const storeBefore = !!(typeof projectConfig !== 'undefined' && projectConfig && projectConfig.apx);
             switchTab('interdep'); await new Promise(r => setTimeout(r, 1200));
             const v = document.getElementById('view-interdep'), shown = v && getComputedStyle(v).display !== 'none' && v.offsetParent !== null;
-            return { enabled: window.SLApxAuto.enabled(), apx: !!document.querySelector('#interdep-host .apx'), shown: !!shown, entry: !!document.querySelector('[data-apx-entry]'), store: !!(typeof projectConfig !== 'undefined' && projectConfig && projectConfig.apx) };
+            return { enabled: window.SLApxAuto.enabled(), apx: !!document.querySelector('#interdep-host .apx'), shown: !!shown, stored: localStorage.getItem('sl_apx'), storeBefore, sent: !!(projectConfig && projectConfig.apx && projectConfig.apx.idp && Object.values(projectConfig.apx.idp).some(r => r && r.sent)) };
         });
-        check('3 switch off: the Autopilot is not enabled', off.enabled === false);
-        check('3 switch off: the Interdependence tab does not open and no Autopilot is drawn', !off.apx && !off.shown && !off.entry, JSON.stringify(off));
-        check('3 switch off: nothing is written into the project', off.store === false);
+        check('3 the retired switch: ?apx=0 does not turn the Autopilot off', off.enabled === true);
+        check('3 the Interdependence tab opens and draws the Autopilot', off.apx && off.shown, JSON.stringify(off));
+        check('3 no stored switch is left behind, and opening the page sends nothing', off.stored === null && !off.sent, JSON.stringify(off));
         await pg.context().close();
 
-        // ---- 4: switch on ------------------------------------------------------------------------------------------------
-        pg = await boot('?apx=1');
+        // ---- 4: as every customer opens it ------------------------------------------------------------------------------------------------
+        pg = await boot('');
         const on = await pg.evaluate(async () => {
             switchTab('interdep'); await new Promise(r => setTimeout(r, 1500));
             const A = window.SLApxAuto, v = document.getElementById('view-interdep');
             const p = v.querySelector(':scope > p');
             return { enabled: A.enabled(), apx: !!document.querySelector('#interdep-host .apx'), shown: v.offsetParent !== null, oldText: p ? getComputedStyle(p).display : 'none', fcs: A.model.fcs().length, cols: A.model.allCols().length, k: (A.model.fcs().find(f => f.fcId === 'FC-07') || {}).key };
         });
-        check('4 switch on: the Autopilot draws on the Interdependence tab', on.enabled && on.apx && on.shown, JSON.stringify(on));
+        check('4 the Autopilot draws on the Interdependence tab', on.enabled && on.apx && on.shown, JSON.stringify(on));
         check('4 it reads the demo: failure conditions and system functions', on.fcs >= 5 && on.cols >= 10, on.fcs + ' / ' + on.cols);
         check("4 today's header text is hidden while the Autopilot shows", on.oldText === 'none', on.oldText);
         check('4 the demo has FC-07', !!on.k);
@@ -292,9 +295,8 @@ function mutate(file, body) {
         check('12 once sent, the page offers to take it back out, and asks before doing it', tk.btn && tk.asks && tk.still === tk.before && tk.before > 0, JSON.stringify(tk));
         check('12 taking it out removes what was sent from today\'s table; the answers here stay', tk.after === 0 && tk.status === 'started' && tk.kept > 0 && tk.tookOut, JSON.stringify(tk));
         await pg.evaluate(() => { window.SLApxAuto._ui.step = 6; window.SLApxAuto.kit.draw(); });
-        await pg.click('[data-apx-view="old"]'); await tick(1200);
-        const old = await pg.evaluate(() => { const v = document.getElementById('view-interdep'), p = v.querySelector(':scope > p'); return { cls: v.classList.contains('apx-on'), p: p ? getComputedStyle(p).display : '', sw: !!document.querySelector('#interdep-host [data-apx-view="new"]'), body: document.querySelector('#interdep-host').innerText.length }; });
-        check("10 the switch back shows today's page, with the way back to the Autopilot", !old.cls && old.p !== 'none' && old.sw && old.body > 200, JSON.stringify(old));
+        const old = await pg.evaluate(() => { const v = document.getElementById('view-interdep'), h = document.querySelector('#interdep-host'); return { cls: v.classList.contains('apx-on'), sw: document.querySelectorAll('[data-apx-view],[data-apx-back]').length, words: /Today's page|our team|preview/i.test(h.innerText), head: (v.querySelector('h3') || {}).textContent }; });
+        check('10 no switch back to the earlier page and no "preview" or "our team" words; the page is named for the three Autopilots', old.cls && old.sw === 0 && !old.words && old.head === 'Interdependence, MAC and CoFFE Autopilots', JSON.stringify(old));
         check('11 no page errors', errs.length === 0, errs.join(' | '));
         await pg.context().close();
     } catch (e) { check('browser run completed', false, e && e.stack ? e.stack : e); }

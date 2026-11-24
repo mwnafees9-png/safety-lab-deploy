@@ -4,9 +4,11 @@
  * in steps 3 and 4: apx_mac.js and apx_coffe.js register themselves here, and apx_bridge.js carries the answers
  * to the PASA and to the files that read today's stores).
  *
- * BEHIND A SWITCH ONLY OUR TEAM SEES. Nothing here shows until the switch is on (open the tool once with ?apx=1 in the
- * address, or SLApxAuto.on(); ?apx=0 or SLApxAuto.off() turns it off). With it on, the Interdependence page shows this
- * Autopilot, with a switch back to today's page. Customers keep today's page, unchanged.
+ * ON FOR EVERYONE (24 Nov 2026, Waqas: "go ahead and get the new autopilots on" for every customer, "new pages only").
+ * The Interdependence page is this Autopilot, the MAC and CoFFE tabs open theirs (apx_bridge.js), and the earlier
+ * Interdependence, MAC and CoFFE pages are not reachable any more. The team-only switch (?apx=1, sl_apx) is retired:
+ * enabled() is always true, on() and off() do nothing, and a stored sl_apx is cleared. Earlier answers are not lost:
+ * the Autopilots read what the project already holds, and the MAC Autopilot converts an earlier MAC rule exactly.
  * IT SAVES IN ITS OWN PLACE (projectConfig.apx). Nothing else in a project is changed until the engineer sends a
  * failure condition to the PASA: what was sent is then carried to today's stores for the files that read them
  * (apx_bridge.js, which can also take it back out). One more thing changes the project, and the engineer asks for it
@@ -48,7 +50,7 @@
  * ==========================================================================*/
 (function (root) {
     'use strict';
-    var VERSION = '1.7';   // 1.7 23 Nov 2026: fillAs: a built-in demo is filled through the steps of the Autopilots, signed by its named engineer on a fixed date   // 1.6 23 Nov 2026: each resource failure says what it does to each function it feeds (no effect with its reason, partial loss, total loss, wrong action); the CoFFE and the fault tree place it by that   // 1.5 17 Nov 2026: no ARP table numbers on any table; the two interdependence tables carry their title in the top row, with a white vertical divider; the common resource table has no left-hand column.   // 1.4 17 Nov 2026: "check" for "tick"; the AI reads a design document or the engineer's words and proposes the systems, functions and resources (a person accepts each); the resources are Assumed until compared with the architecture document; what was sent can be taken back out from the page.   // 1.3 17 Nov 2026: a function that does the job is traced up to the aircraft function when it is checked or added here (and the trace the Autopilot made comes off with the check); a resource's providing function is written where the architecture reads it (providedByFunctions).   // 1.2 16 Nov 2026: the Autopilot ASKS for each system and its function, and whether it is a resource system; a resource system is a row of Table Q.4-2, never a column of Table Q.4-1; no resource is checked by the tool.   // 1.1 16 Nov 2026: a field in a row lines up with its label and its button (the site's own bottom margin on fields is taken off inside the Autopilots)
+    var VERSION = '1.8';   // 1.8 24 Nov 2026: on for everyone, the switch and the way back to the earlier pages retired   // 1.7 1.7 23 Nov 2026: fillAs: a built-in demo is filled through the steps of the Autopilots, signed by its named engineer on a fixed date   // 1.6 23 Nov 2026: each resource failure says what it does to each function it feeds (no effect with its reason, partial loss, total loss, wrong action); the CoFFE and the fault tree place it by that   // 1.5 17 Nov 2026: no ARP table numbers on any table; the two interdependence tables carry their title in the top row, with a white vertical divider; the common resource table has no left-hand column.   // 1.4 17 Nov 2026: "check" for "tick"; the AI reads a design document or the engineer's words and proposes the systems, functions and resources (a person accepts each); the resources are Assumed until compared with the architecture document; what was sent can be taken back out from the page.   // 1.3 17 Nov 2026: a function that does the job is traced up to the aircraft function when it is checked or added here (and the trace the Autopilot made comes off with the check); a resource's providing function is written where the architecture reads it (providedByFunctions).   // 1.2 16 Nov 2026: the Autopilot ASKS for each system and its function, and whether it is a resource system; a resource system is a row of Table Q.4-2, never a column of Table Q.4-1; no resource is checked by the tool.   // 1.1 16 Nov 2026: a field in a row lines up with its label and its button (the site's own bottom margin on fields is taken off inside the Autopilots)
     function g(n) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(n); if (v !== undefined) return v; } } catch (_) {} try { return root[n]; } catch (_) { return undefined; } }
     function arr(v) { return Array.isArray(v) ? v : []; }
     function S(v) { return v == null ? '' : String(v); }
@@ -72,12 +74,11 @@
     // ---- the switch ---------------------------------------------------------------------------------------------------
     var KEY = 'sl_apx';
     function ls() { try { return root.localStorage || null; } catch (_) { return null; } }
-    function enabled() { var l = ls(); try { return !!(l && l.getItem(KEY) === '1'); } catch (_) { return false; } }
-    function on() { var l = ls(); try { if (l) l.setItem(KEY, '1'); } catch (_) {} rerender(); }
-    function off() { var l = ls(); try { if (l) l.removeItem(KEY); } catch (_) {} rerender(); }
-    (function fromAddress() {
-        try { var m = /[?&]apx=([01])\b/.exec(S(root.location && root.location.search)); if (!m) return; var l = ls(); if (!l) return; if (m[1] === '1') l.setItem(KEY, '1'); else l.removeItem(KEY); } catch (_) {}
-    })();
+    // 24 Nov 2026: retired. The Autopilots are on for everyone; on() and off() are kept so an old caller does nothing harmful.
+    function enabled() { return true; }
+    function on() {}
+    function off() {}
+    (function clearOld() { try { var l = ls(); if (l && l.getItem(KEY) != null) l.removeItem(KEY); } catch (_) {} })();
 
     // ---- the store ----------------------------------------------------------------------------------------------------
     function store() {
@@ -337,7 +338,7 @@
     }
 
     // ---- what the engineer does -------------------------------------------------------------------------------------------
-    var ui = { ap: 'idp', stepOf: { idp: 0 }, fc: null, step: 0, eff: 0, old: false, blocked: '', signMiss: false, open: {}, kind: {}, draft: {} };
+    var ui = { ap: 'idp', stepOf: { idp: 0 }, fc: null, step: 0, eff: 0, blocked: '', signMiss: false, open: {}, kind: {}, draft: {} };
     // The MAC and CoFFE Autopilots register here: { name, steps: [title], render(i, fc), click(action, arg, el, fc), change(action, arg, el, fc), status(fc) }
     var EXT = {}, ORDER = ['idp', 'mac', 'cof'];
     function register(key, def) { EXT[key] = def; if (ORDER.indexOf(key) === -1) ORDER.push(key); try { rerender(); } catch (_) {} }
@@ -674,7 +675,7 @@
 
     function html() {
         var fc = curFc();
-        var bar = '<div class="apx-bar"><div class="apx-sw" role="group" aria-label="Which page"><button type="button" class="' + (ui.old ? '' : 'on') + '" data-apx-view="new">New Autopilot (preview)</button><button type="button" class="' + (ui.old ? 'on' : '') + '" data-apx-view="old">Today\'s page</button></div><span style="font-size:12.5px">Only our team sees this switch. Nothing reaches the PASA or today\'s tables until you send it.</span></div>';
+        var bar = '<div class="apx-bar"><span style="font-size:12.5px">Nothing reaches the PASA until you send it.</span></div>';
         if (!fc) return '<div class="apx">' + bar + card('Nothing to work on yet', 'The Interdependence Autopilot needs at least one aircraft failure condition. Add them in the aircraft FHA first.', '') + '</div>';
         if (ui.ap !== 'idp' && !EXT[ui.ap]) setAp('idp');
         var STP = apSteps(ui.ap), aps = ORDER.filter(function (k) { return k === 'idp' || EXT[k]; });
@@ -684,6 +685,7 @@
             + (aps.length > 1 ? '<div class="apx-sw apx-aps" role="group" aria-label="Which Autopilot">' + aps.map(function (k) { var sk = apStatus(k, fc).k; return '<button type="button" class="' + (k === ui.ap ? 'on' : '') + '" data-apx-ap="' + k + '">' + E(apName(k)) + (sk === 'sent' ? ' (sent)' : sk === 'changed' ? ' (changed)' : '') + '</button>'; }).join('') + '</div>' : '')
             + '<div class="apx-pills"><span class="apx-pill"><b>' + E(apName(ui.ap)) + ' Autopilot</b></span>'
             + (i > 0 ? '<span class="apx-pill">Working on <b>' + E(fc.fcId) + '</b> ' + E(fc.desc) + '</span>' + (fc.sev ? '<span class="apx-pill">' + E(fc.sev) + '</span>' : '') + (fc.phases ? '<span class="apx-pill">Phase: <b>' + E(fc.phases) + '</b></span>' : '') : '')
+            + macComments(fc)
             + '<span class="apx-pill">' + (st.k === 'sent' ? 'Sent to the PASA' : st.k === 'changed' ? 'Changed since it was sent' : st.k === 'started' ? 'Started, not sent' : 'Not started') + '</span></div>'
             + '<div class="apx-steps"><select data-apx-jump="1" aria-label="Step" style="font-weight:600;border-width:1.5px">' + STP.map(function (t, k) { return '<option value="' + k + '"' + (k === i ? ' selected' : '') + '>Step ' + (k + 1) + ' of ' + STP.length + ': ' + E(t) + '</option>'; }).join('') + '</select><div class="apx-prog"><i style="width:' + Math.round((i + 1) / STP.length * 100) + '%"></i></div></div>';
         if (ui.ap === 'idp') h += [stepFc, stepDoes, stepFails, stepRes, stepModes, stepEffects, stepSend][i](fc);
@@ -693,13 +695,24 @@
         return h;
     }
 
+    // 24 Nov 2026: the MAC rules that stand for this failure condition carry their comments here (the earlier MAC page is retired)
+    function macComments(fc) {
+        if (ui.ap !== 'mac' || !fc) return '';
+        try {
+            var CK = root.SLCommentKinds, row = arr(g('acFhaData')).filter(function (r) { return r && S(r.internalId) === S(fc.key); })[0];
+            if (!CK || !CK.button || !row || typeof root.macRulesForFc !== 'function') return '';
+            var rs = arr(root.macRulesForFc(row)); if (!rs.length) return '';
+            return rs.map(function (r) { var b = CK.button({ kind: 'mac', id: S(r.id) }); return b ? '<span class="apx-pill" data-apx-maccmt="' + E(S(r.id)) + '">MAC rule ' + E(S(r.id)) + ' ' + b + '</span>' : ''; }).join('');
+        } catch (_) { return ''; }
+    }
     var _host = null, _orig = null;
     function mark(onNow) { try { var v = document.getElementById('view-interdep'); if (v) v.classList.toggle('apx-on', !!onNow); } catch (_) {} }
     // Drawing replaces the page; a field that loses focus as it is replaced may report its change mid-draw. That change
     // is taken, and the page is drawn once more after, never inside itself.
     var _drawing = false, _again = false;
     function draw() {
-        if (!_host) return;
+        // a draw asked for on purpose (a jump, a step) before the page was first drawn finds the page itself
+        if (!_host) { var h0 = typeof document !== 'undefined' && document.getElementById('interdep-host'); if (h0) render(h0); return; }
         if (_drawing) { _again = true; return; }
         _drawing = true;
         try { style(); mark(true); var y = typeof root.scrollY === 'number' ? root.scrollY : 0; _host.innerHTML = html(); try { root.scrollTo(0, y); } catch (_) {} }
@@ -708,10 +721,9 @@
     }
     function val(sel) { var el = _host && _host.querySelector(sel); return el ? el.value : ''; }
     function onClick(e) {
-        var t = e.target && e.target.closest ? e.target.closest('[data-apx-view],[data-apx-ap],[data-apx-x],[data-apx-kind],[data-apx-take],[data-apx-way],[data-apx-aiprop],[data-apx-pacc],[data-apx-pdis],[data-apx-nav],[data-apx-tick],[data-apx-prop],[data-apx-res],[data-apx-feed],[data-apx-eff],[data-apx-addfn],[data-apx-addsys],[data-apx-addres],[data-apx-send],[data-apx-ai]') : null;
+        var t = e.target && e.target.closest ? e.target.closest('[data-apx-ap],[data-apx-x],[data-apx-kind],[data-apx-take],[data-apx-way],[data-apx-aiprop],[data-apx-pacc],[data-apx-pdis],[data-apx-nav],[data-apx-tick],[data-apx-prop],[data-apx-res],[data-apx-feed],[data-apx-eff],[data-apx-addfn],[data-apx-addsys],[data-apx-addres],[data-apx-send],[data-apx-ai]') : null;
         if (!t || !_host || !_host.contains(t)) return;
         var d = t.dataset, fc = curFc();
-        if (d.apxView) { ui.old = d.apxView === 'old'; if (ui.old && ui.ap === 'mac' && typeof root.switchTab === 'function') { root.switchTab('mac'); return; } rerender(); return; }
         if (!fc) return;
         if (d.apxAp) { setAp(d.apxAp); draw(); return; }
         if (d.apxWay) { ui.way = d.apxWay; draw(); return; }
@@ -788,7 +800,7 @@
     }
     function rerender() { try { var f = root.renderInterdepPage; if (typeof f === 'function') f(); } catch (_) {} }
 
-    // With the switch on, the Interdependence page draws this Autopilot (and a switch back to today's page).
+    // The Interdependence page draws this Autopilot (24 Nov 2026: for everyone; the earlier page is not reachable).
     (function wrap(tries) {
         if (typeof document === 'undefined') return;
         var f = root.renderInterdepPage;
@@ -796,34 +808,26 @@
         if (f._apx) return;
         _orig = f;
         var w = function () {
-            if (!enabled()) { mark(false); return _orig.apply(this, arguments); }
             var host = document.getElementById('interdep-host');
             if (!host) return _orig.apply(this, arguments);
-            if (ui.old) {
-                mark(false);
-                var r = _orig.apply(this, arguments);
-                // today's page, with the way back on top (drawn after it, also when it drew late)
-                var put = function () { if (!ui.old || !enabled() || host.querySelector('[data-apx-back]')) return; style(); var b = document.createElement('div'); b.className = 'apx'; b.setAttribute('data-apx-back', '1'); b.innerHTML = '<div class="apx-bar"><div class="apx-sw" role="group" aria-label="Which page"><button type="button" data-apx-view="new">New Autopilot (preview)</button><button type="button" class="on" data-apx-view="old">Today\'s page</button></div></div>'; host.insertBefore(b, host.firstChild); if (_host !== host) { _host = host; host.addEventListener('click', onClick); host.addEventListener('change', onChange); host.addEventListener('toggle', onToggle, true); } };
-                put(); setTimeout(put, 400);
-                return r;
-            }
+            // off screen: drawn when the page is opened, like every other page (lazy_render.js), not on every change elsewhere
+            if (typeof root.SLLazy !== 'undefined' && root.SLLazy && root.SLLazy.defer && root.SLLazy.defer('interdep-host', 'renderInterdepPage', arguments)) return;
             render(host);
         };
         w._apx = true; Object.keys(f).forEach(function (k) { try { w[k] = f[k]; } catch (_) {} });
         root.renderInterdepPage = w;
     })(80);
 
-    // The page is opened like any other (switchTab('interdep')); it is drawn on arrival. With the switch on, the PASA page
-    // carries the way in: the Autopilots that feed it.
-    function open(which) { try { ui.old = false; setAp(which || 'idp'); if (typeof root.switchTab === 'function') root.switchTab('interdep'); } catch (_) {} }
+    // The page is opened like any other (switchTab('interdep')); it is drawn on arrival. The PASA page carries the way in:
+    // the Autopilots that feed it.
+    function open(which) { try { setAp(which || 'idp'); if (typeof root.switchTab === 'function') root.switchTab('interdep'); } catch (_) {} }
     function placeEntry() {
         if (typeof document === 'undefined') return;
         var v = document.getElementById('view-pasa'); if (!v) return;
         var old = v.querySelector(':scope > [data-apx-entry]'); if (old) old.remove();
-        if (!enabled()) return;
         style();
         var b = document.createElement('div'); b.className = 'apx'; b.setAttribute('data-apx-entry', '1');
-        b.innerHTML = '<div class="apx-bar" style="margin:0 0 10px"><b>The Autopilots that feed this report (preview, our team only):</b>' + ORDER.filter(function (k) { return k === 'idp' || EXT[k]; }).map(function (k) { return '<button type="button" class="apx-btn" data-apx-open="' + k + '">' + E(apName(k)) + ' Autopilot</button>'; }).join('') + '</div>';
+        b.innerHTML = '<div class="apx-bar" style="margin:0 0 10px"><b>The Autopilots that feed this report:</b>' + ORDER.filter(function (k) { return k === 'idp' || EXT[k]; }).map(function (k) { return '<button type="button" class="apx-btn" data-apx-open="' + k + '">' + E(apName(k)) + ' Autopilot</button>'; }).join('') + '</div>';
         b.addEventListener('click', function (e) { var t = e.target && e.target.closest ? e.target.closest('[data-apx-open]') : null; if (t) open(t.dataset.apxOpen); });
         var head = v.querySelector(':scope > .header-with-export');
         if (head && head.nextSibling) v.insertBefore(b, head.nextSibling); else v.insertBefore(b, v.firstChild);
@@ -834,7 +838,7 @@
         if (root.switchTab._apx) return;
         var orig = root.switchTab, w = function (tabId) {
             var r = orig.apply(this, arguments);
-            try { if (tabId === 'pasa') placeEntry(); if (tabId === 'interdep' && enabled()) { var f = root.renderInterdepPage; if (typeof f === 'function') f(); } } catch (_) {}
+            try { if (tabId === 'pasa') placeEntry(); if (tabId === 'interdep') { var f = root.renderInterdepPage; if (typeof f === 'function') f(); } } catch (_) {}
             return r;
         };
         w._apx = true; Object.keys(orig).forEach(function (k) { try { w[k] = orig[k]; } catch (_) {} });

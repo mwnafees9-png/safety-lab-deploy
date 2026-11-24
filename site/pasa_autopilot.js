@@ -54,7 +54,7 @@
 // Every number comes from SLTopBasis and the trees. window.SLPasaAuto.
 (function (root) {
     'use strict';
-    var VERSION = '2.6';   // 2.6 23 Nov 2026: an appendix shows the PASA assumptions the Autopilots record. // 2.5 15 Nov 2026: an appendix shows what the Interdependence, MAC and CoFFE Autopilots sent (apx_bridge.js). // 2.2 11 Nov 2026: a gate whose inputs are all held tighter than their shares says what they use of its budget
+    var VERSION = '2.7';   // 2.7 24 Nov 2026: the Interdependence and CoFFE Autopilots ask the interdependence and CoFFE questions (on for everyone); the PASA shows where they stand and opens them. // 2.6 23 Nov 2026: an appendix shows the PASA assumptions the Autopilots record. // 2.5 15 Nov 2026: an appendix shows what the Interdependence, MAC and CoFFE Autopilots sent (apx_bridge.js). // 2.2 11 Nov 2026: a gate whose inputs are all held tighter than their shares says what they use of its budget
     function g(n) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(n); if (v !== undefined) return v; } } catch (_) {} try { return root[n]; } catch (_) { return undefined; } }
     function arr(v) { return Array.isArray(v) ? v : []; }
     function S(v) { return v == null ? '' : String(v); }
@@ -445,13 +445,17 @@
         var RT = root.SLReqTrace; if (RT) RT.TYPES.forEach(function (t) { if (!RT.pasaLevels(t.id, null).levels.length) left.push('At what level are ' + lc(t.name) + ' requirements derived?'); });
         return left;
     }
+    // 24 Nov 2026 (Waqas: the new Autopilots for every customer, "new pages only"; 15 Nov: "the PASA only shows the results"):
+    // where the Autopilots are in the build, they ask the interdependence and CoFFE questions and the PASA does not ask them again.
+    function apxAsks() { try { var B = root.SLApxBridge; return !!(B && !B.missing && typeof B.state === 'function' && root.SLApxAuto && typeof root.SLApxAuto.open === 'function'); } catch (_) { return false; } }
+    function apxOpen(key, which) { return 'SLApxAuto._ui.fc=' + J(S(key)) + ';SLApxAuto.open(' + J(which) + ')'; }
     function fcLeft(gr) {
-        var left = [], rows = idpRows(gr);
-        if (rows.some(function (r) { return r.state === 'open' || r.state === 'proposed'; })) left.push('Which systems feed ' + gr.fcId + '? (the interdependence table)');
+        var left = [], rows = idpRows(gr), AXQ = apxAsks();
+        if (rows.some(function (r) { return r.state === 'open' || r.state === 'proposed'; })) left.push('Which systems feed ' + gr.fcId + '? ' + (AXQ ? '(the Interdependence Autopilot asks this)' : '(the interdependence table)'));
         untraced(gr).forEach(function (u) { if (!u.ex) left.push(u.row.sysName + ' feeds ' + gr.fcId + ' with nothing traced: trace one of its failure conditions, or say why it does not'); });
         if (isQuant(gr) && treeOf(gr)) linkCands(gr).forEach(function (c) { if (!c.answer) left.push('Is the fault tree for ' + c.label + ' ready to be linked into the ' + gr.fcId + ' tree?'); });
         resources(gr).forEach(function (r) { if (!resWhere(gr, r)) left.push('Where is ' + lc(r.name) + ' dispositioned?'); });
-        if (coffeOn()) coffeCasesOf(gr).forEach(function (k) { if (!coffeVerdictOf(gr, k)) left.push('Does ' + caseWords(k) + ' produce ' + gr.fcId + '?'); });
+        if (coffeOn()) { var cOpen = coffeCasesOf(gr).filter(function (k) { return !coffeVerdictOf(gr, k); }); if (AXQ) { if (cOpen.length) left.push(cOpen.length + ' CoFFE case' + (cOpen.length > 1 ? 's' : '') + ' for ' + gr.fcId + (cOpen.length > 1 ? ' are' : ' is') + ' not answered yet (the CoFFE Autopilot asks them)'); } else cOpen.forEach(function (k) { left.push('Does ' + caseWords(k) + ' produce ' + gr.fcId + '?'); }); }
         return left;
     }
     // over-committed budgets and unreviewed items: open questions the left pane shows
@@ -583,8 +587,8 @@
         }
         // CoFFE
         if (AX && AX.mac && AX.mac.length) { b.push(H(3, 'Minimum acceptable configuration (MAC)')); AX.mac.forEach(function (x) { b.push(x); }); }
-        if (AX && AX.cof && AX.cof.length) { b.push(H(3, 'Combined functional failure effects (CoFFE)')); AX.cof.forEach(function (x) { b.push(x); }); }
-        if (AX && AX.asmp && AX.asmp.length) { b.push(H(3, 'Assumptions')); AX.asmp.forEach(function (x) { b.push(x); }); }   // 23 Nov 2026: the PASA assumptions the Autopilots record (apx_bridge.js)
+        // 24 Nov 2026: what the CoFFE Autopilot sent shows unless the PASA says no CoFFE (the CoFFE is done only when chosen); with it, the case list below is not repeated
+        if (coffeOn() !== false && AX && AX.cof && AX.cof.length) { b.push(H(3, 'Combined functional failure effects (CoFFE)')); AX.cof.forEach(function (x) { b.push(x); }); }
         else if (coffeOn()) {
             b.push(H(3, 'Combined functional failure effects (CoFFE)'));
             var ks = coffeCasesOf(gr);
@@ -593,6 +597,9 @@
                 return { 'System failure(s)': caseWords(k), ['Produce ' + f]: v ? (v.v === 'yes' ? 'Yes' : 'No') + (v.src === 'mac' ? ' (from the MAC model)' : '') : 'Not decided yet', 'Covered by the tree': inTree ? 'Yes' : 'No' };
             }), lead: '{N} lists each case: a row with one system is that system alone able to cause it.' } : P('The CoFFE has no cases for ' + f + ': no system is shown to feed it yet.'));
         }
+        // (24 Nov 2026: with no CoFFE chosen, the CoFFE Autopilot's assumptions are left out with its tables)
+        var asmpB = AX && AX.asmp ? (coffeOn() === false ? AX.asmp.map(function (x) { return x && x.k === 'table' ? Object.assign({}, x, { rows: arr(x.rows).filter(function (r) { return !r || r.From !== 'CoFFE Autopilot'; }) }) : x; }).filter(function (x) { return !(x && x.k === 'table' && !x.rows.length); }) : AX.asmp) : null;
+        if (asmpB && asmpB.length) { b.push(H(3, 'Assumptions')); asmpB.forEach(function (x) { b.push(x); }); }   // 23 Nov 2026: the PASA assumptions the Autopilots record (apx_bridge.js)
         if (isQuant(gr) && !built(gr)) {
             // v2.1: nothing built under the top is no analysis: no picture, no numbers
             b.push(H(3, 'The fault tree'));
@@ -741,22 +748,30 @@
         h += '<div class="paq-h" data-paq-fc="' + E(f) + '">' + E(fcName(gr)) + ' (' + E(gr.gov.severity) + ', ' + (isQuant(gr) ? 'quantitative' : 'qualitative') + ')</div><div class="paq-x">Answer these and its part of the appendix writes itself. What the project already holds is filled in and named; what is new is checked by you or drafted by the AI from the architecture, then confirmed.</div>';
         // 15 Nov 2026: with the new Autopilots switched on, they ask the interdependence, MAC and CoFFE questions; this pane shows where each stands
         var AXS = root.SLApxBridge && root.SLApxBridge.state ? safe(function () { return root.SLApxBridge.state(gr); }, null) : null;
-        if (AXS) { var axw = function (k) { return k === 'sent' ? 'sent to the PASA' : k === 'changed' ? 'changed since it was sent' : k === 'started' ? 'started, not sent' : 'not started'; }; h += '<div class="paq-open" data-paq-apx="' + E(f) + '"><b>The Autopilots that feed ' + E(f) + '</b><br>' + [['idp', 'Interdependence'], ['mac', 'MAC'], ['cof', 'CoFFE']].map(function (x) { return '<button type="button" class="paq-b" onclick="SLApxAuto._ui.fc=' + J(AXS.key) + ';SLApxAuto.open(' + J(x[0]) + ')">' + x[1] + ' Autopilot</button> ' + axw(AXS[x[0]]); }).join('<br>') + '<br>What they send fills the questions below and the tables in the report.</div>'; }
+        if (AXS) { var axw = function (k) { return k === 'sent' ? 'sent to the PASA' : k === 'changed' ? 'changed since it was sent' : k === 'started' ? 'started, not sent' : 'not started'; }; h += '<div class="paq-open" data-paq-apx="' + E(f) + '"><b>The Autopilots that feed ' + E(f) + '</b><br>' + [['idp', 'Interdependence'], ['mac', 'MAC'], ['cof', 'CoFFE']].map(function (x) { return '<button type="button" class="paq-b" onclick="SLApxAuto._ui.fc=' + J(AXS.key) + ';SLApxAuto.open(' + J(x[0]) + ')">' + x[1] + ' Autopilot</button> ' + axw(AXS[x[0]]); }).join('<br>') + '<br>They ask the interdependence, MAC and CoFFE questions; what they send fills the tables in the report.</div>'; }
         var items = openItems(gr); if (items.length) h += '<div class="paq-open" data-paq-openitems="1"><b>Open items</b><br>' + items.map(E).join('<br>') + '</div>';
         // 1. interdependence table
         var open = rows.filter(function (r) { return r.state === 'open' || r.state === 'proposed'; });
-        var tb = '<div class="slap-q">Which systems feed ' + E(f) + '?</div><div class="paq-x">The interdependence table for ' + E(f) + ' only: one row per system function. Rows the project already settles (from the architecture, or answered before) are filled in. Answer the rest by hand, or let the AI draft them from the architecture and confirm each one.</div>'
-            + '<div style="margin:4px 0 8px"><button type="button" class="paq-b" data-paq-idpai="' + E(f) + '" onclick="SLPasaAuto.ui.idpAi(' + J(f) + ')"' + (ui.busy === f ? ' disabled' : '') + '>' + (ui.busy === f ? 'Drafting with the AI...' : 'Draft the unanswered rows with AI') + '</button><button type="button" class="paq-b" data-paq-idpnone="' + E(f) + '" onclick="SLPasaAuto.ui.idpNone(' + J(f) + ')">None of the unanswered rows feed it</button></div>'
-            + '<table class="paq-t" data-paq-idp="' + E(f) + '"><thead><tr><th>System and function</th><th>Feeds ' + E(f) + '?</th></tr></thead><tbody>';
-        rows.forEach(function (r) {
-            r.cells.forEach(function (x) {
-                var c = x.cell, k = r.sysId + '|' + x.colId, lab = r.sysName + (x.legacy ? '' : ': ' + x.fn);
-                var src = c.state === 'contributes' ? '<span class="paq-src">' + E(basisWords(x) || 'Feeds it') + ': ' + E(howWords(x)) + '</span>' : c.state === 'cleared' ? '<span class="paq-src">Does not feed it (answered)</span>' : c.state === 'proposed' ? '<span class="paq-prop">AI draft: ' + (c.dir === 'contributes' ? 'feeds it' : 'does not') + (c.why ? ', because ' + E(T(c.why)) : '') + '. Confirm or correct.</span>' : '';
-                var fixed = c.state === 'contributes' && c.kind !== 'asserted';
-                tb += '<tr data-paq-cell="' + E(k) + '"><td>' + E(lab) + (src ? '<div>' + src + '</div>' : '') + '</td><td style="white-space:nowrap">' + (fixed ? 'Yes' : '<button type="button" class="paq-b' + (c.kind === 'asserted' ? ' on' : '') + '" onclick="SLPasaAuto.ui.cell(' + J(f) + ',' + J(x.colId) + ',\'yes\')">Yes</button><button type="button" class="paq-b' + (c.state === 'cleared' ? ' on' : '') + '" onclick="SLPasaAuto.ui.cell(' + J(f) + ',' + J(x.colId) + ',\'no\')">No</button>') + '</td></tr>';
+        if (AXS) {
+            // 24 Nov 2026: the Interdependence Autopilot asks this; the PASA shows where it stands and opens it
+            var fdNames = rows.filter(function (r) { return r.state === 'feeds'; }).map(function (r) { return r.sysName; });
+            h += card('fc.' + f + '.idp', '<div class="slap-q">Which systems feed ' + E(f) + '?</div><div class="paq-x" data-paq-idpapx="' + E(f) + '">The Interdependence Autopilot asks this, one system function at a time, and sends the answer here. '
+                + (fdNames.length ? 'Feeding it now: ' + E(listJoin(fdNames)) + '. ' : 'No system is shown feeding it yet. ') + (open.length ? open.length + ' system function' + (open.length > 1 ? 's are' : ' is') + ' still to be answered.' : 'Every system function is answered.')
+                + '</div><div style="margin-top:6px"><button type="button" class="paq-b on" onclick="' + apxOpen(AXS.key, 'idp') + '">Open the Interdependence Autopilot</button></div>', !open.length);
+        } else {
+            var tb = '<div class="slap-q">Which systems feed ' + E(f) + '?</div><div class="paq-x">The interdependence table for ' + E(f) + ' only: one row per system function. Rows the project already settles (from the architecture, or answered before) are filled in. Answer the rest by hand, or let the AI draft them from the architecture and confirm each one.</div>'
+                + '<div style="margin:4px 0 8px"><button type="button" class="paq-b" data-paq-idpai="' + E(f) + '" onclick="SLPasaAuto.ui.idpAi(' + J(f) + ')"' + (ui.busy === f ? ' disabled' : '') + '>' + (ui.busy === f ? 'Drafting with the AI...' : 'Draft the unanswered rows with AI') + '</button><button type="button" class="paq-b" data-paq-idpnone="' + E(f) + '" onclick="SLPasaAuto.ui.idpNone(' + J(f) + ')">None of the unanswered rows feed it</button></div>'
+                + '<table class="paq-t" data-paq-idp="' + E(f) + '"><thead><tr><th>System and function</th><th>Feeds ' + E(f) + '?</th></tr></thead><tbody>';
+            rows.forEach(function (r) {
+                r.cells.forEach(function (x) {
+                    var c = x.cell, k = r.sysId + '|' + x.colId, lab = r.sysName + (x.legacy ? '' : ': ' + x.fn);
+                    var src = c.state === 'contributes' ? '<span class="paq-src">' + E(basisWords(x) || 'Feeds it') + ': ' + E(howWords(x)) + '</span>' : c.state === 'cleared' ? '<span class="paq-src">Does not feed it (answered)</span>' : c.state === 'proposed' ? '<span class="paq-prop">AI draft: ' + (c.dir === 'contributes' ? 'feeds it' : 'does not') + (c.why ? ', because ' + E(T(c.why)) : '') + '. Confirm or correct.</span>' : '';
+                    var fixed = c.state === 'contributes' && c.kind !== 'asserted';
+                    tb += '<tr data-paq-cell="' + E(k) + '"><td>' + E(lab) + (src ? '<div>' + src + '</div>' : '') + '</td><td style="white-space:nowrap">' + (fixed ? 'Yes' : '<button type="button" class="paq-b' + (c.kind === 'asserted' ? ' on' : '') + '" onclick="SLPasaAuto.ui.cell(' + J(f) + ',' + J(x.colId) + ',\'yes\')">Yes</button><button type="button" class="paq-b' + (c.state === 'cleared' ? ' on' : '') + '" onclick="SLPasaAuto.ui.cell(' + J(f) + ',' + J(x.colId) + ',\'no\')">No</button>') + '</td></tr>';
+                });
             });
-        });
-        h += card('fc.' + f + '.idp', tb + '</tbody></table>', !open.length);
+            h += card('fc.' + f + '.idp', tb + '</tbody></table>', !open.length);
+        }
         // 1b. a system that feeds it with nothing traced
         untraced(gr).forEach(function (u) {
             var qid = 'fc.' + f + '.trace.' + u.row.sysId, opts = sysGroups(u.row.sysId).map(function (sg) { return { id: 'tr:' + sg.fcId, label: 'Trace ' + sg.fcId + ' ' + T(sg.gov.fcDesc || '') + ' (' + sg.gov.severity + ')', impact: 'Its SFHA entry is traced to ' + f + '; the appendix lists it, and its fault tree must carry it.' }; });
@@ -782,10 +797,17 @@
             h += card(qid, Q({ id: qid, text: 'Where is ' + lc(r.name) + ' dispositioned?', why: 'Shared by ' + (listJoin(r.shared) || 'the systems that feed ' + f) + '. A shared resource can fail several inputs at once and bypass an AND gate that says they are independent.', picked: w ? w.where : null, options: opts }) + rbox + ((w && w.where === 'none') || ui.open[qid] === 'none' ? textBox(qid + '.why', 'Why it cannot defeat an independence for ' + f, w ? w.why : '', '') : ''), !!w);
         });
         // 3. CoFFE cases
-        if (coffeOn()) coffeCasesOf(gr).forEach(function (k) {
-            var qid = 'fc.' + f + '.coffe.' + k.key, v = coffeVerdictOf(gr, k);
-            h += card(qid, Q({ id: qid, text: 'Does ' + caseWords(k) + ' produce ' + f + '?', why: v && v.src === 'mac' ? 'Filled in from the MAC model. Answer to record your own.' : 'A CoFFE case: say whether this combination produces the failure condition.', picked: v ? v.v : null, options: [{ id: 'yes', label: 'Yes', impact: 'The CoFFE table shows it produces ' + f + '.' }, { id: 'no', label: 'No', impact: 'The CoFFE table shows it does not.' }] }), !!v);
-        });
+        if (coffeOn() && AXS) {
+            // 24 Nov 2026: the CoFFE Autopilot asks the cases; the PASA shows how many are answered and opens it
+            var cAll = coffeCasesOf(gr), cOpen = cAll.filter(function (k) { return !coffeVerdictOf(gr, k); });
+            h += card('fc.' + f + '.coffe', '<div class="slap-q">The CoFFE cases for ' + E(f) + '</div><div class="paq-x" data-paq-cofapx="' + E(f) + '">The CoFFE Autopilot asks these and sends the answers here. ' + (cAll.length - cOpen.length) + ' of ' + cAll.length + ' case' + (cAll.length === 1 ? '' : 's') + ' answered.'
+                + '</div><div style="margin-top:6px"><button type="button" class="paq-b on" onclick="' + apxOpen(AXS.key, 'cof') + '">Open the CoFFE Autopilot</button></div>', !cOpen.length);
+        } else {
+            if (coffeOn()) coffeCasesOf(gr).forEach(function (k) {
+                var qid = 'fc.' + f + '.coffe.' + k.key, v = coffeVerdictOf(gr, k);
+                h += card(qid, Q({ id: qid, text: 'Does ' + caseWords(k) + ' produce ' + f + '?', why: v && v.src === 'mac' ? 'Filled in from the MAC model. Answer to record your own.' : 'A CoFFE case: say whether this combination produces the failure condition.', picked: v ? v.v : null, options: [{ id: 'yes', label: 'Yes', impact: 'The CoFFE table shows it produces ' + f + '.' }, { id: 'no', label: 'No', impact: 'The CoFFE table shows it does not.' }] }), !!v);
+            });
+        }
         // 4. the tree: nothing to answer
         var pg = pageOf(gr);
         // v2.1: each system failure condition traced here: is its tree ready to be linked into this one?
@@ -997,7 +1019,7 @@
     // Waqas, 10 Nov 2026: the MAC model, MF&MS and CEA move into the Fault trees tab beside the trees; they are not Autopilot
     // questions (the Autopilot uses what they produce and shows their open items). One bar across the top of each of those
     // pages (and of the PASA's fault trees) joins them; the shared resource list (the architecture's) is there too.
-    var BESIDE = [{ id: 'fta', label: 'Fault trees' }, { id: 'mac', label: 'MAC model' }, { id: 'mfms', label: 'MF&MS' }, { id: 'cea', label: 'Cascading effects' }, { id: 'resources', label: 'Shared resources' }];
+    var BESIDE = [{ id: 'fta', label: 'Fault trees' }, { id: 'mac', label: 'MAC Autopilot' }, { id: 'mfms', label: 'MF&MS' }, { id: 'cea', label: 'Cascading effects' }, { id: 'resources', label: 'Shared resources' }];
     function besideBar(cur) { return '<div class="sys-workspace-nav" data-pasa-beside="1">' + BESIDE.map(function (b) { return '<button type="button" class="' + (b.id === cur ? 'active' : '') + '" data-pasa-beside-to="' + E(b.id) + '" onclick="SLPasaAuto.besideGo(' + J(b.id) + ')">' + E(b.label) + '</button>'; }).join('') + '</div>'; }
     function besideGo(id) { try { if (id === 'fta' && root.SLTreeHomes) root.SLTreeHomes.open('pasa'); else if (typeof root.switchTab === 'function') root.switchTab(id); } catch (_) {} }
     function pasaHome() { var H0 = root.SLTreeHomes; var c = H0 && H0.current ? safe(function () { return H0.current(); }, null) : null; return !c || c.home === 'pasa'; }
