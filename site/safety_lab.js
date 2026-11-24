@@ -1,5 +1,5 @@
-// 23 Nov 2026: no pricing screen and no trial banner where the signed license is the authority (slSignedLicenseRules); the license screen owns that case.
 // 13 Sep 2026 (R19 hygiene): store writers announce their own writes with scheduleAutosave; see tests/regression_writers_announce.test.js
+// 23 Nov 2026: no pricing screen and no trial banner where the signed license is the authority (slSignedLicenseRules); the license screen owns that case.
 // 16 Oct 2026 (AI Assistant page): SafetyLabSourceDocs.add stamps who added a document and its text hash and keeps a same-name copy's controlled flag; new setControlled() and replaceAll() (the page's writes, through scheduleAutosave and so SLChangeAck).
 // 13 Oct 2026 (fix G): Change Type offers SEQ, and NOT only when the project allows it and the gate has at most one input. See tests/regression_fta_handbuild_20261013b.test.js
 // 13 Oct 2026 (analysis model links): PRA, ZSA and FMEA rows show and edit their model links (model_links.js): the PRA/ZSA cell and form field, the FMEA form field; an FMEA edit keeps its links; see tests/regression_analysis_links_20261013b.test.js

@@ -127,7 +127,8 @@ for (const f of files) {
     orphans.length ? ('unresolved: ' + orphans.slice(0, 4).join(', ')) :
       ('resolves only in another system: ' + crossSystem.slice(0, 4).join(', ')));
 }
-check('all 131 system-FHA rows across the demos were checked', totalRows === 131, String(totalRows));
+// 23 Nov 2026: 158 (the Aeolus HL-1 at full scale grew from 54 to 81 rows; every one resolves above)
+check('all 158 system-FHA rows across the demos were checked', totalRows === 158, String(totalRows));
 
 console.log('\n[shape] the fix must be the matrix, not a hand-filled extractedFCs');
 for (const f of files) {
