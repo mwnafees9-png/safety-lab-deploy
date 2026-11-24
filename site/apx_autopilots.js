@@ -60,11 +60,13 @@
     function pc() { var p = g('projectConfig'); return p && typeof p === 'object' ? p : null; }
     // While a built-in demo is filled (fillAs), every answer is dated and signed as the demo's engineer, not as whoever opened it.
     var asOf = null;
-    function fillAs(by, at, fn) { var was = asOf; asOf = { by: S(by), at: S(at) }; try { return fn(); } finally { asOf = was; } }
+    // and the thousands of saves a fill makes are one save at its end
+    var pendingSave = false;
+    function fillAs(by, at, fn) { var was = asOf; asOf = { by: S(by), at: S(at) }; try { return fn(); } finally { asOf = was; if (!asOf) memoClear(); if (!asOf && pendingSave) { pendingSave = false; save(); } } }
     function filling() { return !!asOf; }
     function now() { return asOf && asOf.at ? asOf.at : new Date().toISOString(); }
     function who() { if (asOf) return asOf.by; return root.SLAutopilotUI && root.SLAutopilotUI.who ? S(safe(function () { return root.SLAutopilotUI.who(); }, '')) : ''; }
-    function save() { try { if (root.SLDataChange && root.SLDataChange.bump) root.SLDataChange.bump(); } catch (_) {} try { if (root.SLAutopilotUI && root.SLAutopilotUI.save) root.SLAutopilotUI.save(); else if (typeof root.scheduleAutosave === 'function') root.scheduleAutosave(); } catch (_) {} }
+    function save() { if (asOf) { pendingSave = true; return; } try { if (root.SLDataChange && root.SLDataChange.bump) root.SLDataChange.bump(); } catch (_) {} try { if (root.SLAutopilotUI && root.SLAutopilotUI.save) root.SLAutopilotUI.save(); else if (typeof root.scheduleAutosave === 'function') root.scheduleAutosave(); } catch (_) {} }
     function toast(m, kind) { try { if (typeof root.showToast === 'function') root.showToast(m, kind || 'info', 5000); } catch (_) {} }
 
     // ---- the switch ---------------------------------------------------------------------------------------------------
@@ -94,7 +96,15 @@
     function touched(fcKey) { var r = rec(fcKey); if (r.sent) { r.changedSince = { at: now() }; r.wasSent = r.sent; delete r.sent; } save(); }
 
     // ---- the project: failure conditions, systems, functions, resources -------------------------------------------------
+    // While a built-in demo is filled nothing changes which failure conditions there are or which functions each one checks, so
+    // both are worked out once (a check, a proposal or a new system, function or resource still clears them).
+    var fillMemo = null;
+    function memoClear() { fillMemo = null; }
     function fcs() {
+        if (asOf && fillMemo && fillMemo.fcs) return fillMemo.fcs;
+        var out = fcs0(); if (asOf) { fillMemo = fillMemo || { picked: {} }; fillMemo.fcs = out; } return out;
+    }
+    function fcs0() {
         var F = root.SLFcTrees, out = [], seen = {};
         var groups = F && typeof F.groups === 'function' ? safe(function () { return F.groups('ac'); }, null) : null;
         if (groups && groups.length) groups.forEach(function (gr) { if (gr && gr.gov && gr.gov.internalId != null) out.push(gr.gov); });
@@ -133,7 +143,12 @@
         return { on: false, locked: false, src: null, role: 'does', how: 'loss' };
     }
     // the columns of this failure condition, in a steady order: the systems' own order
-    function picked(fc) { return allCols().filter(function (c) { return cellOf(fc, c).on; }); }
+    function picked(fc) {
+        if (asOf && fillMemo && fillMemo.picked[fc.key]) return fillMemo.picked[fc.key].slice();
+        var out = allCols().filter(function (c) { return cellOf(fc, c).on; });
+        if (asOf) { fillMemo = fillMemo || { picked: {} }; fillMemo.picked[fc.key] = out.slice(); }
+        return out;
+    }
 
     function resources() { return arr(g('resourcesData')).filter(Boolean).map(function (r) { return { key: S(r.internalId != null ? r.internalId : r.resId), name: T(r.name || r.resId), type: T(r.type || ''), row: r }; }); }
     function sysByName(name) { name = T(name).toLowerCase(); return name ? systems().filter(function (x) { return T(x.name).toLowerCase() === name; })[0] || null : null; }
@@ -249,6 +264,7 @@
     // system (or the other way) makes it both; nothing is taken away.
     function setRole2(x, kind, existed) { if (!x || !kind) return; var cur = x.role || 'function'; if (kind === 'res' && cur === 'function') x.role = existed && arr(x.functions).length ? 'both' : 'resource'; else if (kind === 'fn' && cur === 'resource') x.role = 'both'; }
     function addSystem(name, kind) {
+        memoClear();
         name = T(name); if (!name) return { ok: false, why: 'Give the system a name.' };
         var list = g('systemsData'); if (!Array.isArray(list)) return { ok: false, why: 'No project is open.' };
         var N = root.SLNoDupes, clash = N && N.systemNameClash ? safe(function () { return N.systemNameClash(name, list, null); }, null) : null;
@@ -263,6 +279,7 @@
         return 'SF-' + (max + 1);
     }
     function addFunction(sysId, name) {
+        memoClear();
         name = T(name); if (!name) return { ok: false, why: 'Give the function a name.' };
         var s = systems().filter(function (x) { return S(x.id) === S(sysId); })[0]; if (!s) return { ok: false, why: 'That system is not in the project.' };
         if (!Array.isArray(s.functions)) s.functions = [];
@@ -279,6 +296,7 @@
     // trace its own page writes. The record remembers the traces the Autopilot made, so unchecking takes that one off again.
     function fnRow(funcId) { var hit = null; systems().forEach(function (x) { arr(x.functions).forEach(function (y) { if (y && S(y.funcId) === S(funcId)) hit = y; }); }); return hit; }
     function traceUp(fc, funcId) {
+        memoClear();
         var x = fnRow(funcId); if (!x || !fc.subId) return false;
         if (!Array.isArray(x.traceIds)) x.traceIds = x.traceId ? [x.traceId] : [];
         if (x.traceIds.indexOf(fc.subId) !== -1) return false;
@@ -288,6 +306,7 @@
         return true;
     }
     function traceDown(fc, colId) {
+        memoClear();
         var r = rec(fc.key), sub = r.madeTrace && r.madeTrace[colId]; if (!sub) return false;
         var x = fnRow(colId.replace(/^fn:/, '')); if (x && Array.isArray(x.traceIds)) x.traceIds = x.traceIds.filter(function (t) { return t !== sub; });
         delete r.madeTrace[colId];
@@ -295,6 +314,7 @@
     }
     // A resource with who provides it: the system (made a resource system) and that system's function, created if missing.
     function addResourceFull(name, sysName, fnName) {
+        memoClear();
         var r = addResource(name); if (!r.ok) return r;
         if (!T(sysName)) return r;
         var list = g('resourcesData'), row = list.filter(function (x) { return x && S(x.internalId != null ? x.internalId : x.resId) === r.key; })[0];
@@ -306,6 +326,7 @@
         return r;
     }
     function addResource(name) {
+        memoClear();
         name = T(name); if (!name) return { ok: false, why: 'Give the resource a name.' };
         var list = g('resourcesData'); if (!Array.isArray(list)) return { ok: false, why: 'No project is open.' };
         var same = list.filter(function (r) { return r && T(r.name).toLowerCase() === name.toLowerCase(); })[0];
@@ -326,6 +347,7 @@
     function setAp(k) { if (k !== 'idp' && !EXT[k]) k = 'idp'; ui.takeAsk = null; ui.stepOf[ui.ap] = ui.step; ui.ap = k; ui.step = ui.stepOf[k] || 0; ui.blocked = ''; ui.signMiss = false; ui.sign = null; }
     function curFc() { var all = fcs(); if (!all.length) return null; var f = ui.fc && fcOf(ui.fc); if (!f) { f = all[0]; ui.fc = f.key; } return f; }
     function tick(fc, colId, role) {
+        memoClear();
         var col = colOf(colId); if (!col) return;
         var c = cellOf(fc, col), r = rec(fc.key);
         ui.blocked = '';
@@ -340,11 +362,12 @@
         touched(fc.key);
     }
     function setRole(fc, colId, role, how) {
+        memoClear();
         var r = rec(fc.key), cur = r.cols[colId] || { role: 'does', how: 'loss' };
         r.cols[colId] = { role: role || cur.role, how: how || cur.how };
         touched(fc.key);
     }
-    function proposal(fc, colId, accept) { var r = rec(fc.key); if (accept) { r.cols[colId] = { role: 'does', how: 'loss' }; delete r.off[colId]; } else r.off[colId] = true; touched(fc.key); }
+    function proposal(fc, colId, accept) { memoClear(); var r = rec(fc.key); if (accept) { r.cols[colId] = { role: 'does', how: 'loss' }; delete r.off[colId]; } else r.off[colId] = true; touched(fc.key); }
     function resRec(fc, r) { var me = rec(fc.key).res; if (!me[r.key]) { var st = resState(fc, r); me[r.key] = { on: st.on, feeds: {}, modes: st.modes }; } if (!me[r.key].feeds) me[r.key].feeds = {}; if (!Array.isArray(me[r.key].modes)) me[r.key].modes = []; return me[r.key]; }
     function resTick(fc, key) { var r = resources().filter(function (x) { return x.key === key; })[0]; if (!r) return; var st = resState(fc, r), me = resRec(fc, r); me.on = !st.on; touched(fc.key); }
     function feed(fc, key, colId) { var r = resources().filter(function (x) { return x.key === key; })[0]; if (!r) return; var st = resState(fc, r), me = resRec(fc, r); me.feeds[colId] = !st.feeds[colId]; touched(fc.key); }
@@ -573,6 +596,7 @@
         return exact || (same.length === 1 ? same[0] : null);
     }
     function acceptProposal(fc, id) {
+        memoClear();
         var pr = proposals(fc); if (!pr) return { ok: false, why: 'That proposal is gone.' };
         var it = pr.items.filter(function (x) { return x.id === id; })[0]; if (!it) return { ok: false, why: 'That proposal is gone.' };
         var r = rec(fc.key), res = null;

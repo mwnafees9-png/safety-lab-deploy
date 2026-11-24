@@ -27,7 +27,7 @@
 // ============================================================================
 (function (root) {
     'use strict';
-    var VERSION = '1.1';   // 1.1 10 Nov 2026: several levels per type (PASA aircraft and/or systems, PSSA systems and/or items), flow-down rows traced to their parent
+    var VERSION = '1.2';   // 1.2 23 Nov 2026: the FHA rows kept per project generation, looked up by id   // 1.1 10 Nov 2026: several levels per type (PASA aircraft and/or systems, PSSA systems and/or items), flow-down rows traced to their parent
     function g(n) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(n); if (v !== undefined) return v; } } catch (_) {} try { return root[n]; } catch (_) { return undefined; } }
     function arr(v) { return Array.isArray(v) ? v : []; }
     function E(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -210,13 +210,24 @@
         });
         _ix = ix; _ixGen = gen; return ix;
     }
-    function fhaRows() {
+    // 23 Nov 2026: the rows and their lookup by id are kept for as long as the project has not changed (the same generation the
+    // tree index uses), so a report with hundreds of requirements does not rebuild them for every lookup
+    var _fr = null, _frGen = null;
+    function fhaCache() {
+        var dc = root.SLDataChange, gen = dc && dc.gen ? dc.gen() : -1;
+        if (_fr && gen === _frGen && gen !== -1) return _fr;
+        var rows = fhaRows0(), byIid = {};
+        rows.forEach(function (x) { var k = S(x.f.internalId); if (!(k in byIid)) byIid[k] = x; });
+        _fr = { rows: rows, byIid: byIid }; _frGen = gen; return _fr;
+    }
+    function fhaRows() { return fhaCache().rows; }
+    function fhaRows0() {
         var out = [];
         arr(g('acFhaData')).forEach(function (f) { if (f) out.push({ f: f, sys: null }); });
         systems().forEach(function (s) { arr(s.fha).forEach(function (f) { if (f) out.push({ f: f, sys: s }); }); });
         return out;
     }
-    function fhaByIid(iid) { iid = S(iid).replace(/^(AC_|SYS_)/, ''); return fhaRows().filter(function (x) { return S(x.f.internalId) === iid; })[0] || null; }
+    function fhaByIid(iid) { iid = S(iid).replace(/^(AC_|SYS_)/, ''); return fhaCache().byIid[iid] || null; }
     function fhaByFcId(id, sys) { return fhaRows().filter(function (x) { return S(x.f.fcId) === S(id) && (sys === undefined || (x.sys ? S(x.sys.id) : null) === (sys == null ? null : S(sys))); })[0] || null; }
     function pageFc(p) {
         if (!p) return null;

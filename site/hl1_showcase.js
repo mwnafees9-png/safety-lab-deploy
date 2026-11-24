@@ -1,4 +1,4 @@
-// 23 Nov 2026: the demo opens with the Interdependence, MAC and CoFFE Autopilots done for all thirty failure conditions and sent to the PASA (demo/hl1_apx.js, filled through the Autopilots' own steps after load).
+// 23 Nov 2026: the demo opens with the Autopilots done: the three plans (demo/hl1_plans.js), the Interdependence, MAC and CoFFE Autopilots for all sixty failure conditions (demo/hl1_apx.js) and the ten human factors steps (demo/hl1_hf.js), each filled through the Autopilot's own steps after load.
 // 10 Nov 2026: every part of the demo's CAD model has its material and a description built in (HL1_MATERIALS, projectConfig.cadMaterials and cadProps).
 // hl1_showcase.js — loader for the Aeolus HL-1 demo project.
 //
@@ -46,7 +46,7 @@
     // geometry itself comes from the bundled STEP (demo/hl1_cad_step.js), which the 3D view reads the first time it is
     // needed on a computer, checked against the fingerprint like any re-opened file (cad_viewer.js, SLCadBundled).
     var CAD_DATA_SRC = 'demo/hl1_cad_data.js?v=1', CAD_STEP_SRC = 'demo/hl1_cad_step.js?v=1';
-    var APX_SRC = 'demo/hl1_apx.js?v=1';   // the Autopilot answers; bump with every change to the file
+    var APX_SRC = 'demo/hl1_apx.js?v=2', HF_SRC = 'demo/hl1_hf.js?v=1', PLANS_SRC = 'demo/hl1_plans.js?v=1';   // the Autopilot answers; bump each with every change to its file
     function _loadScript(id, src) {
         return new Promise(function (resolve, reject) {
             var ex = document.getElementById(id);
@@ -199,7 +199,7 @@
             }
             var s = document.createElement('script');
             s.id = 'sl-hl1-lazy';
-            s.src = window.SL_SHOWCASE_HL1_SRC || 'demo_showcase_hl1.js?v=7';
+            s.src = window.SL_SHOWCASE_HL1_SRC || 'demo_showcase_hl1.js?v=8';
             s.onload = function () { resolve(); };
             s.onerror = function () { reject(new Error('HL-1 showcase load failed')); };
             document.head.appendChild(s);
@@ -228,16 +228,23 @@
         }
         catch (err) { try { showToast('Could not load the demo: ' + ((err && err.message) || err), 'error', 4500); } catch (_) {} return; }
         try { window.SL_SHOWCASE_HL1.postLoad(); } catch (_) {}
-        // the Interdependence, MAC and CoFFE Autopilots, answered and sent for every failure condition (the demo opens without them if they cannot load).
+        // The Autopilots, answered and signed: the three program plans, then the Interdependence, MAC and CoFFE Autopilots for every
+        // failure condition, then the ten human factors steps (the demo opens without any that cannot load).
         // Kill switch: window.SL_HL1_APX_OFF = true opens the demo as it was before the Autopilots.
-        if (!window.SL_HL1_APX_OFF) try {
-            await _loadScript('sl-hl1-apx', APX_SRC);
-            if (window.SLHl1Apx && typeof window.SLHl1Apx.fill === 'function') {
-                var fr = window.SLHl1Apx.fill();
-                window.__slHl1ApxFill = fr;
-                if (fr && !fr.ok) { try { console.warn('[HL-1 Autopilots] ' + fr.problems.join(' | ')); } catch (_) {} }
+        if (!window.SL_HL1_APX_OFF) {
+            var fills = [['sl-hl1-plans', PLANS_SRC, 'SLHl1Plans', '__slHl1PlansFill'], ['sl-hl1-apx', APX_SRC, 'SLHl1Apx', '__slHl1ApxFill'], ['sl-hl1-hf', HF_SRC, 'SLHl1Hf', '__slHl1HfFill']];
+            for (var fi = 0; fi < fills.length; fi++) {
+                var F = fills[fi];
+                try {
+                    await _loadScript(F[0], F[1]);
+                    if (window[F[2]] && typeof window[F[2]].fill === 'function') {
+                        var fr = window[F[2]].fill();
+                        window[F[3]] = fr;
+                        if (fr && !fr.ok) { try { console.warn('[HL-1 ' + F[2] + '] ' + fr.problems.join(' | ')); } catch (_) {} }
+                    }
+                } catch (_) {}
             }
-        } catch (_) {}
+        }
         try { localStorage.setItem('safetyLab.onrampState.v1', 'dismissed'); if (window._refreshOnramp) window._refreshOnramp(); } catch (_) {}
         try {
             showToast('Aeolus HL-1 demonstration loaded. Built from public information only — open Assumptions to see what is public and what we assumed. Start at Define → Certification basis, then Analyze → Aircraft analyses.', 'success', 9000);

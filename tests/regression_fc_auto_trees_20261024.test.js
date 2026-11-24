@@ -167,8 +167,11 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
             if (typeof renderACFHA === 'function') renderACFHA(); await wait(300);
             const trOf = (rw) => { const btn = [...document.querySelectorAll('#view-ac-fha [onclick*="editACFHA(\'' + rw.internalId + '\')"]')][0]; return btn ? btn.closest('tr') : null; };
             const flag = (rw) => { const tr = trOf(rw); if (!tr) return null; const k = tr.querySelector('.row-kebab'); const after = k ? getComputedStyle(k, '::after').content : ''; const first = tr.querySelector('.row-action-menu button'); const chip = tr.querySelector('.fha-route-chip'); return { dot: after !== 'none' && after !== '' && after !== 'normal', first: first && first.textContent, chip: chip && chip.textContent }; };
+            // 23 Nov 2026: the demo has 60 failure conditions now, so the AFHA table pages; the test rows are on its last page
+            { const last = document.querySelector('#slp-fha-ac [data-pg="last"]'); if (last && !last.disabled) { last.click(); await wait(300); } }
             R.flag = { gov: flag(g.gov), other: flag(g.gov === a1 ? a1b : a1), lowSev: flag(a1c), qual: flag(a3), minor: flag(a2) };
             g.gov.chartProps = { isSimpleConventional: false }; scheduleAutosave(); renderACFHA(); await wait(300);
+            { const last = document.querySelector('#slp-fha-ac [data-pg="last"]'); if (last && !last.disabled) { last.click(); await wait(300); } }
             R.flag.answered = flag(g.gov);
             return R;
         }, demo.data), 150000, 'the browser step');

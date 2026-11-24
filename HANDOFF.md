@@ -1,4 +1,18 @@
-## 23 Nov 2026, latest: THE AEOLUS HL-1 DEMO OPENS WITH THE INTERDEPENDENCE, MAC AND CoFFE AUTOPILOTS DONE, AND THE FAILURE COUNT FIXED.
+## 23 Nov 2026, latest: THE AEOLUS HL-1 AT FULL SCALE: 24 SYSTEMS, 60 FAILURE CONDITIONS, EVERY AUTOPILOT DONE.
+
+**Why (Waqas).** "lets fill those out in full, human factors, a full scale demo that any customer can use please, please expand the size of the demo"; confirmed: grow the aircraft and the HF depth both; task times typed as assumptions labeled as such.
+
+**The aircraft (demo_showcase_hl1.js, pin v=8).** Ten systems added (autoflight, high lift, APU, communications, lighting, water and waste, recorders, stall warning and protection, terrain and traffic, windshield heat and rain removal) and two functions on existing ones (avionics cooling, fuel quantity): 36 aircraft functions, 60 failure conditions (FC-31 to FC-60, with FCIM rows, system FHA rows, requirements REQ-AC-019 to 025, assumptions ASM-AC-021 to 025), 28 units and 52 flight deck controls and displays. The additions take ids from their own range (id2, from 19000), so every id the first cut had is unchanged (trees, mirrors, items checked identical).
+
+**The fills (hl1_showcase.js 12).** After the engines run: demo/hl1_plans.js (the SSPP, HF plan and RAM plan answered and applied, all Ready to issue, J. Okafor), demo/hl1_apx.js 1.1 (all 60 failure conditions; FC-27 and FC-26 middle outcomes are now FC-57 and FC-59, each with two CoFFE sources; 115 VAC loss no longer reads as two hydraulic systems lost), demo/hl1_hf.js (all ten HF steps, 615 answers, signed R. Valdez; task times "Assumed pending simulator evidence"; no pilot over 80 per cent; five design findings left open). Kill switch window.SL_HL1_APX_OFF covers all three.
+
+**Speed.** The fills took 9 s; now about 2.7 s: saves and data-change bumps are one at the end of a fill (SLApxAuto and SLAutopilotUI fillAs), the failure conditions and checked functions are worked out once during a fill (apx_autopilots), the HF questions once per change of shape (hf_autopilot 1.1). The PASA front ran 1.75 s on the bigger demo (budget 1.5 s): req_trace 1.2 keeps the FHA rows and their id lookup per project generation, now about 0.9 s. Pins: autopilot_ui 1.6, hf_autopilot 2.2, plan_autopilot 2.5, req_trace 1.2, demo_picker 7.
+
+**Tests.** regression_hl1_apx_demo now 27 checks (mutations nofill, hfcache, colcount, nodedupe red). Updated for the size: hl1_demo, hf_autopilot, find_scroll_phases, fc_auto_trees, plan_autopilot and cma_report_gates pins, hl1_cad_demo pin, pasa_autopilot pin. 57 suites green except the three that already failed (eta_bowtie browser part, tree_homes [H], hl1_cad_demo needs the STEP file in the cloud copy).
+
+**Open.** Radia's desktop app needs a release carrying all of this. The aircraft fault trees from the CoFFE gate (proposal waiting). System FHA lines numbered FC-001 near the aircraft FC-01.
+
+## 23 Nov 2026, later: THE AEOLUS HL-1 DEMO OPENS WITH THE INTERDEPENDENCE, MAC AND CoFFE AUTOPILOTS DONE, AND THE FAILURE COUNT FIXED.
 
 **Why (Waqas).** "RADIA wants the aeolus demos fully populated with the autopilots and I think their build is much further behind"; on order: both, demo first, then Radia's build; "demo in all the builds need to upgraded with all the latest information". On the CoFFE summary counting the loss of a whole redundant group as one failure (a false "single failure, not allowed" on about 12 Catastrophic failure conditions): "Fix it".
 

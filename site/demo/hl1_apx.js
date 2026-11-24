@@ -1,6 +1,6 @@
 /* ============================================================================
  * demo/hl1_apx.js (23 Nov 2026): the Aeolus HL-1 demo with the Interdependence, MAC and CoFFE Autopilots done for all
- * thirty aircraft failure conditions and sent to the PASA.
+ * sixty aircraft failure conditions and sent to the PASA (1.1: the full-scale aircraft, thirty more).
  *
  * Waqas, 23 Nov 2026: Radia wants "the aeolus demos fully populated with the autopilots"; "demo in all the builds need to
  * upgraded with all the latest information".
@@ -18,7 +18,7 @@
  * ==========================================================================*/
 (function () {
     'use strict';
-    var VERSION = '1.0';
+    var VERSION = '1.1';
 
     const B = (name, pattern, units, extra) => Object.assign({ name, pattern, units }, extra || {});
     const BUILDS = {
@@ -30,7 +30,7 @@
         'SFN-PRP2': [B('Thrust asymmetry monitor', 'shared', ['Asymmetry monitor', 'Engine indication cross-check'])],
         'SFN-PRP3': [B('Thrust reversers', 'lr', ['LH reversers', 'RH reversers'])],
         'SFN-LDG1': [B('Gear extension', 'backup', ['Normal hydraulic extension', 'Alternate free-fall extension'], { co: 'no' })],
-        'SFN-LDG2': [B('Brake hydraulic supply', 'backup', ['Normal brakes (system A)', 'Alternate brakes (system B)'], { co: 'yes' })],
+        'SFN-LDG2': [B('Brake hydraulic supply', 'backup', ['Normal brakes (system A)', 'Alternate brakes (system B)'], { co: 'yes' }), B('Brake control monitor', 'shared', ['Brake control unit A monitor', 'Brake control unit B monitor'])],
         'SFN-LDG3': [B('Nose-wheel steering', 'backup', ['Steering actuator (system A)', 'Differential braking'], { co: 'no' })],
         'SFN-LDG4': [B('Main gear bogies', 'pairs', ['Left bogie group', 'Right bogie group'])],
         'SFN-AVI1': [B('Display channels', 'triple', ['Captain PFD', 'First officer PFD', 'Standby instrument'])],
@@ -57,7 +57,33 @@
         'SFN-HYD1': [B('Hydraulic systems', 'triple', ['System A', 'System B', 'System C'])],
         'SFN-HYD2': [B('System isolation valves', 'single', ['Isolation valves'])],
         'SFN-FPR1': [B('Detection loops', 'shared', ['Loop A', 'Loop B'])],
-        'SFN-FPR2': [B('Extinguisher bottles', 'shared', ['Bottle 1', 'Bottle 2'])]
+        'SFN-FPR2': [B('Extinguisher bottles', 'shared', ['Bottle 1', 'Bottle 2'])],
+        // 23 Nov 2026: the full-scale aircraft
+        'SFN-AFS1': [B('Autopilot channels', 'shared', ['Autopilot channel 1', 'Autopilot channel 2'])],
+        'SFN-AFS2': [B('Autothrust drive', 'shared', ['Servo motor', 'Failure annunciation'])],
+        'SFN-HLF1': [B('Trailing-edge flaps', 'lr', ['Left flaps', 'Right flaps'])],
+        'SFN-HLF2': [B('Leading-edge slats', 'lr', ['Left slats', 'Right slats'])],
+        'SFN-HLF3': [B('Asymmetry brakes', 'shared', ['Left wing tip brake', 'Right wing tip brake'])],
+        'SFN-HLF4': [B('Position monitoring lanes', 'shared', ['Lane 1', 'Lane 2'])],
+        'SFN-APU1': [B('APU', 'single', ['APU'])],
+        'SFN-APU2': [B('APU bleed shutoff', 'single', ['APU bleed shutoff valve'])],
+        'SFN-COM1': [B('Voice radios', 'triple', ['VHF radio 1', 'VHF radio 2', 'HF radio'])],
+        'SFN-COM2': [B('Datalink', 'single', ['Datalink unit'])],
+        'SFN-LGT1': [B('Landing lights', 'lr', ['Left landing light', 'Right landing light'])],
+        'SFN-LGT2': [B('Flight deck lighting', 'backup', ['Normal flight deck lighting', 'Standby flood lighting'], { co: 'no' })],
+        'SFN-LGT3': [B('Emergency lighting', 'shared', ['Battery pack 1', 'Battery pack 2'])],
+        'SFN-WWS1': [B('Potable water', 'single', ['Water tank and pump'])],
+        'SFN-WWS2': [B('Waste containment', 'backup', ['Waste line', 'Drained shroud'], { co: 'no' })],
+        'SFN-REC1': [B('Voice recording', 'single', ['Voice recorder function'])],
+        'SFN-REC2': [B('Data recording', 'single', ['Data recorder function'])],
+        'SFN-STW1': [B('Shaker channels', 'shared', ['Shaker channel 1', 'Shaker channel 2'])],
+        'SFN-STW2': [B('Pusher channels', 'shared', ['Pusher channel 1', 'Pusher channel 2'])],
+        'SFN-SAW1': [B('Terrain warning', 'single', ['Terrain awareness computer'])],
+        'SFN-SAW2': [B('Collision avoidance', 'single', ['Collision avoidance computer'])],
+        'SFN-WSH1': [B('Windshield heat', 'lr', ['Left windshield heat', 'Right windshield heat'])],
+        'SFN-WSH2': [B('Wipers', 'lr', ['Left wiper', 'Right wiper'])],
+        'SFN-ECS4': [B('Avionics cooling fans', 'shared', ['Fan 1', 'Fan 2'])],
+        'SFN-FUE4': [B('Fuel quantity channels', 'shared', ['Capacitance gauging', 'Fuel used cross-check'])]
     };
     // what each resource failure does to each function it feeds (state: none | partial | total | wrong; none needs a reason)
     const R = (res, mode, state, why) => ({ res, mode, state, why });
@@ -84,8 +110,22 @@
         'SFN-ECS2': [R('RES-06', 'Total loss', 'total')],
         'SFN-NZD1': [R('RES-02', 'Total loss', 'partial')],
         'SFN-NZD3': [R('RES-01', 'Total loss', 'total')],
-        'SFN-HYD1': [R('RES-01', 'Total loss', 'partial')],
-        'SFN-FPR1': [R('RES-01', 'Total loss', 'partial')]
+        'SFN-HYD1': [R('RES-01', 'Total loss', 'none', 'Systems A and B have engine-driven pumps; only the electric pump of system C stops, and one system lost is not a partial loss here')],
+        'SFN-FPR1': [R('RES-01', 'Total loss', 'partial')],
+        'SFN-AFS1': [R('RES-01', 'Total loss', 'partial')],
+        'SFN-AFS2': [R('RES-01', 'Total loss', 'none', 'The servo is on the essential bus, which the battery keeps')],
+        'SFN-HLF1': [R('RES-02', 'Total loss', 'partial'), R('RES-03', 'Total loss', 'partial')],
+        'SFN-HLF2': [R('RES-02', 'Total loss', 'partial'), R('RES-03', 'Total loss', 'partial')],
+        'SFN-HLF3': [R('RES-01', 'Total loss', 'none', 'The brakes are set by springs and released by power, so a power loss applies them')],
+        'SFN-HLF4': [R('RES-01', 'Total loss', 'partial')],
+        'SFN-COM1': [R('RES-01', 'Total loss', 'partial')],
+        'SFN-LGT1': [R('RES-01', 'Total loss', 'partial')],
+        'SFN-LGT2': [R('RES-01', 'Total loss', 'partial')],
+        'SFN-STW1': [R('RES-01', 'Total loss', 'partial')],
+        'SFN-STW2': [R('RES-01', 'Total loss', 'partial')],
+        'SFN-WSH1': [R('RES-01', 'Total loss', 'partial')],
+        'SFN-ECS4': [R('RES-01', 'Total loss', 'partial')],
+        'SFN-FUE4': [R('RES-01', 'Total loss', 'partial')]
     };
     const PARTIAL_PHRASE = { none: 'No effect. Loss of redundancy', partial: 'Partial loss of this function', total: 'Total loss of this function', wrong: 'Wrong output' };
     // what each resource failure does at aircraft level
@@ -129,14 +169,49 @@
         'FC-23': { best: 'Door held closed', worst: 'Nose door opens in flight', lvl: s => s('Latches and locks') === 'F' ? 1 : 0, why: 'Neither the latches nor the locks hold the door' },
         'FC-24': { best: 'Lock state indicated', worst: 'Dispatch with the lock state unknown', lvl: s => s('Lock indication channels') === 'F' ? 1 : 0, why: 'No indication channel left' },
         'FC-25': { malf: { 'SFN-NZD3': 'combo' }, best: 'False locked indication caught by channel disagree', worst: 'Take-off with the door indicated locked when it is not', lvl: s => (s.m('SFN-NZD3') && s('Lock indication channels') === 'D') ? 1 : 0 },
-        'FC-26': { mid: [['Essential bus on emergency sources only', 'none', 'All engine generators lost: essential loads on the APU generator or the battery, land at the nearest suitable field']], best: 'Electrical power kept', worst: 'No electrical power to any bus',
+        'FC-26': { mid: [['Essential bus on emergency sources only', 'FC-59', 'All engine generators lost: essential loads on the APU generator or the battery, land at the nearest suitable field']], best: 'Electrical power kept', worst: 'No electrical power to any bus',
                    lvl: s => ((s('Engine generators') === 'F' && s('Emergency sources') === 'F') || s('Main AC buses') === 'F' || (s('Wiring segregation') === 'F' && lost(s('Main AC buses')))) ? 2 : s('Engine generators') === 'F' ? 1 : 0, why: 'No source or no bus left to supply power, or a wiring failure takes out the remaining bus' },
-        'FC-27': { mid: [['One hydraulic system left', 'none', 'Two systems lost: flight control on one system, reduced authority, land at the nearest suitable field']], best: 'Hydraulic power kept', worst: 'No hydraulic power for flight control',
+        'FC-27': { mid: [['One hydraulic system left', 'FC-57', 'Two systems lost: flight control on one system, reduced authority, land at the nearest suitable field']], best: 'Hydraulic power kept', worst: 'No hydraulic power for flight control',
                    lvl: s => (s('Hydraulic systems') === 'F' || (s('Hydraulic systems') === 'D' && s('System isolation valves') === 'F')) ? 2 : s('Hydraulic systems') === 'D' ? 1 : 0, why: 'No hydraulic system left, or the isolation fails with only one system left' },
         'FC-28': { mid: [['One bogie group damaged', 'none', 'One bogie group fails its load path: stop on the strip, structural inspection']], best: 'Loads absorbed', worst: 'Gear or airframe structural failure on the unpaved surface',
                    lvl: s => s('Main gear bogies') === 'F' ? 2 : s('Main gear bogies') === 'D' ? 1 : 0, why: 'Neither bogie group can carry the semi-prepared surface loads' },
         'FC-29': { best: 'Fire detected and put out', worst: 'Fire spreads in the hold or a nacelle', lvl: s => (s('Detection loops') === 'F' || s('Extinguisher bottles') === 'F') ? 1 : 0, why: 'No detection loop or no extinguisher bottle left' },
-        'FC-30': { malf: { 'SFN-PRP1': 'alone' }, best: 'Thrust as commanded', worst: 'Uncommanded thrust change on one engine', lvl: s => 0 }
+        'FC-30': { malf: { 'SFN-PRP1': 'alone' }, best: 'Thrust as commanded', worst: 'Uncommanded thrust change on one engine', lvl: s => 0 },
+        // ---- 23 Nov 2026: the full-scale aircraft -------------------------------------------------------------------
+        'FC-31': { malf: { 'SFN-AFS1': 'combo' }, best: 'Excursion caught by the monitor channel', worst: 'Flight path leaves the approach below 1,000 ft', lvl: s => (s.m('SFN-AFS1') && s('Autopilot channels') === 'D') ? 1 : 0 },
+        'FC-32': { best: 'Autoflight kept', worst: 'Hand flying for the rest of the sector', lvl: s => s('Autopilot channels') === 'F' ? 1 : 0, why: 'No autopilot channel left to drive the autopilot or the autothrust' },
+        'FC-33': { best: 'Autothrust works, or its failure is annunciated', worst: 'Go-around started without the thrust the climb needs', lvl: s => s('Autothrust drive') === 'F' ? 1 : 0, why: 'The servo fails and its failure is not annunciated' },
+        'FC-34': { mid: [['High-lift locked out by the asymmetry brakes', 'none', 'Surfaces stopped where they were within roll authority: approach at a higher speed to a longer runway']], best: 'High-lift symmetric', worst: 'Rolling moment beyond the ailerons and spoilers near the ground',
+                   lvl: s => ((s('Trailing-edge flaps') === 'D' || s('Leading-edge slats') === 'D') && s('Asymmetry brakes') === 'F') ? 2 : (s('Trailing-edge flaps') === 'D' || s('Leading-edge slats') === 'D') ? 1 : 0, why: 'One side of a surface set stops while the other keeps moving, and neither tip brake stops them' },
+        'FC-35': { mid: [['Slats only, or surfaces locked out', 'none', 'Approach with part of the high-lift: higher speed, landing distance beyond the strip, diversion']], best: 'Full high-lift for landing', worst: 'Flapless approach far faster than the strip allows',
+                   lvl: s => s('Trailing-edge flaps') === 'F' ? 2 : (s('Leading-edge slats') === 'F' || s('Trailing-edge flaps') === 'D' || s('Leading-edge slats') === 'D') ? 1 : 0, why: 'Neither side of the flaps can extend' },
+        'FC-36': { malf: { 'SFN-HLF1': 'combo' }, best: 'Retraction stopped by the monitoring lanes', worst: 'Lift lost just after rotation with a full payload', lvl: s => (s.m('SFN-HLF1') && s('Position monitoring lanes') !== 'O') ? 1 : 0 },
+        'FC-37': { best: 'APU available', worst: 'No APU power when the generators are already lost', lvl: s => s('APU') === 'F' ? 1 : 0, why: 'The APU does not start' },
+        'FC-38': { malf: { 'SFN-APU1': 'combo' }, best: 'Contaminated bleed shut off', worst: 'Smoke or fumes in the flight deck', lvl: s => (s.m('SFN-APU1') && s('APU bleed shutoff') === 'F') ? 1 : 0 },
+        'FC-39': { best: 'Voice kept on at least one radio', worst: 'No voice contact over a remote route', lvl: s => s('Voice radios') === 'F' ? 1 : 0, why: 'All three radios lost' },
+        'FC-40': { malf: { 'SFN-COM2': 'combo' }, best: 'Wrong clearance caught by voice readback', worst: 'Aircraft flies a clearance it was not given', lvl: s => (s.m('SFN-COM2') && s('Voice radios') !== 'O') ? 1 : 0 },
+        'FC-41': { mid: [['Landing on one light', 'none', 'One landing light left: reduced view of the strip edges, landing continued']], best: 'Both landing lights', worst: 'Night landing on an unlit strip with no surface cues',
+                   lvl: s => s('Landing lights') === 'F' ? 2 : s('Landing lights') === 'D' ? 1 : 0, why: 'Neither landing light works' },
+        'FC-42': { best: 'Flight deck lit', worst: 'Panels and instruments unlit at night', lvl: s => s('Flight deck lighting') === 'F' ? 1 : 0, why: 'Neither the normal nor the standby lighting works' },
+        'FC-43': { best: 'Escape path lit', worst: 'Evacuation in the dark', lvl: s => s('Emergency lighting') === 'F' ? 1 : 0, why: 'Neither battery pack lights the exits' },
+        'FC-44': { best: 'Waste contained', worst: 'Water reaches the avionics', lvl: s => s('Waste containment') === 'F' ? 1 : 0, why: 'The line leaks and the drained shroud fails to carry it away' },
+        'FC-45': { best: 'Water available', worst: 'No water for the crew', lvl: s => s('Potable water') === 'F' ? 1 : 0, why: 'The tank or the pump fails' },
+        'FC-46': { best: 'Flight recorded', worst: 'No voice or data record', lvl: s => (s('Voice recording') === 'F' && s('Data recording') === 'F') ? 1 : 0, why: 'Both voice and data recording lost' },
+        'FC-47': { best: 'Stall warning kept', worst: 'An approach to the stall is not announced', lvl: s => s('Shaker channels') === 'F' ? 1 : 0, why: 'Neither shaker channel works' },
+        'FC-48': { malf: { 'SFN-STW2': 'combo' }, best: 'False pusher command stopped by the channel agreement check', worst: 'Nose pushed down close to the ground', lvl: s => (s.m('SFN-STW2') && s('Pusher channels') === 'D') ? 1 : 0 },
+        'FC-49': { best: 'Stall protection kept', worst: 'A stall develops without the pusher', lvl: s => s('Pusher channels') === 'F' ? 1 : 0, why: 'Neither pusher channel works' },
+        'FC-50': { best: 'Terrain warning kept', worst: 'Terrain near the strip not announced', lvl: s => s('Terrain warning') === 'F' ? 1 : 0, why: 'The terrain awareness computer fails' },
+        'FC-51': { best: 'Collision avoidance kept', worst: 'No resolution advisory', lvl: s => s('Collision avoidance') === 'F' ? 1 : 0, why: 'The collision avoidance computer fails' },
+        'FC-52': { malf: { 'SFN-SAW1': 'alone' }, best: 'No false warning', worst: 'Unneeded pull-up and go-around at the strip', lvl: s => 0 },
+        'FC-53': { mid: [['View from one side only', 'none', 'One windshield heated or wiped: the pilot on that side lands']], best: 'Both windshields clear', worst: 'Forward view lost at the strip',
+                   lvl: s => (s('Windshield heat') === 'F' || s('Wipers') === 'F') ? 2 : (s('Windshield heat') === 'D' || s('Wipers') === 'D') ? 1 : 0, why: 'Neither windshield heated, or neither wiped' },
+        'FC-54': { best: 'Avionics cooled', worst: 'Avionics overheat', lvl: s => s('Avionics cooling fans') === 'F' ? 1 : 0, why: 'Neither fan works' },
+        'FC-55': { malf: { 'SFN-HLF4': 'combo' }, best: 'Wrong indication caught by lane disagreement', worst: 'Take-off or landing on a flap setting the crew does not expect', lvl: s => (s.m('SFN-HLF4') && s('Position monitoring lanes') === 'D') ? 1 : 0 },
+        'FC-56': { malf: { 'SFN-FUE4': 'combo' }, best: 'Wrong quantity caught by the fuel used cross-check', worst: 'Fuel exhaustion not foreseen', lvl: s => (s.m('SFN-FUE4') && s('Fuel quantity channels') === 'D') ? 1 : 0 },
+        'FC-57': { best: 'Two or more hydraulic systems kept', worst: 'Flight control on one hydraulic system', lvl: s => (s('Hydraulic systems') !== 'O') ? 1 : 0, why: 'Two of the three hydraulic systems lost' },
+        'FC-58': { malf: { 'SFN-FPR1': 'combo' }, best: 'False warning caught by the loop discordance monitor', worst: 'A healthy engine shut down at take-off', lvl: s => (s.m('SFN-FPR1') && s('Detection loops') === 'D') ? 1 : 0 },
+        'FC-59': { best: 'At least one engine generator kept', worst: 'Essential loads on the APU or the battery only', lvl: s => s('Engine generators') === 'F' ? 1 : 0, why: 'All engine generators lost' },
+        'FC-60': { malf: { 'SFN-LDG2': 'combo' }, best: 'Uncommanded braking caught by the brake control monitor', worst: 'Acceleration lost on the strip', lvl: s => (s.m('SFN-LDG2') && s('Brake control monitor') !== 'O') ? 1 : 0 }
     };
     const EV = 'HL-1 performance and handling assessment (ASM-AC set, public information and assumptions), to be replaced by simulator evidence';
     // the budget for each event, per flight, as allocated for each table (shared equipment carries its most conservative figure)
@@ -170,7 +245,37 @@
         'FC-27': { 'Hydraulic systems|F': '1E-10', 'Hydraulic systems|D': '1E-07', 'System isolation valves|F': '1E-05' },
         'FC-28': { 'Main gear bogies|F': '2E-09' },
         'FC-29': { 'Detection loops|F': '1E-09', 'Extinguisher bottles|F': '1E-09' },
-        'FC-30': {  }
+        'FC-30': {  },
+        'FC-31': { 'Autopilot channels|D': '2E-04', 'M:SFN-AFS1': '1E-06' },
+        'FC-32': { 'Autopilot channels|F': '1E-08' },
+        'FC-33': { 'Autothrust drive|F': '1E-08' },
+        'FC-34': { 'Asymmetry brakes|F': '1E-08', 'Trailing-edge flaps|D': '2E-04', 'Leading-edge slats|D': '2E-04' },
+        'FC-35': { 'Trailing-edge flaps|F': '1E-08' },
+        'FC-36': { 'Position monitoring lanes|D': '2E-04', 'M:SFN-HLF1': '1E-06' },
+        'FC-37': { 'APU|F': '1E-05' },
+        'FC-38': { 'APU bleed shutoff|F': '1E-05', 'M:SFN-APU1': '1E-06' },
+        'FC-39': { 'Voice radios|F': '1E-10' },
+        'FC-40': { 'Voice radios|D': '1E-07', 'M:SFN-COM2': '1E-06' },
+        'FC-41': { 'Landing lights|F': '1E-08' },
+        'FC-42': { 'Flight deck lighting|F': '1E-08' },
+        'FC-43': { 'Emergency lighting|F': '1E-08' },
+        'FC-44': { 'Waste containment|F': '1E-08' },
+        'FC-45': { 'Potable water|F': '1E-05' },
+        'FC-46': { 'Voice recording|F': '1E-05', 'Data recording|F': '1E-05' },
+        'FC-47': { 'Shaker channels|F': '1E-08' },
+        'FC-48': { 'Shaker channels|D': '2E-04', 'Pusher channels|D': '2E-04', 'M:SFN-STW2': '1E-06' },
+        'FC-49': { 'Pusher channels|F': '1E-08' },
+        'FC-50': { 'Terrain warning|F': '1E-05' },
+        'FC-51': { 'Collision avoidance|F': '1E-05' },
+        'FC-52': {  },
+        'FC-53': { 'Windshield heat|F': '1E-08', 'Wipers|F': '1E-08' },
+        'FC-54': { 'Avionics cooling fans|F': '1E-08' },
+        'FC-55': { 'Trailing-edge flaps|F': '1E-08', 'Leading-edge slats|F': '1E-08', 'Position monitoring lanes|D': '2E-04', 'M:SFN-HLF4': '1E-06', 'Leading-edge slats|D': '2E-04', 'Asymmetry brakes|D': '2E-04', 'Trailing-edge flaps|D': '2E-04', 'Asymmetry brakes|F': '1E-08' },
+        'FC-56': { 'Fuel quantity channels|D': '2E-04', 'M:SFN-FUE4': '1E-06' },
+        'FC-57': { 'Hydraulic systems|D': '1E-07' },
+        'FC-58': { 'Detection loops|D': '2E-04', 'M:SFN-FPR1': '1E-06' },
+        'FC-59': { 'Engine generators|F': '2E-09' },
+        'FC-60': { 'Brake control monitor|D': '2E-04', 'M:SFN-LDG2': '1E-06' }
     };
     const SIGNER = 'M. Chen', SIGNED_AT = '2026-11-23T16:00:00.000Z';
     const PLAN = { BUILDS, RES_BY_FN, PARTIAL_PHRASE, AC, FCS, EV, BUDGETS, SIGNER, SIGNED_AT };

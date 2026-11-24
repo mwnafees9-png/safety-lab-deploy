@@ -10,7 +10,7 @@
 // questions and the answers.
 (function (root) {
     'use strict';
-    var VERSION = '1.5';
+    var VERSION = '1.6';   // 1.6 23 Nov 2026: fillAs: a built-in demo answers the Autopilots as its named engineer, on a fixed date
     function E(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
     var CSS = ''
         + '.slap{font-size:14px;line-height:1.45}'
@@ -163,15 +163,23 @@
             '<div class="slap-why">' + (adding ? 'Adding the Aeolus HL-1 3D model to this project...' : E(what) + ' Import the CAD model and the zone list first. The table below still works by hand.') + '</div>' +
             '<div class="slap-nav">' + importButtons(false) + '</div></div>';
     }
+    // While a built-in demo is filled (fillAs), every answer is signed as the demo's engineer on the demo's date, not as whoever opened it.
+    var asOf = null;
+    // and the thousands of saves a fill makes are one save at its end
+    var pendingSave = false;
+    function fillAs(by, at, fn) { var was = asOf; asOf = { by: String(by || ''), at: String(at || '') }; try { return fn(); } finally { asOf = was; if (!asOf && pendingSave) { pendingSave = false; save(); } } }
+    function filling() { return !!asOf; }
+    function now() { return asOf && asOf.at ? asOf.at : new Date().toISOString(); }
     // who answered: the signed-in person (4 Nov 2026: it read "Engineer" for a signed-in user)
     function who() {
+        if (asOf && asOf.by) return asOf.by;
         try { var ss = (typeof _supabaseSession !== 'undefined' && _supabaseSession) || root._supabaseSession, u0 = ss && ss.user; if (u0 && u0.email) { var md = u0.user_metadata || {}; return md.full_name || md.name || u0.email; } } catch (_) {}
         try { var me = root.SLAvatar && root.SLAvatar.me && root.SLAvatar.me(); if (me && me.name && me.name !== 'Someone') return me.name; } catch (_) {}
         try { if (typeof root._signoffReviewerName === 'function') { var n = root._signoffReviewerName(); if (n) return n; } } catch (_) {}
         try { var u = root.__slUser; if (u && (u.name || u.email)) return u.name || u.email; } catch (_) {}
         return 'Engineer';
     }
-    function save() { try { if (typeof root.scheduleAutosave === 'function') root.scheduleAutosave(); } catch (_) {} }
+    function save() { if (asOf) { pendingSave = true; return; } try { if (typeof root.scheduleAutosave === 'function') root.scheduleAutosave(); } catch (_) {} }
     // a printable report in a new window (the person prints or saves it as PDF from there)
     function openReport(title, html) {
         var w = null; try { w = root.open('', '_blank'); } catch (_) {}
@@ -180,6 +188,6 @@
         try { var b = new Blob([doc], { type: 'text/html' }), a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = title.replace(/[^\w-]+/g, '_') + '.html'; a.click(); } catch (_) {}
         return false;
     }
-    root.SLAutopilotUI = { VERSION: VERSION, E: E, importCad: importCad, importZones: importZones, openCad: openCad, importButtons: importButtons, emptyCard: emptyCard, style: style, picture: picture, figure: figure, question: question, pill: pill, rail: rail, progress: progress, who: who, save: save, openReport: openReport };
+    root.SLAutopilotUI = { VERSION: VERSION, E: E, importCad: importCad, importZones: importZones, openCad: openCad, importButtons: importButtons, emptyCard: emptyCard, style: style, picture: picture, figure: figure, question: question, pill: pill, rail: rail, progress: progress, who: who, now: now, fillAs: fillAs, filling: filling, save: save, openReport: openReport };
     if (typeof module !== 'undefined' && module.exports) module.exports = root.SLAutopilotUI;
 })(typeof window !== 'undefined' ? window : globalThis);

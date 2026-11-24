@@ -38,6 +38,9 @@
     function build() {
         let _nid = 7000;
         const id = () => _nid++;
+        // 23 Nov 2026: the full-scale additions take their ids from their own range, so every id the first cut gave keeps its number
+        let _nid2 = 19000;
+        const id2 = () => _nid2++;
         const NOW = '2026-07-31T09:00:00.000Z';
         const T0 = Date.parse('2026-07-20T10:00:00Z');
 
@@ -89,9 +92,24 @@
             ['AF-13', 'Provide hydraulic power', 'SF-21', 'Provide hydraulic power', 'Supply actuation power to flight controls, gear, brakes, steering and the nose door.'],
             ['AF-14', 'Operate from semi-prepared surfaces', 'SF-22', 'Tolerate unpaved-surface operation', 'Withstand surface irregularity, soft-field loads, debris ingestion and dust across the approved strip specification.'],
             ['AF-15', 'Protect against fire', 'SF-23', 'Detect and suppress fire', 'Detect and suppress fire in the nacelles, hold, wheel wells and equipment bays.'],
+            // 23 Nov 2026: the full-scale aircraft. The functions every transport has that the first cut left out.
+            ['AF-16', 'Fly the aircraft automatically', 'SF-24', 'Hold the flight path and thrust automatically', 'Hold attitude, altitude, heading and speed, and fly coupled approaches, with autothrust on all four engines.'],
+            ['AF-17', 'Configure the wing for low speed', 'SF-25', 'Extend and retract the high-lift devices', 'Position the trailing-edge flaps and leading-edge slats symmetrically for take-off, approach and landing on a short strip.'],
+            ['AF-18', 'Provide auxiliary power', 'SF-26', 'Provide auxiliary power and bleed air', 'Supply electrical power and clean bleed air from the APU on the ground and, after a generator loss, in flight.'],
+            ['AF-19', 'Communicate', 'SF-27', 'Communicate with air traffic control and the ground', 'Voice on VHF and HF, and datalink clearances, over the remote routes to the wind-farm sites.'],
+            ['AF-20', 'Provide lighting', 'SF-28', 'Light the strip and the flight deck', 'Landing, taxi and runway turn-off lights for an unlit strip, and flight deck lighting at night.'],
+            ['AF-20', 'Provide lighting', 'SF-29', 'Light the escape path in an emergency', 'Emergency lighting of the flight deck and crew rest exits after an evacuation is called.'],
+            ['AF-21', 'Provide water and waste services', 'SF-30', 'Supply water and collect waste', 'Potable water for the crew and contained waste above the avionics bay.'],
+            ['AF-22', 'Record the flight', 'SF-31', 'Record cockpit voice and flight data', 'Record the flight deck audio and the flight data the accident investigation rules ask for.'],
+            ['AF-23', 'Protect against stall', 'SF-32', 'Warn of and protect against stall', 'Warn the crew of an approaching stall with the stick shaker and push the nose down at the stall.'],
+            ['AF-24', 'Avoid terrain and traffic', 'SF-33', 'Warn of terrain and traffic', 'Terrain awareness and warning, and traffic collision avoidance, including near unsurveyed strips.'],
+            ['AF-25', 'Keep the flight deck view clear', 'SF-34', 'Keep the windshields clear', 'Heat the windshields against ice and fog and remove rain on approach.'],
+            ['AF-26', 'Cool the avionics', 'SF-35', 'Cool the avionics bay', 'Remove the heat of the avionics so the flight-critical computers stay inside their temperature limits.'],
+            ['AF-06', 'Store and deliver fuel', 'SF-36', 'Indicate fuel quantity and balance', 'Show the crew how much fuel is in each tank group and whether the load is balanced.'],
         ];
-        const acFunctionsData = FN.map(f => ({
-            internalId: id(), funcId: f[0], funcName: f[1], subId: f[2], subName: f[3], subDef: f[4],
+        const FIRST_CUT = 23;
+        const acFunctionsData = FN.map((f, i) => ({
+            internalId: i < FIRST_CUT ? id() : id2(), funcId: f[0], funcName: f[1], subId: f[2], subName: f[3], subDef: f[4],
         }));
 
         // ====================================================================
@@ -125,6 +143,19 @@
             M('SF-21', 'Aware', 'FC-27', 'Total loss of hydraulic power', 'SF21-PL', 'Loss of one hydraulic system — Major', 'SF21-M', 'Undetected loss of system pressure'),
             M('SF-22', 'Aware', 'FC-28', 'Structural failure from unpaved-surface loads', 'SF22-PL', 'Single tire failure on the semi-prepared strip — Major', 'SF22-M', 'Undetected gear damage carried into the next sector'),
             M('SF-23', 'Aware', 'FC-29', 'Undetected or unsuppressed fire in the hold or a nacelle', 'SF23-PL', 'Loss of one extinguisher shot — Major', 'SF23-M', 'False fire warning — Minor'),
+            M('SF-24', 'Aware', 'FC-32', 'Loss of autopilot and autothrust', 'SF24-PL', 'Loss of one autopilot channel, Minor', 'FC-31', 'Uncommanded autopilot pitch excursion near the ground'),
+            M('SF-25', 'Aware', 'FC-35', 'Loss of high-lift extension for landing', 'FC-34', 'Flap or slat asymmetry beyond roll authority', 'FC-36', 'Uncommanded high-lift retraction during take-off'),
+            M('SF-26', 'Aware', 'FC-37', 'Loss of APU power when needed in flight', 'SF26-PL', 'APU bleed only, no electrical power, Minor', 'FC-38', 'Contaminated APU bleed air delivered to the flight deck'),
+            M('SF-27', 'Aware', 'FC-39', 'Loss of all air-ground voice communication', 'SF27-PL', 'Loss of one radio, Minor', 'FC-40', 'Erroneous datalink clearance accepted by the crew'),
+            M('SF-28', 'Aware', 'FC-41', 'Loss of landing and taxi lights on an unlit strip at night', 'FC-42', 'Loss of all flight-deck lighting at night', 'SF28-M', 'Lights fail to switch off, Minor'),
+            M('SF-29', 'Unaware', 'FC-43', 'Loss of emergency escape path lighting', 'SF29-PL', 'Loss of one emergency light, Minor', 'SF29-M', 'Emergency lights come on uncommanded, no safety effect'),
+            M('SF-30', 'Aware', 'FC-45', 'Loss of potable water', 'SF30-PL', 'Reduced water supply, no safety effect', 'FC-44', 'Waste water leak into the avionics bay'),
+            M('SF-31', 'Unaware', 'FC-46', 'Loss of cockpit voice and flight data recording', 'SF31-PL', 'Loss of one recorder, Minor', 'SF31-M', 'Corrupted recording, Minor'),
+            M('SF-32', 'Unaware', 'FC-47', 'Loss of stall warning', 'FC-49', 'Loss of stall protection near the stall', 'FC-48', 'Inadvertent stick pusher activation at low altitude'),
+            M('SF-33', 'Unaware', 'FC-50', 'Loss of terrain warning approaching an unsurveyed strip', 'FC-51', 'Loss of traffic collision avoidance', 'FC-52', 'Erroneous terrain warning causing an unnecessary pull-up near the strip'),
+            M('SF-34', 'Aware', 'FC-53', 'Loss of windshield visibility on approach', 'SF34-PL', 'Loss of heat on one windshield, Minor', 'SF34-M', 'Windshield overheat, Minor'),
+            M('SF-35', 'Aware', 'FC-54', 'Loss of avionics cooling', 'SF35-PL', 'Loss of one cooling fan, Minor', 'SF35-M', 'Cooling air contaminated, Minor'),
+            M('SF-36', 'Unaware', 'SF36-TL', 'Loss of fuel quantity indication, Major with the fuel log procedure', 'SF36-PL', 'Loss of one tank group indication, Minor', 'FC-56', 'Erroneous fuel quantity indication'),
         ];
 
         // ====================================================================
@@ -202,6 +233,68 @@
               'Fire propagates through a 105 m hold or a pylon before landing.', 'Suppression exhausted or ineffective.', 'Fatalities.', ['ASM-AC-019']),
             F(1030, 'FC-30', 'SF-04', 'Uncommanded thrust change on one engine', 'Major', 'Takeoff, Climb, Approach',
               'Thrust excursion within the controllable envelope.', 'Crew identifies and shuts down the affected engine.', 'Discomfort.', []),
+            // 23 Nov 2026: the full-scale aircraft. Thirty more failure conditions over the added functions and the
+            // middle outcomes the CoFFE tables name (FC-57 two hydraulic systems, FC-59 all engine generators).
+            F(1031, 'FC-31', 'SF-24', 'Uncommanded autopilot pitch excursion near the ground', 'Hazardous', 'Approach, Landing',
+              'Flight path leaves the approach below 1,000 ft before the crew intervenes.', 'Disconnect and recover by hand; workload very high.', 'Serious injuries possible.', ['ASM-AC-021']),
+            F(1032, 'FC-32', 'SF-24', 'Loss of autopilot and autothrust', 'Major', 'Climb, Cruise, Descent, Approach',
+              'Manual flight for the rest of the sector, including a long ferry leg.', 'Hand flying with raised workload.', 'Discomfort.', []),
+            F(1033, 'FC-33', 'SF-24', 'Autothrust fails to advance thrust in a go-around', 'Hazardous', 'Approach',
+              'Go-around started without the thrust the climb needs at maximum weight.', 'Crew must notice and push the thrust levers by hand.', 'Serious injuries possible.', ['ASM-AC-021']),
+            F(1034, 'FC-34', 'SF-25', 'Flap or slat asymmetry beyond roll authority', 'Catastrophic', 'Takeoff, Approach, Landing',
+              'Rolling moment beyond what the ailerons and spoilers can hold at low speed.', 'No recovery available close to the ground.', 'Fatalities.', ['ASM-AC-022']),
+            F(1035, 'FC-35', 'SF-25', 'Loss of high-lift extension for landing', 'Hazardous', 'Approach, Landing',
+              'Flapless approach far faster than the 1,800 m strip allows; diversion to a long paved runway.', 'Non-normal procedure, high workload, diversion.', 'Serious injuries possible.', ['ASM-AC-022']),
+            F(1036, 'FC-36', 'SF-25', 'Uncommanded high-lift retraction during take-off', 'Hazardous', 'Takeoff, Climb',
+              'Lift lost at low speed just after rotation with a full payload.', 'Immediate pitch and thrust correction required.', 'Serious injuries possible.', ['ASM-AC-022']),
+            F(1037, 'FC-37', 'SF-26', 'Loss of APU power when needed in flight', 'Major', 'Cruise, Descent',
+              'The backup source is not there when generators are already lost.', 'Load shedding; land at the nearest suitable field.', 'No effect on the flight deck beyond workload.', []),
+            F(1038, 'FC-38', 'SF-26', 'Contaminated APU bleed air delivered to the flight deck', 'Hazardous', 'Standing, Taxi, Takeoff, Climb',
+              'Smoke or fumes in the flight deck.', 'Oxygen masks on, smoke procedure, possible impairment.', 'Serious injuries possible.', []),
+            F(1039, 'FC-39', 'SF-27', 'Loss of all air-ground voice communication', 'Major', ALLPH,
+              'Lost-communication procedure over remote routes.', 'Squawk lost communications, fly the cleared route.', 'Discomfort.', []),
+            F(1040, 'FC-40', 'SF-27', 'Erroneous datalink clearance accepted by the crew', 'Major', 'Climb, Cruise, Descent',
+              'Aircraft flies a level or route it was not cleared for.', 'Crew believes the clearance is valid.', 'Discomfort.', []),
+            F(1041, 'FC-41', 'SF-28', 'Loss of landing and taxi lights on an unlit strip at night', 'Hazardous', 'Approach, Landing',
+              'Night landing on an unlit graded strip with no visual reference to the surface.', 'Go-around and diversion, or landing with no surface cues.', 'Serious injuries possible.', ['ASM-AC-023']),
+            F(1042, 'FC-42', 'SF-28', 'Loss of all flight-deck lighting at night', 'Major', ALLPH,
+              'Instruments and panels hard to read at night.', 'Flashlights and standby lighting; raised workload.', 'Discomfort.', []),
+            F(1043, 'FC-43', 'SF-29', 'Loss of emergency escape path lighting', 'Major', 'Standing, Landing',
+              'Crew evacuation in the dark is slower.', 'Evacuate by feel and flashlight.', 'Minor injuries possible.', []),
+            F(1044, 'FC-44', 'SF-30', 'Waste water leak into the avionics bay', 'Major', 'Cruise',
+              'Water reaches avionics below the lavatory; equipment may fail.', 'Non-normal procedure for the failed equipment.', 'Discomfort.', []),
+            F(1045, 'FC-45', 'SF-30', 'Loss of potable water', 'Minor', 'Cruise',
+              'No water for the crew for the rest of the flight.', 'Use bottled water.', 'Discomfort.', []),
+            F(1046, 'FC-46', 'SF-31', 'Loss of cockpit voice and flight data recording', 'Minor', ALLPH,
+              'No effect on the flight; the record is lost.', 'Recorder caution only.', 'No effect.', []),
+            F(1047, 'FC-47', 'SF-32', 'Loss of stall warning', 'Hazardous', 'Takeoff, Climb, Approach, Landing',
+              'An approach to the stall is not announced; stall margin depends on the crew scan.', 'No cue before the stall.', 'Serious injuries possible.', ['ASM-AC-024']),
+            F(1048, 'FC-48', 'SF-32', 'Inadvertent stick pusher activation at low altitude', 'Catastrophic', 'Takeoff, Climb, Approach',
+              'Nose pushed down close to the ground with no stall present.', 'Too little height to recover after the pusher is overridden.', 'Fatalities.', ['ASM-AC-024']),
+            F(1049, 'FC-49', 'SF-32', 'Loss of stall protection near the stall', 'Hazardous', 'Takeoff, Approach',
+              'A stall develops without the pusher to stop it.', 'Recovery by hand from the shaker cue only.', 'Serious injuries possible.', ['ASM-AC-024']),
+            F(1050, 'FC-50', 'SF-33', 'Loss of terrain warning approaching an unsurveyed strip', 'Major', 'Approach',
+              'Terrain near the strip is not announced.', 'Crew relies on the chart and the visual approach.', 'Discomfort.', ['ASM-AC-008']),
+            F(1051, 'FC-51', 'SF-33', 'Loss of traffic collision avoidance', 'Major', 'Climb, Cruise, Descent',
+              'No resolution advisory if another aircraft comes close.', 'See and avoid, air traffic control separation.', 'Discomfort.', []),
+            F(1052, 'FC-52', 'SF-33', 'Erroneous terrain warning causing an unnecessary pull-up near the strip', 'Major', 'Approach',
+              'Unneeded pull-up and go-around at the strip.', 'Escape maneuver flown, approach abandoned.', 'Discomfort.', []),
+            F(1053, 'FC-53', 'SF-34', 'Loss of windshield visibility on approach', 'Hazardous', 'Approach, Landing',
+              'Forward view lost in ice, fog or heavy rain at the strip.', 'Go-around and diversion; landing by the side window only.', 'Serious injuries possible.', []),
+            F(1054, 'FC-54', 'SF-35', 'Loss of avionics cooling', 'Major', ALLPH,
+              'Avionics overheat; computers shut down one by one if not managed.', 'Non-normal procedure, land at the nearest suitable field.', 'Discomfort.', []),
+            F(1055, 'FC-55', 'SF-25', 'Erroneous flap position indication', 'Major', 'Takeoff, Approach, Landing',
+              'Take-off or landing with a flap setting other than the one the crew believes.', 'Speed and configuration mismatch noticed late.', 'Discomfort.', []),
+            F(1056, 'FC-56', 'SF-36', 'Erroneous fuel quantity indication', 'Hazardous', ALLPH,
+              'Fuel exhaustion or imbalance not foreseen by the crew.', 'Crew trusts the gauge over the fuel log.', 'Serious injuries possible.', ['ASM-AC-025']),
+            F(1057, 'FC-57', 'SF-21', 'Loss of two hydraulic systems', 'Hazardous', ALLPH,
+              'Flight control on one hydraulic system; brakes and steering degraded.', 'Non-normal procedure, land at the nearest suitable field.', 'Serious injuries possible.', ['ASM-AC-017']),
+            F(1058, 'FC-58', 'SF-23', 'False engine fire warning leading to an unnecessary shutdown at take-off', 'Major', 'Takeoff',
+              'One engine shut down without need during the climb-out.', 'Engine fire procedure flown on a healthy engine.', 'Discomfort.', []),
+            F(1059, 'FC-59', 'SF-20', 'Loss of all engine generators', 'Hazardous', ALLPH,
+              'Essential loads on the APU generator or the battery only.', 'Load shedding; land at the nearest suitable field.', 'Serious injuries possible.', ['ASM-AC-016']),
+            F(1060, 'FC-60', 'SF-06', 'Uncommanded brake application during the take-off roll', 'Hazardous', 'Takeoff',
+              'Acceleration lost on the strip; rejected take-off or overrun.', 'Reject the take-off.', 'Serious injuries possible.', ['ASM-AC-005']),
         ];
 
         // ====================================================================
@@ -230,6 +323,13 @@
             R(1116, 'REQ-AC-016', 'FC-29', 'L1', 'Architecture', 'Fire detection and suppression shall be provided in each nacelle, the cargo hold and each wheel well, with suppression sufficient for the maximum diversion time.', 'Catastrophic classification; 105 m hold with a single-item load.', 'Analysis', 'Pending'),
             R(1117, 'REQ-AC-017', 'FC-04', 'L1', 'Architecture', 'Directional control shall be maintained following the failure of the most critical engine at the most critical point in the take-off, with the twin-fin empennage sized accordingly.', 'Catastrophic classification; outboard engine moment arm on an 80 m span.', 'Test', 'Pending'),
             R(1118, 'REQ-AC-018', 'FC-16', 'L1', 'Architecture', 'Approach guidance to an unsurveyed strip shall include an independent means of confirming that the intended surface has been acquired.', 'Hazardous classification; no published approach exists to a wind-farm strip.', 'Analysis', 'Pending'),
+            R(1119, 'REQ-AC-019', 'FC-34', 'L1', 'Quantitative', 'The probability of a flap or slat asymmetry beyond roll authority shall not exceed 1E-9 per flight hour.', 'Catastrophic classification; asymmetry brakes on each side stop the surfaces before the limit.', 'Analysis', 'Pending'),
+            R(1120, 'REQ-AC-020', 'FC-48', 'L1', 'Quantitative', 'The probability of a stick pusher activation without a stall shall not exceed 1E-9 per flight hour.', 'Catastrophic classification; dual-channel agreement before the pusher fires.', 'Analysis', 'Pending'),
+            R(1121, 'REQ-AC-021', 'FC-41', 'L1', 'Architecture', 'Landing lights shall be supplied from two independent buses, either sufficient to light the strip for landing.', 'Hazardous classification; the strips are unlit.', 'Analysis', 'Pending'),
+            R(1122, 'REQ-AC-022', 'FC-56', 'L1', 'Architecture', 'Fuel quantity shall be cross-checked against fuel used from the engine flowmeters, and a disagreement shall be annunciated.', 'Hazardous classification; removes the single erroneous-gauge path to fuel exhaustion.', 'Analysis', 'Pending'),
+            R(1123, 'REQ-AC-023', 'FC-33', 'L1', 'Architecture', 'Go-around thrust shall be available from the thrust levers with autothrust failed, and an autothrust failure shall be annunciated.', 'Hazardous classification.', 'Test', 'Pending'),
+            R(1124, 'REQ-AC-024', 'FC-53', 'L1', 'Architecture', 'Each pilot shall have a heated windshield panel supplied independently of the other.', 'Hazardous classification; approach to unlit strips in icing.', 'Analysis', 'Pending'),
+            R(1125, 'REQ-AC-025', 'FC-47', 'L1', 'Architecture', 'Stall warning shall come from two independent angle-of-attack channels, either sufficient to warn.', 'Hazardous classification.', 'Analysis', 'Pending'),
         ];
 
         // ====================================================================
@@ -264,6 +364,11 @@
             A('ASM-AC-018', '[PRELIM] Twenty tires spread the footprint pressure, with tire sizing derived from a tactical airlifter. The number of gear legs and bogies is not frozen and is assumed as one nose unit and four main bogies.', 'Assumed', 'Confirm the gear arrangement with the landing-system supplier.', 'Design — landing gear'),
             A('ASM-AC-019', 'The cargo hold is assumed to be a Class E compartment in the manner of a large freighter, with detection and depressurization rather than active suppression.', 'Assumed', 'Confirm the intended compartment classification; a 105 m hold has no direct precedent.', 'Cert — basis'),
             A('ASM-AC-020', 'The certification basis is assumed to be 14 CFR Part 25 with special conditions for size, the nose door, the payload restraint and semi-prepared operation. No certification basis has yet been agreed with the authority.', 'Assumed', 'This is the single largest open item. The program has an FAA pathway and a named regulatory lead, but no agreed basis, amendment level or special conditions.', 'Cert — basis'),
+            A('ASM-AC-021', 'The flight controls are fly-by-wire with side sticks, and the autoflight system has two channels, each monitored by the other.', 'Assumed', 'No avionics architecture has been released; confirm with the systems group.', 'Design: autoflight'),
+            A('ASM-AC-022', 'The flaps and slats are driven hydraulically from systems A and B through one torque shaft per surface set, with asymmetry brakes at each wing tip.', 'Assumed', 'Confirm the high-lift architecture with the wing supplier.', 'Design: high lift'),
+            A('ASM-AC-023', 'Night operations to the wind-farm strips rely on the aircraft lights only; the strips have no lighting.', 'Assumed', 'Derived from the stated operating concept; confirm with operations.', 'Ops: procedures'),
+            A('ASM-AC-024', 'Stall protection is a stick shaker and a stick pusher fed by two angle-of-attack channels; the pusher fires only when both agree.', 'Assumed', 'Confirm with the flight control supplier and the stall test plan.', 'Design: stall protection'),
+            A('ASM-AC-025', 'Fuel quantity is measured by capacitance probes in each tank group and cross-checked against fuel used.', 'Assumed', 'Confirm the fuel gauging architecture.', 'Design: fuel'),
         ];
 
         // ---- flight phases: a 3.0 hour design mission ------------------------
@@ -274,13 +379,14 @@
         ];
 
         // ====================================================================
-        // SYSTEMS — fourteen, matching the confirmed supplier map where one exists
+        // SYSTEMS: twenty-four, matching the confirmed supplier map where one exists (ten added 23 Nov 2026)
         // ====================================================================
         const mkSys = (sid, name, role, fns, fha, req, asm) => ({
             id: sid, name, role, asmCounter: (asm || []).length + 1,
             functions: fns, fcim: [], extractedFCs: [], fha: fha || [], req: req || [], asm: asm || [],
         });
         const sf = (traces, fid, name) => ({ internalId: id(), traceIds: traces, funcId: fid, funcName: name, funcDef: '' });
+        const sf2 = (traces, fid, name) => ({ internalId: id2(), traceIds: traces, funcId: fid, funcName: name, funcDef: '' });
         const sysFha = (iid, fcId, subId, desc, sev, acTrace, phases) => ({
             internalId: iid, subId, fcId, fcDesc: desc, severity: sev, acTrace,
             phases: phases || ALLPH, effAc: 'See traced aircraft failure condition.', effCrew: '', effPax: '',
@@ -373,10 +479,11 @@
 
             mkSys('sys-fue', 'Fuel System', 'resource',
                 [sf(['SF-11'], 'SFN-FUE1', 'Store fuel'), sf(['SF-11'], 'SFN-FUE2', 'Deliver fuel to each powerplant'),
-                 sf(['SF-11'], 'SFN-FUE3', 'Manage lateral and longitudinal balance')],
+                 sf(['SF-11'], 'SFN-FUE3', 'Manage lateral and longitudinal balance'), sf2(['SF-36'], 'SFN-FUE4', 'Indicate fuel quantity and balance')],
                 [sysFha(2041, 'FC-FUE01', 'SF-11', 'Loss of fuel delivery to all powerplants', 'Catastrophic', 1014),
                  sysFha(2042, 'FC-FUE02', 'SF-11', 'Loss of feed to one powerplant', 'Major', 1014),
-                 sysFha(2043, 'FC-FUE03', 'SF-11', 'Undetected fuel imbalance beyond lateral limits', 'Hazardous', 1014)],
+                 sysFha(2043, 'FC-FUE03', 'SF-11', 'Undetected fuel imbalance beyond lateral limits', 'Hazardous', 1014),
+                 sysFha(2044, 'FC-FUE04', 'SF-36', 'Erroneous fuel quantity indication', 'Hazardous', 1056)],
                 [sysReq(2141, 'FC-FUE01', 'Independence', 'Each engine feed path shall be independent from tank outlet to engine interface, with crossfeed normally closed.', 'Supports the four-engine independence claim.', 'Passed'),
                  sysReq(2142, 'FC-FUE03', 'Monitoring', 'Lateral imbalance shall be annunciated before the certified limit is reached.', 'Removes the undetected path.', 'Passed')]),
 
@@ -410,10 +517,11 @@
 
             mkSys('sys-ecs', 'Environmental Control & Pressurization', 'function',
                 [sf(['SF-16'], 'SFN-ECS1', 'Pressurize the cargo hold'), sf(['SF-17'], 'SFN-ECS2', 'Pressurize the flight deck'),
-                 sf(['SF-16'], 'SFN-ECS3', 'Relieve over-pressure')],
+                 sf(['SF-16'], 'SFN-ECS3', 'Relieve over-pressure'), sf2(['SF-35'], 'SFN-ECS4', 'Cool the avionics bay')],
                 [sysFha(2081, 'FC-ECS01', 'SF-16', 'Loss of hold pressurization', 'Major', 1020, 'Climb, Cruise, Descent'),
                  sysFha(2082, 'FC-ECS02', 'SF-16', 'Hold over-pressure beyond structural limits', 'Catastrophic', 1021, 'Climb, Cruise'),
-                 sysFha(2083, 'FC-ECS03', 'SF-17', 'Loss of flight-deck pressurization', 'Catastrophic', 1022, 'Cruise')],
+                 sysFha(2083, 'FC-ECS03', 'SF-17', 'Loss of flight-deck pressurization', 'Catastrophic', 1022, 'Cruise'),
+                 sysFha(2084, 'FC-ECS04', 'SF-35', 'Loss of avionics bay cooling', 'Major', 1054)],
                 [sysReq(2181, 'FC-ECS02', 'Architecture', 'Two independent relief devices shall limit hold differential pressure, neither dependent on the control channel.', 'Catastrophic classification; a 105 m pressure vessel.', 'Pending'),
                  sysReq(2182, 'FC-ECS03', 'Independence', 'The flight-deck pressure boundary and its supply shall be independent of the hold schedule and of any single hold failure.', 'Hold and flight deck are on different schedules — see ASM-AC-013.', 'Pending')]),
 
@@ -458,6 +566,64 @@
                 [sysFha(2261, 'FC-OXY01', 'SF-17', 'Loss of crew oxygen supply', 'Hazardous', 1022, 'Cruise'),
                  sysFha(2262, 'FC-OXY02', 'SF-17', 'Undetected oxygen depletion', 'Catastrophic', 1022, 'Cruise')],
                 [sysReq(2271, 'FC-OXY02', 'Monitoring', 'Oxygen quantity shall be indicated continuously and checked as a dispatch item.', 'The undetected case is what raises this to Catastrophic.', 'Pending')]),
+
+            // ---- 23 Nov 2026: the ten systems of the full-scale aircraft --------------------------------------------
+            mkSys('sys-afs', 'Autoflight System', 'function',
+                [sf2(['SF-24'], 'SFN-AFS1', 'Hold the flight path automatically'), sf2(['SF-24'], 'SFN-AFS2', 'Control thrust automatically')],
+                [sysFha(2281, 'FC-AFS01', 'SF-24', 'Uncommanded autopilot pitch command', 'Hazardous', 1031, 'Approach, Landing'),
+                 sysFha(2282, 'FC-AFS02', 'SF-24', 'Loss of both autopilot channels', 'Major', 1032),
+                 sysFha(2283, 'FC-AFS03', 'SF-24', 'Autothrust fails to command go-around thrust', 'Hazardous', 1033, 'Approach')],
+                [sysReq(2381, 'FC-AFS01', 'Monitoring', 'Each autopilot channel shall be monitored by the other, and a pitch command disagreement shall disconnect the autopilot within 1 s.', 'Bounds the excursion near the ground.', 'Pending')]),
+            mkSys('sys-hlf', 'High-Lift System', 'function',
+                [sf2(['SF-25'], 'SFN-HLF1', 'Position the trailing-edge flaps'), sf2(['SF-25'], 'SFN-HLF2', 'Position the leading-edge slats'),
+                 sf2(['SF-25'], 'SFN-HLF3', 'Detect and stop high-lift asymmetry'), sf2(['SF-25'], 'SFN-HLF4', 'Indicate high-lift position')],
+                [sysFha(2284, 'FC-HLF01', 'SF-25', 'Flap or slat asymmetry not stopped', 'Catastrophic', 1034, 'Takeoff, Approach, Landing'),
+                 sysFha(2285, 'FC-HLF02', 'SF-25', 'Flaps and slats fail to extend', 'Hazardous', 1035, 'Approach, Landing'),
+                 sysFha(2286, 'FC-HLF03', 'SF-25', 'Uncommanded retraction', 'Hazardous', 1036, 'Takeoff, Climb'),
+                 sysFha(2287, 'FC-HLF04', 'SF-25', 'Erroneous high-lift position indication', 'Major', 1055)],
+                [sysReq(2382, 'FC-HLF01', 'Architecture', 'Asymmetry brakes at each wing tip shall stop both surface sets when their positions differ by more than the roll-authority limit.', 'Catastrophic at aircraft level.', 'Pending')]),
+            mkSys('sys-apu', 'Auxiliary Power Unit', 'function',
+                [sf2(['SF-26'], 'SFN-APU1', 'Start and run the APU in flight'), sf2(['SF-26'], 'SFN-APU2', 'Supply clean bleed air')],
+                [sysFha(2288, 'FC-APU01', 'SF-26', 'APU fails to start in flight', 'Major', 1037, 'Cruise, Descent'),
+                 sysFha(2289, 'FC-APU02', 'SF-26', 'Oil-contaminated APU bleed air', 'Hazardous', 1038, 'Standing, Taxi, Takeoff, Climb')],
+                [sysReq(2383, 'FC-APU02', 'Monitoring', 'APU bleed shall be closed automatically on a load-compressor oil seal failure indication.', 'Removes the fumes path.', 'Pending')]),
+            mkSys('sys-com', 'Communications', 'function',
+                [sf2(['SF-27'], 'SFN-COM1', 'Provide air-ground voice'), sf2(['SF-27'], 'SFN-COM2', 'Provide datalink')],
+                [sysFha(2290, 'FC-COM01', 'SF-27', 'Loss of all VHF and HF voice', 'Major', 1039),
+                 sysFha(2291, 'FC-COM02', 'SF-27', 'Corrupted datalink message displayed as valid', 'Major', 1040, 'Climb, Cruise, Descent')],
+                [sysReq(2384, 'FC-COM02', 'Integrity', 'Datalink messages shall carry an end-to-end integrity check, and a failed check shall not be displayed as a clearance.', 'Removes the corrupted-clearance path.', 'Pending')]),
+            mkSys('sys-lgt', 'Lighting', 'function',
+                [sf2(['SF-28'], 'SFN-LGT1', 'Light the strip on approach and taxi'), sf2(['SF-28'], 'SFN-LGT2', 'Light the flight deck'), sf2(['SF-29'], 'SFN-LGT3', 'Light the escape path')],
+                [sysFha(2292, 'FC-LGT01', 'SF-28', 'Loss of all landing and taxi lights', 'Hazardous', 1041, 'Approach, Landing'),
+                 sysFha(2293, 'FC-LGT02', 'SF-28', 'Loss of all flight-deck lighting', 'Major', 1042),
+                 sysFha(2294, 'FC-LGT03', 'SF-29', 'Emergency lights fail to come on', 'Major', 1043, 'Standing, Landing')],
+                [sysReq(2385, 'FC-LGT01', 'Architecture', 'The landing lights shall be split across two buses, left and right, either sufficient to land.', 'Implements REQ-AC-021.', 'Pending')]),
+            mkSys('sys-wws', 'Water and Waste', 'function',
+                [sf2(['SF-30'], 'SFN-WWS1', 'Supply potable water'), sf2(['SF-30'], 'SFN-WWS2', 'Collect and contain waste')],
+                [sysFha(2295, 'FC-WWS01', 'SF-30', 'Waste tank or line leak above the avionics bay', 'Major', 1044, 'Cruise'),
+                 sysFha(2296, 'FC-WWS02', 'SF-30', 'Loss of potable water supply', 'Minor', 1045, 'Cruise')],
+                [sysReq(2386, 'FC-WWS01', 'Installation', 'Waste lines above the avionics bay shall be double-walled with a drained shroud.', 'Keeps a leak off the avionics.', 'Pending')]),
+            mkSys('sys-rec', 'Flight Recorders', 'function',
+                [sf2(['SF-31'], 'SFN-REC1', 'Record cockpit voice'), sf2(['SF-31'], 'SFN-REC2', 'Record flight data')],
+                [sysFha(2297, 'FC-REC01', 'SF-31', 'Loss of voice and data recording', 'Minor', 1046)],
+                [sysReq(2387, 'FC-REC01', 'Regulatory', 'Voice and flight data shall be recorded to the rules of 14 CFR 25.1457 and 25.1459.', 'Accident investigation requirement.', 'Passed')]),
+            mkSys('sys-stw', 'Stall Warning and Protection', 'function',
+                [sf2(['SF-32'], 'SFN-STW1', 'Warn of an approaching stall'), sf2(['SF-32'], 'SFN-STW2', 'Push the nose down at the stall')],
+                [sysFha(2298, 'FC-STW01', 'SF-32', 'Loss of the stick shaker', 'Hazardous', 1047, 'Takeoff, Climb, Approach, Landing'),
+                 sysFha(2299, 'FC-STW02', 'SF-32', 'Pusher fires with no stall present', 'Catastrophic', 1048, 'Takeoff, Climb, Approach'),
+                 sysFha(2300, 'FC-STW03', 'SF-32', 'Loss of the stick pusher', 'Hazardous', 1049, 'Takeoff, Approach')],
+                [sysReq(2388, 'FC-STW02', 'Architecture', 'The pusher shall fire only when both angle-of-attack channels agree that the stall angle is reached.', 'Implements REQ-AC-020.', 'Pending')]),
+            mkSys('sys-saw', 'Terrain and Traffic Awareness', 'function',
+                [sf2(['SF-33'], 'SFN-SAW1', 'Warn of terrain'), sf2(['SF-33'], 'SFN-SAW2', 'Warn of traffic')],
+                [sysFha(2301, 'FC-SAW01', 'SF-33', 'Loss of terrain awareness and warning', 'Major', 1050, 'Approach'),
+                 sysFha(2302, 'FC-SAW02', 'SF-33', 'Loss of collision avoidance', 'Major', 1051, 'Climb, Cruise, Descent'),
+                 sysFha(2303, 'FC-SAW03', 'SF-33', 'False terrain warning near the strip', 'Major', 1052, 'Approach')],
+                [sysReq(2389, 'FC-SAW03', 'Data', 'Each planned strip shall be added to the terrain database with its surveyed elevation before the first operation.', 'Removes the false-warning path at unsurveyed strips.', 'Pending')]),
+            mkSys('sys-wsh', 'Windshield Heat and Rain Removal', 'function',
+                [sf2(['SF-34'], 'SFN-WSH1', 'Heat the windshields'), sf2(['SF-34'], 'SFN-WSH2', 'Remove rain')],
+                [sysFha(2304, 'FC-WSH01', 'SF-34', 'Loss of heat on both windshields', 'Hazardous', 1053, 'Approach, Landing'),
+                 sysFha(2305, 'FC-WSH02', 'SF-34', 'Loss of both wipers in heavy rain', 'Major', 1053, 'Approach, Landing')],
+                [sysReq(2390, 'FC-WSH01', 'Architecture', 'Each windshield heat controller shall be powered from a different bus.', 'Implements REQ-AC-024.', 'Pending')]),
         ];
 
         // ---- FCIM ---------------------------------------------------------------
@@ -511,6 +677,7 @@
             'sys-fue': [
                 { subId: 'SF-11', tlId: 'FC-FUE01', tlDesc: 'Loss of fuel delivery to all powerplants', mId: 'FC-FUE03', mDesc: 'Undetected fuel imbalance beyond lateral limits' },
                 { subId: 'SF-11', tlId: 'FC-FUE02', tlDesc: 'Loss of feed to one powerplant' },
+                { subId: 'SF-36', mId: 'FC-FUE04', mDesc: 'Erroneous fuel quantity indication' },
             ],
             'sys-ldg': [
                 { subId: 'SF-12', tlId: 'FC-LDG01', tlDesc: 'Gear fails to extend or lock' },
@@ -531,6 +698,7 @@
                 { subId: 'SF-16', tlId: 'FC-ECS01', tlDesc: 'Loss of hold pressurization' },
                 { subId: 'SF-16', tlId: 'FC-ECS02', tlDesc: 'Hold over-pressure beyond structural limits' },
                 { subId: 'SF-17', tlId: 'FC-ECS03', tlDesc: 'Loss of flight-deck pressurization' },
+                { subId: 'SF-35', tlId: 'FC-ECS04', tlDesc: 'Loss of avionics bay cooling' },
             ],
             'sys-crg': [
                 { subId: 'SF-14', tlId: 'FC-CRG01', tlDesc: 'Loss of payload restraint in flight', mId: 'FC-CRG02', mDesc: 'Progressive restraint slippage without indication' },
@@ -550,6 +718,43 @@
             ],
             'sys-oxy': [
                 { subId: 'SF-17', tlId: 'FC-OXY01', tlDesc: 'Loss of crew oxygen supply', mId: 'FC-OXY02', mDesc: 'Undetected oxygen depletion' },
+            ],
+            'sys-afs': [
+                { subId: 'SF-24', tlId: 'FC-AFS02', tlDesc: 'Loss of both autopilot channels', mId: 'FC-AFS01', mDesc: 'Uncommanded autopilot pitch command' },
+                { subId: 'SF-24', tlId: 'FC-AFS03', tlDesc: 'Autothrust fails to command go-around thrust' },
+            ],
+            'sys-hlf': [
+                { subId: 'SF-25', tlId: 'FC-HLF02', tlDesc: 'Flaps and slats fail to extend', mId: 'FC-HLF03', mDesc: 'Uncommanded retraction' },
+                { subId: 'SF-25', tlId: 'FC-HLF01', tlDesc: 'Flap or slat asymmetry not stopped', mId: 'FC-HLF04', mDesc: 'Erroneous high-lift position indication' },
+            ],
+            'sys-apu': [
+                { subId: 'SF-26', tlId: 'FC-APU01', tlDesc: 'APU fails to start in flight', mId: 'FC-APU02', mDesc: 'Oil-contaminated APU bleed air' },
+            ],
+            'sys-com': [
+                { subId: 'SF-27', tlId: 'FC-COM01', tlDesc: 'Loss of all VHF and HF voice', mId: 'FC-COM02', mDesc: 'Corrupted datalink message displayed as valid' },
+            ],
+            'sys-lgt': [
+                { subId: 'SF-28', tlId: 'FC-LGT01', tlDesc: 'Loss of all landing and taxi lights' },
+                { subId: 'SF-28', tlId: 'FC-LGT02', tlDesc: 'Loss of all flight-deck lighting' },
+                { subId: 'SF-29', tlId: 'FC-LGT03', tlDesc: 'Emergency lights fail to come on' },
+            ],
+            'sys-wws': [
+                { subId: 'SF-30', tlId: 'FC-WWS02', tlDesc: 'Loss of potable water supply', mId: 'FC-WWS01', mDesc: 'Waste tank or line leak above the avionics bay' },
+            ],
+            'sys-rec': [
+                { subId: 'SF-31', tlId: 'FC-REC01', tlDesc: 'Loss of voice and data recording' },
+            ],
+            'sys-stw': [
+                { subId: 'SF-32', tlId: 'FC-STW01', tlDesc: 'Loss of the stick shaker', mId: 'FC-STW02', mDesc: 'Pusher fires with no stall present' },
+                { subId: 'SF-32', tlId: 'FC-STW03', tlDesc: 'Loss of the stick pusher' },
+            ],
+            'sys-saw': [
+                { subId: 'SF-33', tlId: 'FC-SAW01', tlDesc: 'Loss of terrain awareness and warning', mId: 'FC-SAW03', mDesc: 'False terrain warning near the strip' },
+                { subId: 'SF-33', tlId: 'FC-SAW02', tlDesc: 'Loss of collision avoidance' },
+            ],
+            'sys-wsh': [
+                { subId: 'SF-34', tlId: 'FC-WSH01', tlDesc: 'Loss of heat on both windshields' },
+                { subId: 'SF-34', tlId: 'FC-WSH02', tlDesc: 'Loss of both wipers in heavy rain' },
             ],
         };
         systemsData.forEach(function (s) {
@@ -849,17 +1054,21 @@
             { internalId: 3306, routingId: 'RT-006', name: 'Hydraulic systems A and B wing-root run', kind: 'HV', desc: 'Wing root to fuselage, both systems.', routesThroughZones: ['Z-CWB'], carriesFunctions: ['SF-21'], carriesItems: [] },
         ];
         const resourcesData = [
-            { internalId: id(), resId: 'RES-01', name: '115 VAC electrical power', type: 'Electrical', providedBy: ['sys-eps'], consumedBy: [], consumedBySystems: ['sys-fcs', 'sys-avi', 'sys-ips', 'sys-fue', 'sys-ldg', 'sys-crg', 'sys-nzd', 'sys-ecs', 'sys-fpr'] },
-            { internalId: id(), resId: 'RES-02', name: 'Hydraulic pressure, system A', type: 'Hydraulic', providedBy: ['sys-hyd-a'], consumedBy: [], consumedBySystems: ['sys-fcs', 'sys-ldg', 'sys-nzd'] },
-            { internalId: id(), resId: 'RES-03', name: 'Hydraulic pressure, system B', type: 'Hydraulic', providedBy: ['sys-hyd-b'], consumedBy: [], consumedBySystems: ['sys-fcs', 'sys-ldg'] },
+            { internalId: id(), resId: 'RES-01', name: '115 VAC electrical power', type: 'Electrical', providedBy: ['sys-eps'], consumedBy: [], consumedBySystems: ['sys-fcs', 'sys-avi', 'sys-ips', 'sys-fue', 'sys-ldg', 'sys-crg', 'sys-nzd', 'sys-ecs', 'sys-fpr', 'sys-afs', 'sys-hlf', 'sys-com', 'sys-lgt', 'sys-rec', 'sys-stw', 'sys-saw', 'sys-wsh', 'sys-wws'] },
+            { internalId: id(), resId: 'RES-02', name: 'Hydraulic pressure, system A', type: 'Hydraulic', providedBy: ['sys-hyd-a'], consumedBy: [], consumedBySystems: ['sys-fcs', 'sys-ldg', 'sys-nzd', 'sys-hlf'] },
+            { internalId: id(), resId: 'RES-03', name: 'Hydraulic pressure, system B', type: 'Hydraulic', providedBy: ['sys-hyd-b'], consumedBy: [], consumedBySystems: ['sys-fcs', 'sys-ldg', 'sys-hlf'] },
             { internalId: id(), resId: 'RES-04', name: 'Hydraulic pressure, system C', type: 'Hydraulic', providedBy: ['sys-hyd-c'], consumedBy: [], consumedBySystems: ['sys-fcs'] },
             { internalId: id(), resId: 'RES-05', name: 'Fuel feed', type: 'Fuel', providedBy: ['sys-fue'], consumedBy: [], consumedBySystems: ['sys-prp'] },
-            { internalId: id(), resId: 'RES-06', name: 'Engine bleed air', type: 'Pneumatic', providedBy: ['sys-prp'], consumedBy: [], consumedBySystems: ['sys-ecs', 'sys-ips'] },
+            { internalId: id(), resId: 'RES-06', name: 'Engine bleed air', type: 'Pneumatic', providedBy: ['sys-prp', 'sys-apu'], consumedBy: [], consumedBySystems: ['sys-ecs', 'sys-ips'] },
         ];
 
         // ---- items / LRUs ----------------------------------------------------
         const item = (itemId, name, type, dal, daType, sysId, desc, traces) => ({
             internalId: id(), itemId, name, type, dal, daType, owningSystemId: sysId, description: desc,
+            traceIds: traces || [],
+        });
+        const item2 = (itemId, name, type, dal, daType, sysId, desc, traces) => ({
+            internalId: id2(), itemId, name, type, dal, daType, owningSystemId: sysId, description: desc,
             traceIds: traces || [],
         });
         const itemsData = [
@@ -918,6 +1127,88 @@
             item('LDG-ACC', 'Brake accumulator', 'Hydraulic', 'A', 'Hardware', 'sys-ldg', 'Reserve for six full brake applications.', ['SF-06']),
             item('CRG-WBC', 'Weight and balance computer', 'Computing', 'A', 'Software', 'sys-crg', 'Independent CG confirmation from the station load cells.', ['SF-15']),
             item('LRU-FPR-02', 'Hold fire detection loop', 'Sensing', 'A', 'Hardware', 'sys-fpr', 'Dual loop per hold third.', ['SF-23']),
+            // 23 Nov 2026: the units of the ten added systems, and every control and display on the flight deck (the human factors steps
+            // 6 and 8 ask the four 25.1302 questions and reach and view for each one)
+            item2('LRU-AFS-01', 'Autopilot channel 1', 'Computing', 'A', 'Software', 'sys-afs', 'Command channel, monitored by channel 2.', ['SF-24']),
+            item2('LRU-AFS-02', 'Autopilot channel 2', 'Computing', 'A', 'Software', 'sys-afs', 'Monitor channel, dissimilar software.', ['SF-24']),
+            item2('LRU-AFS-03', 'Autothrust servo, quad', 'Electromechanical', 'B', 'Hardware', 'sys-afs', 'Drives the four thrust levers.', ['SF-24']),
+            item2('LRU-HLF-01', 'Flap power drive unit', 'Hydraulic', 'A', 'Hardware', 'sys-hlf', 'Hydraulic systems A and B.', ['SF-25']),
+            item2('LRU-HLF-02', 'Slat power drive unit', 'Hydraulic', 'A', 'Hardware', 'sys-hlf', 'Hydraulic systems A and B.', ['SF-25']),
+            item2('LRU-HLF-03', 'Wing tip asymmetry brake, left', 'Electromechanical', 'A', 'Hardware', 'sys-hlf', 'Stops both surface sets on asymmetry.', ['SF-25']),
+            item2('LRU-HLF-04', 'Wing tip asymmetry brake, right', 'Electromechanical', 'A', 'Hardware', 'sys-hlf', 'As the left brake.', ['SF-25']),
+            item2('LRU-HLF-05', 'High-lift electronic unit', 'Computing', 'A', 'Software', 'sys-hlf', 'Two lanes; asymmetry and position monitoring.', ['SF-25']),
+            item2('LRU-APU-01', 'APU', 'Propulsion', 'C', 'Hardware', 'sys-apu', 'Aft fuselage, starts up to 35,000 ft.', ['SF-26']),
+            item2('LRU-APU-02', 'APU bleed shutoff valve', 'Pneumatic', 'B', 'Hardware', 'sys-apu', 'Closes on an oil seal failure indication.', ['SF-26']),
+            item2('LRU-COM-01', 'VHF radio 1', 'Communication', 'C', 'Hardware', 'sys-com', 'Voice and datalink.', ['SF-27']),
+            item2('LRU-COM-02', 'VHF radio 2', 'Communication', 'C', 'Hardware', 'sys-com', 'Voice.', ['SF-27']),
+            item2('LRU-COM-03', 'HF radio', 'Communication', 'C', 'Hardware', 'sys-com', 'Remote routes.', ['SF-27']),
+            item2('LRU-LGT-01', 'Landing light, left', 'Electrical', 'C', 'Hardware', 'sys-lgt', 'Left bus.', ['SF-28']),
+            item2('LRU-LGT-02', 'Landing light, right', 'Electrical', 'C', 'Hardware', 'sys-lgt', 'Right bus.', ['SF-28']),
+            item2('LRU-LGT-03', 'Emergency lighting battery pack', 'Electrical', 'D', 'Hardware', 'sys-lgt', 'Self-contained.', ['SF-29']),
+            item2('LRU-WWS-01', 'Waste tank and shroud', 'Fluid', 'D', 'Hardware', 'sys-wws', 'Double-walled lines above the avionics bay.', ['SF-30']),
+            item2('LRU-REC-01', 'Combined voice and data recorder', 'Recording', 'D', 'Hardware', 'sys-rec', 'Crash-protected, aft fuselage.', ['SF-31']),
+            item2('LRU-STW-01', 'Angle-of-attack vane, left', 'Sensing', 'A', 'Hardware', 'sys-stw', 'Channel 1.', ['SF-32']),
+            item2('LRU-STW-02', 'Angle-of-attack vane, right', 'Sensing', 'A', 'Hardware', 'sys-stw', 'Channel 2.', ['SF-32']),
+            item2('LRU-STW-03', 'Stall protection computer', 'Computing', 'A', 'Software', 'sys-stw', 'Two channels; the pusher fires only on agreement.', ['SF-32']),
+            item2('LRU-STW-04', 'Stick pusher actuator', 'Electromechanical', 'A', 'Hardware', 'sys-stw', 'Acts on both side sticks.', ['SF-32']),
+            item2('LRU-SAW-01', 'Terrain awareness and warning computer', 'Computing', 'C', 'Software', 'sys-saw', 'With the strip database.', ['SF-33']),
+            item2('LRU-SAW-02', 'Traffic collision avoidance computer', 'Computing', 'B', 'Software', 'sys-saw', 'With two Mode S transponders.', ['SF-33']),
+            item2('LRU-WSH-01', 'Windshield heat controller, left', 'Electrical', 'B', 'Hardware', 'sys-wsh', 'Left bus.', ['SF-34']),
+            item2('LRU-WSH-02', 'Windshield heat controller, right', 'Electrical', 'B', 'Hardware', 'sys-wsh', 'Right bus.', ['SF-34']),
+            item2('LRU-ECS-04', 'Avionics cooling fan pair', 'Pneumatic', 'B', 'Hardware', 'sys-ecs', 'Two fans, either sufficient.', ['SF-35']),
+            item2('LRU-FUE-03', 'Fuel quantity computer', 'Computing', 'B', 'Software', 'sys-fue', 'Capacitance probes, cross-checked against fuel used.', ['SF-36']),
+            item2('FD-D01', 'Primary flight display 2', 'Display', 'A', 'Hardware', 'sys-avi', 'First officer side.', ['SF-08']),
+            item2('FD-D02', 'Navigation display, captain', 'Display', 'B', 'Hardware', 'sys-avi', 'Map, weather and traffic.', ['SF-13', 'SF-33']),
+            item2('FD-D03', 'Navigation display, first officer', 'Display', 'B', 'Hardware', 'sys-avi', 'As the captain side.', ['SF-13', 'SF-33']),
+            item2('FD-D04', 'Engine indication and crew alerting display', 'Display', 'A', 'Hardware', 'sys-avi', 'Engines, alerts and synoptics.', ['SF-04', 'SF-05', 'SF-09']),
+            item2('FD-D05', 'Lower center multifunction display', 'Display', 'B', 'Hardware', 'sys-avi', 'Systems synoptics and checklists.', ['SF-09', 'SF-20', 'SF-21']),
+            item2('FD-D06', 'Standby flight display', 'Display', 'A', 'Hardware', 'sys-avi', 'Independent attitude, airspeed and altitude.', ['SF-08']),
+            item2('FD-D07', 'Head-up display, captain', 'Display', 'B', 'Hardware', 'sys-avi', 'Approach guidance to the strip.', ['SF-08', 'SF-13']),
+            item2('FD-D08', 'Head-up display, first officer', 'Display', 'B', 'Hardware', 'sys-avi', 'As the captain side.', ['SF-08', 'SF-13']),
+            item2('FD-D09', 'Cargo control panel display', 'Display', 'A', 'Hardware', 'sys-crg', 'Restraint tension at every station.', ['SF-14']),
+            item2('FD-D10', 'Weight and balance display', 'Display', 'A', 'Hardware', 'sys-crg', 'Center of gravity from the station load cells.', ['SF-15']),
+            item2('FD-D11', 'Nose door status display', 'Display', 'A', 'Hardware', 'sys-nzd', 'Closed, latched and locked, both channels.', ['SF-18', 'SF-19']),
+            item2('FD-D12', 'Fuel quantity indicator', 'Display', 'B', 'Hardware', 'sys-fue', 'Each tank group and the total.', ['SF-36']),
+            item2('FD-D13', 'Flap and slat position indicator', 'Display', 'B', 'Hardware', 'sys-hlf', 'Both surface sets, left and right.', ['SF-25']),
+            item2('FD-D14', 'Electronic flight bag, captain', 'Display', 'C', 'Hardware', 'sys-avi', 'Charts, strip data and performance.', ['SF-13']),
+            item2('FD-D15', 'Electronic flight bag, first officer', 'Display', 'C', 'Hardware', 'sys-avi', 'As the captain side.', ['SF-13']),
+            item2('FD-D16', 'Master warning light, captain', 'Display', 'A', 'Hardware', 'sys-avi', 'Red, with the aural warning.', ['SF-09']),
+            item2('FD-D17', 'Master warning light, first officer', 'Display', 'A', 'Hardware', 'sys-avi', 'As the captain side.', ['SF-09']),
+            item2('FD-D18', 'Master caution light, captain', 'Display', 'B', 'Hardware', 'sys-avi', 'Amber.', ['SF-09']),
+            item2('FD-D19', 'Master caution light, first officer', 'Display', 'B', 'Hardware', 'sys-avi', 'As the captain side.', ['SF-09']),
+            item2('FD-C01', 'Side stick, captain', 'Control', 'A', 'Hardware', 'sys-fcs', 'Pitch and roll command; pusher acts on it.', ['SF-01', 'SF-02', 'SF-32']),
+            item2('FD-C02', 'Side stick, first officer', 'Control', 'A', 'Hardware', 'sys-fcs', 'As the captain side.', ['SF-01', 'SF-02', 'SF-32']),
+            item2('FD-C03', 'Rudder pedals, captain', 'Control', 'A', 'Hardware', 'sys-fcs', 'Yaw, and toe brakes.', ['SF-03', 'SF-06']),
+            item2('FD-C04', 'Rudder pedals, first officer', 'Control', 'A', 'Hardware', 'sys-fcs', 'As the captain side.', ['SF-03', 'SF-06']),
+            item2('FD-C05', 'Thrust levers', 'Control', 'A', 'Hardware', 'sys-prp', 'Four levers, driven by the autothrust servo.', ['SF-04', 'SF-24']),
+            item2('FD-C06', 'Thrust reverser levers', 'Control', 'A', 'Hardware', 'sys-prp', 'On the thrust levers.', ['SF-06']),
+            item2('FD-C07', 'Flap and slat selector lever', 'Control', 'A', 'Hardware', 'sys-hlf', 'Five positions.', ['SF-25']),
+            item2('FD-C08', 'Speed brake and lift dump lever', 'Control', 'B', 'Hardware', 'sys-fcs', 'Armed for landing.', ['SF-06']),
+            item2('FD-C09', 'Landing gear selector lever', 'Control', 'A', 'Hardware', 'sys-ldg', 'Up and down.', ['SF-12']),
+            item2('FD-C10', 'Alternate gear extension switch', 'Control', 'A', 'Hardware', 'sys-ldg', 'Free-fall release.', ['SF-12']),
+            item2('FD-C11', 'Parking brake lever', 'Control', 'B', 'Hardware', 'sys-ldg', 'Center pedestal.', ['SF-06']),
+            item2('FD-C12', 'Nose-wheel steering tiller', 'Control', 'B', 'Hardware', 'sys-ldg', 'Captain side.', ['SF-07']),
+            item2('FD-C13', 'Autopilot flight director control panel', 'Control', 'B', 'Hardware', 'sys-afs', 'Modes, targets and engagement.', ['SF-24']),
+            item2('FD-C14', 'Multifunction control display unit, captain', 'Control', 'B', 'Hardware', 'sys-avi', 'Flight plan and performance entry.', ['SF-13']),
+            item2('FD-C15', 'Multifunction control display unit, first officer', 'Control', 'B', 'Hardware', 'sys-avi', 'As the captain side.', ['SF-13']),
+            item2('FD-C16', 'Cursor control device, captain', 'Control', 'B', 'Hardware', 'sys-avi', 'Display interaction.', ['SF-08', 'SF-13']),
+            item2('FD-C17', 'Cursor control device, first officer', 'Control', 'B', 'Hardware', 'sys-avi', 'As the captain side.', ['SF-08', 'SF-13']),
+            item2('FD-C18', 'Fuel control panel', 'Control', 'B', 'Hardware', 'sys-fue', 'Pumps, crossfeed and transfer.', ['SF-11']),
+            item2('FD-C19', 'Electrical control panel', 'Control', 'B', 'Hardware', 'sys-eps', 'Generators, buses and battery.', ['SF-20']),
+            item2('FD-C20', 'Hydraulic control panel', 'Control', 'B', 'Hardware', 'sys-hyd', 'Pumps and isolation.', ['SF-21']),
+            item2('FD-C21', 'Pressurization control panel', 'Control', 'B', 'Hardware', 'sys-ecs', 'Hold and flight deck schedules, avionics cooling.', ['SF-16', 'SF-17', 'SF-35']),
+            item2('FD-C22', 'Ice protection control panel', 'Control', 'B', 'Hardware', 'sys-ips', 'Wing, tail and probe heat.', ['SF-10']),
+            item2('FD-C23', 'Fire handles and extinguisher switches', 'Control', 'A', 'Hardware', 'sys-fpr', 'One handle per engine, APU and hold.', ['SF-23']),
+            item2('FD-C24', 'Nose door control panel', 'Control', 'A', 'Hardware', 'sys-nzd', 'Open, close, latch and lock.', ['SF-18']),
+            item2('FD-C25', 'Lighting control panel', 'Control', 'C', 'Hardware', 'sys-lgt', 'Exterior, flight deck and emergency lights.', ['SF-28', 'SF-29']),
+            item2('FD-C26', 'Audio control panel, captain', 'Control', 'C', 'Hardware', 'sys-com', 'Radios and interphone.', ['SF-27']),
+            item2('FD-C27', 'Audio control panel, first officer', 'Control', 'C', 'Hardware', 'sys-com', 'As the captain side.', ['SF-27']),
+            item2('FD-C28', 'Oxygen mask and regulator, captain', 'Control', 'A', 'Hardware', 'sys-oxy', 'Quick-donning.', ['SF-17']),
+            item2('FD-C29', 'Oxygen mask and regulator, first officer', 'Control', 'A', 'Hardware', 'sys-oxy', 'Quick-donning.', ['SF-17']),
+            item2('FD-C30', 'Terrain and traffic control panel', 'Control', 'C', 'Hardware', 'sys-saw', 'Modes, test and inhibit.', ['SF-33']),
+            item2('FD-C31', 'Stall protection cutout switches', 'Control', 'A', 'Hardware', 'sys-stw', 'Shaker and pusher, one per channel.', ['SF-32']),
+            item2('FD-C32', 'Windshield heat and wiper controls', 'Control', 'B', 'Hardware', 'sys-wsh', 'Heat and wiper speed, each side.', ['SF-34']),
+            item2('FD-C33', 'APU control panel', 'Control', 'C', 'Hardware', 'sys-apu', 'Start, bleed and generator.', ['SF-26']),
         ];
 
         // ---- basic events to the items that realize them (17 Oct 2026) --------

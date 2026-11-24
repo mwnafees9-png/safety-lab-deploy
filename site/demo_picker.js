@@ -32,7 +32,7 @@
         {
             id: 'hl1', badge: 'Part 25 · Outsized freighter', accent: '#1E7A4D',
             title: 'Aeolus HL-1 — Outsized Freighter',
-            desc: 'A 109 m, four-engine outsized freighter that loads through the nose and lands on 1,800 m of graded dirt. Fourteen systems, payload restraint and center-of-gravity control for a single 105 m item, the nose-door pressure boundary, PRA / ZSA / CMA, reliability and human factors. A fictional aircraft on a thin specification: every gap is a declared assumption, marked as such.',
+            desc: 'A 109 m, four-engine outsized freighter that loads through the nose and lands on 1,800 m of graded dirt. Twenty-four systems and sixty failure conditions, with the Interdependence, MAC and CoFFE Autopilots done for every one, the full human factors assessment and the three program plans; payload restraint and center-of-gravity control for a single 105 m item, the nose-door pressure boundary, PRA / ZSA / CMA and reliability. A fictional aircraft on a thin specification: every gap is a declared assumption, marked as such.',
             loader: 'loadHL1Demo',
             gate: 'slHL1Visible',
         },

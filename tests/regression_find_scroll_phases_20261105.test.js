@@ -126,7 +126,7 @@ const tick = (ms) => new Promise((r) => setTimeout(r, ms || 0));
       await pg.evaluate(() => { document.documentElement.classList.remove('sl-auth-gate-blocked'); const g = document.getElementById('sl-auth-gate'); if (g) g.remove(); });
       await pg.addStyleTag({ content: '#signup-modal{display:none!important} .modal-overlay{display:none!important}' });
       await pg.evaluate(() => window.loadHL1Demo()); await tick(9000);
-      await pg.evaluate(() => { const base = acFhaData.slice(); for (let k = 0; k < 4; k++) base.forEach((r, i) => acFhaData.push(Object.assign({}, r, { internalId: 'x' + k + '_' + i, fcId: r.fcId + '-c' + k }))); acFhaData[acFhaData.length - 3].fcDesc = 'Zebra crossing failure on page three'; renderACFHA(); switchTab('ac-fha'); });
+      await pg.evaluate(() => { const base = acFhaData.slice(); for (let k = 0; k < 4; k++) base.forEach((r, i) => acFhaData.push(Object.assign({}, r, { internalId: 'x' + k + '_' + i, fcId: r.fcId + '-c' + k }))); acFhaData[147].fcDesc = 'Zebra crossing failure on page three'; /* 23 Nov 2026: 60 failure conditions now, so the row on page 3 is picked by its place */ renderACFHA(); switchTab('ac-fha'); });
       await tick(1500);
       // the phase check
       const P = await pg.evaluate(() => ({ bar: !!document.getElementById('fha-phase-bar-ac'), text: (document.getElementById('fha-phase-bar-ac') || {}).innerText || '', notes: document.querySelectorAll('#ac-fha-body .fha-phase-gap').length, inComments: [...document.querySelectorAll('#ac-fha-body .fha-phase-gap')].every(n => /Comments|comment/i.test(document.querySelector('#ac-fha-table thead').querySelectorAll('th')[n.closest('td').cellIndex].innerText)), gaps: SLPhaseCover.gaps(acFhaData).length }));
@@ -152,7 +152,7 @@ const tick = (ms) => new Promise((r) => setTimeout(r, ms || 0));
       check('Edit takes the page to the form; Save brings it back to the row edited, lit', y1 < 200 && Math.abs(y2 - y0) < 700 && lit, JSON.stringify({ y0, y1, y2, lit }));
       // Ctrl+F
       await pg.mouse.click(900, 500); await pg.keyboard.press('Control+f'); await tick(300);
-      check('Ctrl+F opens the find bar, saying it searches every row and page', await pg.locator('.sl-find-bar').isVisible() && /every row of this table \(150 rows\), pages included/.test(await pg.locator('.sl-find-scope').innerText()));
+      check('Ctrl+F opens the find bar, saying it searches every row and page', await pg.locator('.sl-find-bar').isVisible() && (await pg.locator('.sl-find-scope').innerText()).indexOf('every row of this table (' + (await pg.evaluate(() => acFhaData.length)) + ' rows), pages included') >= 0);
       await pg.keyboard.type('zebra'); await tick(1500);
       const F = await pg.evaluate(() => ({ count: document.querySelector('.sl-find-count').innerText, marks: document.querySelectorAll('mark.sl-find-hit').length, page: document.querySelector('#slp-fha-ac input[data-pg=jump]').value, inRow: !!document.querySelector('tr.sl-find-row mark.sl-find-hit') }));
       check('a row on page 3 is found: the pager turns to it and the word is lit', F.count === '1 of 1 row' && F.marks === 1 && F.page === '3' && F.inRow, JSON.stringify(F));

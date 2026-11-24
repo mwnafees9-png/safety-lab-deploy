@@ -4156,7 +4156,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script>window.SL_SHOWCASE_SRC = 'demo_showcase.js?v=65.43';</script>
     <script>window.SL_SHOWCASE_SORA_SRC = 'demo_showcase_sora.js?v=3';</script>
     <script>window.SL_SHOWCASE_KESTREL25_SRC = 'demo_showcase_kestrel25.js?v=2';</script>
-    <script>window.SL_SHOWCASE_HL1_SRC = 'demo_showcase_hl1.js?v=7';</script>
+    <script>window.SL_SHOWCASE_HL1_SRC = 'demo_showcase_hl1.js?v=8';</script>
     <script>window.SL_SHOWCASE_HALCYON_SRC = 'demo_showcase_halcyon.js?v=7';</script>
     <script>window.SL_SHOWCASE_VAYU_SRC = 'demo_showcase_vayu.js?v=2';</script>
     <!-- Stage 2 (9 Sep 2026): live CRDT co-editing is the source of truth on open;
@@ -4529,10 +4529,10 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- Demo-project picker — one chooser routing to every showcase loader. -->
     <!-- shared showcase authoring helpers; MUST load before any showcase builder runs -->
     <script src="demo_kit.js?v=3" defer></script>
-    <script src="hl1_showcase.js?v=11" defer></script>
+    <script src="hl1_showcase.js?v=12" defer></script>
     <script src="halcyon_showcase.js?v=7" defer></script>
     <script src="vayu_showcase.js?v=2" defer></script>
-    <script src="demo_picker.js?v=6" defer></script>
+    <script src="demo_picker.js?v=7" defer></script>
     <script src="first_run.js?v=3" defer></script>
     <script src="continue_session.js?v=1.1" defer></script>
     <script src="stpa_panel.js?v=1.48" defer></script>
@@ -4586,15 +4586,15 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="zsa_engine_ui.js?v=1.1" defer></script>
     <!-- 4 Nov 2026: the ZSA and PRA Autopilots (the shared look first) -->
     <script src="report_comments.js?v=1.1" defer></script>
-    <script src="autopilot_ui.js?v=1.5" defer></script>
+    <script src="autopilot_ui.js?v=1.6" defer></script>
     <script src="cca_report.js?v=2.2" defer></script>
     <script src="zsa_type_hazards.js?v=1.0" defer></script>
     <script src="zsa_autopilot.js?v=1.11" defer></script>
     <script src="pra_autopilot.js?v=2.11" defer></script>
     <!-- 6 Nov 2026: the HF Autopilot (SLHfAuto): the human factors work through the design cycle, one plain question at a time, written into the HF tables -->
-    <script src="hf_autopilot.js?v=2.1" defer></script>
+    <script src="hf_autopilot.js?v=2.2" defer></script>
     <!-- 6 Nov 2026: the Plan Autopilot. After autopilot_ui.js (the shared look), objectives_matrix.js (the objectives) and program_plan.js (the lanes). -->
-    <script src="plan_autopilot.js?v=2.4" defer></script>
+    <script src="plan_autopilot.js?v=2.5" defer></script>
     <!-- 18 Oct 2026: the live state of every generated requirement, written beside the project for Sys Lab (requirement-states.json). -->
     <script src="requirement_states.js?v=1.1" defer></script>
     <script src="pra_report.js?v=1.6" defer></script>
@@ -4711,7 +4711,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="cma_autopilot.js?v=1.7" defer></script>
     <!-- 10 Nov 2026: pasa_autopilot.js (SLPasaAuto): the PASA Autopilot, one report for the aircraft with an appendix per function (cca_report.js 2.1 frame). After cma_claims.js (the tree pictures), req_trace.js and assurance_modules.js (AutoReq). -->
     <!-- 10 Nov 2026: req_trace.js (SLReqTrace): requirement IDs, the level of each requirement type, where each requirement is driven from. After assurance_modules.js (AutoReq) and req_basis.js; the Autopilots below use it. -->
-    <script src="req_trace.js?v=1.1" defer></script>
+    <script src="req_trace.js?v=1.2" defer></script>
     <!-- 15 Nov 2026: apx_engine.js (SLApx): the math under the Interdependence, MAC and CoFFE Autopilots (cases, the one order that carries an answer to other mixes, the next question, the summary, the fault tree gate, the common resource pairs). Pure, no page parts. Before pasa_autopilot.js. -->
     <script src="apx_engine.js?v=1.0" defer></script>
     <!-- 15 Nov 2026: apx_autopilots.js (SLApxAuto): the Interdependence Autopilot (the MAC and CoFFE Autopilots join it). Behind a switch only our team sees (?apx=1); saves in its own place (projectConfig.apx). After apx_engine.js. -->

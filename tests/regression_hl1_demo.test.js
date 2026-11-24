@@ -80,8 +80,10 @@ if (d) {
     d.projectName === 'Aeolus HL-1 · Outsized Freighter', 'got ' + d.projectName);
   check('certification basis is Part 25', d.projectConfig.regulation === 'part-25');
   // Depth: these are the numbers that make it a worked example rather than a stub.
-  check('23 aircraft sub-functions', n(d.acFunctionsData) === 23, String(n(d.acFunctionsData)));
-  check('30 aircraft failure conditions', n(d.acFhaData) === 30, String(n(d.acFhaData)));
+  // 23 Nov 2026: the full-scale aircraft (Waqas: "please expand the size of the demo")
+  check('36 aircraft sub-functions', n(d.acFunctionsData) === 36, String(n(d.acFunctionsData)));
+  check('60 aircraft failure conditions', n(d.acFhaData) === 60, String(n(d.acFhaData)));
+  check('twenty-four systems, the redundant installations modelled as their units on top', n(d.systemsData.filter(x => !/^sys-(prp|hyd-)[0-9a-c]$/.test(x.id))) === 24, String(n(d.systemsData)));
   // §7.3, again: these were `=== 14` and `=== 18` and broke the moment the
   // propulsion and hydraulic units were modelled and the mirrors landed. Assert
   // the invariant — the demo must not SHRINK, and every allocation tree must be

@@ -28,7 +28,7 @@
 // Deterministic: no AI, no invented numbers (task times are typed by the engineer, with where they came from).
 (function (root) {
     'use strict';
-    var VERSION = '1.0';
+    var VERSION = '1.1';   // 1.1 23 Nov 2026: dates from SLAutopilotUI.now; while a built-in demo is filled, the questions are worked out once per change of shape
     function U() { return root.SLAutopilotUI; }
     function HF() { return root.HF_ANALYSES; }
     function _g(n) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(n); if (v !== undefined) return v; } } catch (_) {} try { return root[n]; } catch (_) { return undefined; } }
@@ -47,7 +47,7 @@
     function _lane(kind) { var pc = _pc(); pc.hf = pc.hf || {}; pc.hf[kind] = pc.hf[kind] || { rows: [] }; if (!Array.isArray(pc.hf[kind].rows)) pc.hf[kind].rows = []; return pc.hf[kind]; }
     function _laneRows(kind) { var pc = _pc(); return _arr(pc.hf && pc.hf[kind] && pc.hf[kind].rows); }
     function _who() { return U() ? U().who() : 'Engineer'; }
-    function _now() { return new Date().toISOString(); }
+    function _now() { return U() && U().now ? U().now() : new Date().toISOString(); }
     function _save() { try { if (U()) U().save(); else if (typeof root.scheduleAutosave === 'function') root.scheduleAutosave(); } catch (_) {} }
     function _stampLevel(kind, row) { try { if (root.SLLevelView && root.SLLevelView.stamp) root.SLLevelView.stamp(kind, row, null); } catch (_) {} return row; }
     function _nextId(rows, field, prefix) { var mx = 0; rows.forEach(function (r) { var m = /(\d+)$/.exec(S(r && r[field])); if (m) mx = Math.max(mx, +m[1]); }); return prefix + String(mx + 1).padStart(3, '0'); }
@@ -332,13 +332,18 @@
     }
 
     // ---- actions ------------------------------------------------------------------------------------------------
-    function _find(qid) { var res = compute(); var q = null; res.stages.some(function (s) { q = s.questions.find(function (x) { return x.id === qid; }) || null; return !!q; }); return q; }
+    // While a built-in demo is filled (SLAutopilotUI.fillAs) the questions are worked out once and kept until an answer that changes
+    // which questions there are (a pick, who does a function, an alert); a grid, error, time or workload answer does not.
+    var _fillRes = null;
+    function _shape() { _fillRes = null; }
+    function _find(qid) { var fill = U() && U().filling && U().filling(); var res = fill && _fillRes ? _fillRes : compute(); if (fill) _fillRes = res; var q = null; res.stages.some(function (s) { q = s.questions.find(function (x) { return x.id === qid; }) || null; return !!q; }); return q; }
     function answer(qid, pick) {
-        var q = _find(qid); if (!q || q.kind !== 'pick' || !q.options.some(function (o) { return o.id === pick; })) return false;
-        _set(qid, { pick: pick }, q.stage); q.apply(pick); _save(); return true;
+        _shape(); var q = _find(qid); if (!q || q.kind !== 'pick' || !q.options.some(function (o) { return o.id === pick; })) return false;
+        _set(qid, { pick: pick }, q.stage); q.apply(pick); _shape(); _save(); return true;
     }
     // who does a function in one phase, or in every phase at once
     function setAlloc(fnId, phase, value) {
+        _shape();
         if (!ALLOC_OPTS.some(function (o) { return o.id === value; })) return false;
         var f = functions().find(function (x) { return S(x.internalId) === S(fnId); }); if (!f) return false;
         var ph = phases(); if (phase !== '*' && ph.indexOf(phase) < 0) return false;
@@ -387,12 +392,13 @@
         _set(q.id, a, 'err'); _materializeErr(q.task, a.modes); _save(); return true;
     }
     function setAlert(fcId, field, value) {
+        _shape();
         var q = _find('alert:' + fcId); if (!q) return false;
         var a = Object.assign({ modality: [] }, answerOf(q.id) || {}); a.modality = _arr(a.modality).slice();
         if (field === 'pick') { if (value !== 'none' && !PRIO[value]) return false; a.pick = value; if (value === 'none') a.modality = []; }
         else if (field === 'modality') { var i = a.modality.indexOf(value); if (i >= 0) a.modality.splice(i, 1); else a.modality.push(value); }
         else return false;
-        _set(q.id, a, 'alert'); _materializeAlert(q.fc, a); _save(); return true;
+        _set(q.id, a, 'alert'); _materializeAlert(q.fc, a); _shape(); _save(); return true;
     }
     function setGrid(qid, rowId, field, value) {
         var q = _find(qid); if (!q || q.kind !== 'grid' || !q.rows.some(function (r) { return r.id === rowId; })) return false;

@@ -30,7 +30,7 @@
 // (program_plan.js doctrine); an expected lane holding work is turned off with a signed tailoring entry naming the answer.
 (function (root) {
     'use strict';
-    var VERSION = '2.4';   // 2.4 10 Nov 2026: each section can carry "How this will be done", written or drafted with the AI once its questions are answered;
+    var VERSION = '2.5';   // 2.5 23 Nov 2026: dates come from SLAutopilotUI.now, so a built-in demo is dated as filled   // 2.4 10 Nov 2026: each section can carry "How this will be done", written or drafted with the AI once its questions are answered;
     function E(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
     function U() { return root.SLAutopilotUI || null; }
     function PP() { return root.PROGRAM_PLAN || null; }
@@ -38,7 +38,7 @@
     function arr(name) { var v = g(name); if (v === undefined) { try { v = root[name]; } catch (_) {} } return Array.isArray(v) ? v : []; }
     function pc() { var v = g('projectConfig'); if (v === undefined) { try { v = root.projectConfig; } catch (_) {} } if (v === undefined) { try { v = projectConfig; } catch (_) {} } return v || null; }   // eslint-disable-line no-undef
     function safe(f, d) { try { var v = f(); return v === undefined ? d : v; } catch (_) { return d; } }
-    function now() { return new Date().toISOString(); }
+    function now() { return U() && U().now ? U().now() : new Date().toISOString(); }
     function today() { return now().slice(0, 10); }
     function who() { return U() ? U().who() : 'Engineer'; }
     function save() { if (U()) U().save(); else { try { if (typeof root.scheduleAutosave === 'function') root.scheduleAutosave(); } catch (_) {} } }
