@@ -35,7 +35,8 @@ check('the AFHA tab highlighter no longer lists req', /\['func','fcim','fha','as
 // 10 Nov 2026 (the PASA Autopilot): the PASA page's own tab row is gone; the aircraft PASA area's tabs across the top are
 // PASA (the Autopilot), Aircraft requirements (the one home for them), Fault trees and Diagrams (nav_areas.js)
 const NAVA = S('nav_areas.js');
-check('the PASA area offers Aircraft requirements as one of its tabs (PASA, Aircraft requirements, Fault trees, Diagrams)', /key: 'pasa', label: 'PASA', ic: '[^']+', scope: 'aircraft', items: \['snav-pasa', 'snav-ac-req', 'snav-fta', 'sl-nav-diag-pasa'\]/.test(NAVA));
+// 24 Nov 2026: the Interdependence, MAC and CoFFE Autopilots (on for everyone) have their tab right after the PASA
+check('the PASA area offers Aircraft requirements as one of its tabs (PASA, Interdependence MAC and CoFFE, Aircraft requirements, Fault trees, Diagrams)', /key: 'pasa', label: 'PASA', ic: '[^']+', scope: 'aircraft', items: \['snav-pasa', 'snav-apx', 'snav-ac-req', 'snav-fta', 'sl-nav-diag-pasa'\]/.test(NAVA));
 check('the old PASA tab row (and its duplicate Aircraft Requirements button) is gone from the page', idx.indexOf('id="pasa-subnav"') < 0 && idx.indexOf('id="pasa-tab-req"') < 0);
 check('pasaGo lands where each old tab now is (MAC model, MF&MS beside the trees; the rest the PASA)', /function pasaGo\(name\) \{[\s\S]{0,300}const to = \{ mac: 'mac', mfms: 'mfms', cea: 'cea', resources: 'resources', fta: 'fta' \}\[name\] \|\| 'pasa';/.test(misc) && /window\.pasaGo = pasaGo;/.test(sl));
 check('the sidebar lists Aircraft requirements under the PASA group', (() => { const a = idx.indexOf('id="asb-grp-pasa"'), b = idx.indexOf('id="asb-grp-asa"'), r = idx.indexOf('id="snav-ac-req"'); return a > 0 && r > a && r < b; })());
