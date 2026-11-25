@@ -12,6 +12,20 @@ and the single ordered build list), `UPGRADES_Requirement_Bucketing.md` (U-1 …
 by later work moved to `CLOSED_ITEMS.md`, with the migration ids, test counts and live checks that
 closed it. 137 entries became 52 open and 72 closed; the rest were duplicate or historical blocks.
 
+## 25 Nov 2026, TOMORROW'S ORDERS (Waqas: "log what is still to come as things to do for tomorrow")
+
+The connections deck (artifact "One Thread Across Every Tool") presents all of these as available. Waqas will not send it until every one is built.
+
+- [ ] **TD-1 Safety Lab public API.** API client (client ID + secret) for systems, personal API key for scripts. Reads the whole project (functions, failure conditions, fault trees, requirements, assumptions, traces). Writes follow connections.js ownership rules: incoming lines wait for an engineer to accept and sign; items another tool owns cannot be changed. Must match deck slide 10 (`GET /v1/projects/{project}/failure-conditions`, Bearer token). Design approved 30 Oct.
+- [ ] **TD-2 Safety Lab MCP server.** Same gate as the API: AI reads and proposes, changes are staged for an engineer, the deterministic engine generates trees and requirements. Can also read architecture and requirements from other MCP sources. Must match deck slide 11.
+- [ ] **TD-3 GENESYS live connection** (REST API, read and send), beside today's ReqIF and XMI files. Add a driver to alm_engine.js.
+- [ ] **TD-4 DOORS Next and Cameo send-back proven** against a real installation; then drop pilotSend so sending is on. Cameo stays canOwn:false (only elements Safety Lab created).
+- [ ] **TD-5 Native CAFTA and FaultTree+ file import** in fta_exchange.js (gates, events, type codes, numbers). Needs a real program file to build against.
+- [ ] **TD-6 Brief Waqas again on the CoFFE/MAC fault-tree structure** before building anything. His rulings so far: create whatever layers exist without architectural specifics; a baselined tree changes only through a change request and a PR; CoFFE and interdependence fill the first layers, MAC adds detail.
+- [ ] **TD-7 Radia license renewal:** SL-LIC-2026-RADIA-T5 ends 4 Dec.
+- [ ] **TD-8 Loose ends:** comment buttons on each CoFFE case; the CMA Autopilot not reading projectConfig.apx.cma; system FHA lines numbered FC-001 next to the aircraft FC-01.
+- [ ] **TD-9 landing-1.html:** keep or delete (Waqas to decide).
+
 ## 24 Oct 2026, NEXT SESSION ORDERS (Waqas)
 
 - [ ] **NS-1 Quiet bar instead of the "confirm changes" pop-up** (change_ack.js). No dialog on page switch; a bar with the count and Review; confirm when done, on save, or on close.

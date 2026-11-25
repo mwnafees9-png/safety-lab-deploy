@@ -1,3 +1,9 @@
+## 25 Nov 2026: CONNECTIONS DECK READY, HELD UNTIL THE API, MCP AND OTHER TD ITEMS ARE BUILT.
+
+- Slides artifact "One Thread Across Every Tool" (15 slides; tracking across tools, migration from legacy tools, the API and MCP). Written for aerospace programs and suppliers, no customer named. Safety Lab mark (site/favicon.svg) on the cover, the close and every footer.
+- At Waqas's direction the deck presents as available: the public API, the MCP server, GENESYS live, DOORS Next and Cameo sending, native CAFTA and FaultTree+ files. None of these exist yet. Do not send the deck until OPEN_ITEMS.md TD-1 to TD-5 are built and match it.
+- Tomorrow's list is OPEN_ITEMS.md "25 Nov 2026, TOMORROW'S ORDERS" (TD-1 to TD-9). Start with TD-6: brief Waqas on the CoFFE/MAC structure; build nothing there until he signs off.
+
 ## 24 Nov 2026: THE INTERDEPENDENCE, MAC AND CoFFE AUTOPILOTS ARE ON FOR EVERY CUSTOMER. The team-only switch and the earlier pages are retired.
 
 **Why (Waqas).** "go ahead and get the new autopilots on the Radia build too please"; asked who sees them: "Every customer"; asked whether the earlier pages stay reachable: "New pages only". The 15 Nov ruling stands: the Autopilots ask, "the PASA only shows the results".
