@@ -57,11 +57,13 @@
  *   Its own table is never shelved: a failure condition with its own answers keeps its table live; one with none is pointed
  *   to the table(s) that claim it, and can still start its own (rec.ownToo).
  *
+ * v1.9, 26 Nov 2026: a comment button on every case of the CoFFE table (comment_kinds.js kind 'coffe').
+ *
  * API (window.SLApxCof): model, act. Tests: tests/regression_apx_coffe_20261115.test.js.
  * ==========================================================================*/
 (function (root) {
     'use strict';
-    var VERSION = '1.8';   // 1.8 24 Nov 2026: on for everyone (wording: the earlier CoFFE questions)   // 1.7 23 Nov 2026: the shortest route counts failures by the units that have to be lost (both of a pair = 2), a resource failure that does it alone = 1   // 1.6 23 Nov 2026: every CoFFE source of a failure condition shown, added together for the check, the driver named, the sources checked against each other   // 1.5 23 Nov 2026: resource failures by what they do; one table for several failure conditions; outcome definitions; the CMA list; budgets per flight   // 1.4 23 Nov 2026: a backup whose change-over can fail on its own is drawn under its loss as its two ways   // 1.3 17 Nov 2026: no ARP table or figure numbers on the captions   // 1.1 17 Nov 2026: the functional failures are the lines the tool added to each system's FHA; each line's effect on its own is written from the CoFFE table
+    var VERSION = '1.9';   // 1.8 24 Nov 2026: on for everyone (wording: the earlier CoFFE questions)   // 1.7 23 Nov 2026: the shortest route counts failures by the units that have to be lost (both of a pair = 2), a resource failure that does it alone = 1   // 1.6 23 Nov 2026: every CoFFE source of a failure condition shown, added together for the check, the driver named, the sources checked against each other   // 1.5 23 Nov 2026: resource failures by what they do; one table for several failure conditions; outcome definitions; the CMA list; budgets per flight   // 1.4 23 Nov 2026: a backup whose change-over can fail on its own is drawn under its loss as its two ways   // 1.3 17 Nov 2026: no ARP table or figure numbers on the captions   // 1.1 17 Nov 2026: the functional failures are the lines the tool added to each system's FHA; each line's effect on its own is written from the CoFFE table
     var A = root.SLApxAuto, X = root.SLApx, M = root.SLApxMac;
     if (!A || !A.kit || !X || !M || !M.model) { if (typeof module !== 'undefined' && module.exports) module.exports = { VERSION: VERSION, missing: true }; return; }
     var K = A.kit, E = K.E, S = K.S, T = K.T, arr = K.arr, safe = K.safe, lc = K.lc, MM = M.model, note = M.note, joinAnd = MM.joinAnd;
@@ -491,12 +493,16 @@
         var R = ffRows(fc), one = function (cap, rows) { return rows.length ? '<div class="apx-cap">' + cap + '</div><div class="apx-tw"><table data-sl-worksheet="1" class="apx-arp"><tr><th style="width:50%">System Functional Failures</th><th>Associated Sys Failure Condition (SFHA)</th></tr>' + rows.map(function (r) { return '<tr><td class="l">' + E(r.id) + ' - ' + E(r.text) + '</td><td class="l">' + (edit ? M.linkPicker(fc, r.e) : (r.sfha ? E(r.sfha) : 'Not linked yet')) + '</td></tr>'; }).join('') + '</table></div>' : ''; };
         return one('System functional failures and SFHA failure conditions: Total loss', R.total) + one('System functional failures and SFHA failure conditions: Partial loss', R.partial) + one('System functional failures and SFHA failure condition: malfunction', R.malf) + K.abbr([['FF', 'Functional Failure'], ['SFHA', 'System Functional Hazard Assessment']]);
     }
+    // v1.9 (26 Nov 2026, Waqas: "comment buttons on each CoFFE case"): each case of the table carries its comment button here
+    // (comment kind 'coffe', id = failure condition key + the case). The PASA's own table (apx_bridge.js) has none.
+    function cmtFn() { var CK = root.SLCommentKinds; return CK && typeof CK.button === 'function' ? function (t) { return safe(function () { return CK.button(t); }, '') || ''; } : null; }
     function tableQ46(fc, sol) {
+        var cmt = cmtFn();
         var pages = Math.ceil(sol.cases.length / PER) || 1; ui.page = Math.max(0, Math.min(ui.page, pages - 1));
         var slice = sol.cases.slice(ui.page * PER, ui.page * PER + PER), how = ui.how;
         return '<div class="apx-cap">CoFFE table</div><div class="apx-pager" style="justify-content:center"><button class="apx-btn" data-apx-x="page|-1"' + (ui.page === 0 ? ' disabled' : '') + '>Previous</button><b>Cases ' + (ui.page * PER + 1) + ' to ' + Math.min(sol.cases.length, ui.page * PER + PER) + ' of ' + sol.cases.length + '</b><button class="apx-btn" data-apx-x="page|1"' + (ui.page >= pages - 1 ? ' disabled' : '') + '>Next</button></div>'
-            + '<div class="apx-tw"><table data-sl-worksheet="1" class="apx-arp"><tr><th>Case #</th>' + heads(fc, sol.ds) + '<th>' + E(resName(fc)) + '</th>' + (how ? '<th>Decided by</th>' : '') + '</tr>'
-            + slice.map(function (c) { var n = sol.cases.indexOf(c) + 1, lv = sol.lvl[c]; return '<tr><td>' + n + '</td>' + c.split('').map(function (s, i) { return cellTd(sol.ds[i], s); }).join('') + '<td>' + E(lv == null ? '' : levelName(fc, sol, lv)) + '</td>' + (how ? '<td>' + (lv == null ? '' : sol.src[c] === 'you' ? 'You' : 'Logic') + '</td>' : '') + '</tr>'; }).join('') + '</table></div>'
+            + '<div class="apx-tw"><table data-sl-worksheet="1" class="apx-arp"><tr><th>Case #</th>' + heads(fc, sol.ds) + '<th>' + E(resName(fc)) + '</th>' + (how ? '<th>Decided by</th>' : '') + (cmt ? '<th>Comment</th>' : '') + '</tr>'
+            + slice.map(function (c) { var n = sol.cases.indexOf(c) + 1, lv = sol.lvl[c]; return '<tr><td>' + n + '</td>' + c.split('').map(function (s, i) { return cellTd(sol.ds[i], s); }).join('') + '<td>' + E(lv == null ? '' : levelName(fc, sol, lv)) + '</td>' + (how ? '<td>' + (lv == null ? '' : sol.src[c] === 'you' ? 'You' : 'Logic') + '</td>' : '') + (cmt ? '<td data-apx-cofcmt="' + E(fc.key + '\u00A7' + c) + '">' + cmt({ kind: 'coffe', id: fc.key + '\u00A7' + c }) + '</td>' : '') + '</tr>'; }).join('') + '</table></div>'
             + legend(fc, sol.ds) + '<p style="text-align:center"><label style="cursor:pointer"><input type="checkbox" data-apx-xc="how"' + (how ? ' checked' : '') + '> Show who decided each case (not printed in the PASA)</label></p>';
     }
     function tableQ47(fc, sol) {

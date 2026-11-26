@@ -78,9 +78,35 @@ function _slAssignFuncId(data) {
 // deterministic criterion functions already use; a reworded condition is a
 // different row on purpose, never a guess. makeSharedId covers rows minted in
 // the same batch before either lands in the store.
+// 26 Nov 2026 (Waqas, on system FHA lines numbered FC-001 next to the aircraft FC-01: "allow users to add their own
+// numbering scheme"): a system failure condition has its own template (kind sysFailureCond, default {SYS}-{TYPE}-{SEQ:000},
+// counted per system), set on the Program Planning page like the others. {SYS} is the system's short name (slSysCode), not
+// its internal id. A minted id that some FHA row already uses is never handed out again.
+function slSysCode(sysId) {
+    try {
+        const list = (typeof systemsData !== 'undefined' && Array.isArray(systemsData)) ? systemsData : [];
+        const sy = list.find(s => s && String(s.id) === String(sysId));
+        const c = sy && (sy.code || sy.abbr || sy.shortName);
+        if (c) return String(c).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) || 'SYS';
+        const id = String(sysId == null ? '' : sysId).replace(/^sys[-_]?/i, '');
+        if (/^[A-Za-z][A-Za-z0-9]{0,7}$/.test(id)) return id.toUpperCase();
+        const words = String((sy && sy.name) || '').split(/[^A-Za-z0-9]+/).filter(w => w && !/^(and|the|of|for|system|systems)$/i.test(w));
+        return words.map(w => w.charAt(0)).join('').toUpperCase().slice(0, 6) || 'SYS';
+    } catch (_) { return 'SYS'; }
+}
+try { window.slSysCode = slSysCode; } catch (_) {}
+function _slFcIdTaken(id) {
+    if (_slBlank(id)) return false;
+    const has = rows => (rows || []).some(r => r && String(r.fcId || '') === String(id));
+    try { if (has(typeof acFhaData !== 'undefined' ? acFhaData : [])) return true; } catch (_) {}
+    try { if ((typeof systemsData !== 'undefined' ? systemsData : []).some(s => s && has(s.fha))) return true; } catch (_) {}
+    return false;
+}
 function _slAssignFcId(data, rows, ctx) {
     const N = window.SafetyLabNumbering;
     if (!_slBlank(data.fcId)) return;                          // respect manual entry
+    const sysLevel = !!(ctx && ctx.SYS), kind = sysLevel ? 'sysFailureCond' : 'failureCond';
+    const nctx = sysLevel ? Object.assign(_slNumberCtx(), ctx, { SYS: slSysCode(ctx.SYS) }) : (ctx ? Object.assign(_slNumberCtx(), ctx) : _slNumberCtx());
     const desc = (data.fcDesc || '').trim().toLowerCase();
     const sub  = (data.subId  || '').trim().toLowerCase();
     if (desc) {
@@ -88,12 +114,15 @@ function _slAssignFcId(data, rows, ctx) {
             && (r.fcDesc || '').trim().toLowerCase() === desc
             && (r.subId  || '').trim().toLowerCase() === sub);
         if (ex) { data.fcId = ex.fcId; return; }
-        const scope = (ctx && ctx.SYS) ? (String(ctx.SYS) + '|') : '';
-        data.fcId = N.makeSharedId(slNumberingScheme, 'failureCond', 'cond:' + scope + sub + '|' + desc,
-            ctx ? Object.assign(_slNumberCtx(), ctx) : _slNumberCtx(), slNumberingStore);
+        const scope = sysLevel ? (String(ctx.SYS) + '|') : '';
+        const key = 'cond:' + scope + sub + '|' + desc;
+        let id = N.makeSharedId(slNumberingScheme, kind, key, nctx, slNumberingStore);
+        for (let i = 0; i < 200 && _slFcIdTaken(id); i++) id = N.makeId(slNumberingScheme, kind, nctx, slNumberingStore);
+        if (slNumberingStore && slNumberingStore.map) { if (!slNumberingStore.map[kind]) slNumberingStore.map[kind] = {}; slNumberingStore.map[kind][key] = id; }
+        data.fcId = id;
         return;
     }
-    _slFillField('failureCond', 'fcId', data, ctx);            // no text to key on — plain mint
+    _slFillField(kind, 'fcId', data, sysLevel ? { SYS: slSysCode(ctx.SYS) } : ctx);   // no text to key on: plain mint
 }
 // Auto-fill blank IDs on CREATE. key = CRUD/form key. ctx carries scope context
 // (SYS for system-level artifacts) into the scheme templates.

@@ -33,6 +33,12 @@ function _apportionWeight(child, siblingCount, strategy) {
 // CONDITIONING event (the condition an INHIBIT gate needs, a probability of the world, entered) are facts the engineer
 // sets, not failures with a budget. Allocation never writes into them: they keep their value, and the budget is split
 // across the basic and undeveloped events around them (a gate's set-event children are held like any fixed child).
+// 26 Nov 2026 (apx_trees.js; Waqas: budgets come from the CoFFE): an event of a layer built from the CoFFE carries the budget
+// the engineer gave it there (apxBudget, a probability per flight, the same unit as a node's probability here). It is held
+// like any other constraint: verbatim, its free siblings taking the rest, never looser than a stricter share from elsewhere
+// (shared strictest). Inputs that all carry budgets tighter than their gate needs leave spare, flagged as everywhere else.
+function slApxCap(node) { const v = node ? Number(node.apxBudget) : NaN; return (isFinite(v) && v > 0 && v <= 1) ? v : null; }
+try { if (typeof window !== 'undefined') window.slApxCap = slApxCap; } catch (_) {}
 function slIsSetEvent(n) { return !!n && (n.type === 'house' || n.type === 'conditioning'); }
 try { if (typeof window !== 'undefined') window.slIsSetEvent = slIsSetEvent; } catch (_) {}
 // 11 Nov 2026 (Waqas: "going forward math must stay at the highest standard possible no matter what happens"; "per flight hour
@@ -124,7 +130,7 @@ function allocateTopDown(node, target, strategy, visited) {
         delete node._prescribedActive;
         delete node._prescribedOverallocation;
     }
-    let extTarget = null;
+    let extTarget = null, apxB = null;
     try {
         let extSrc = null, paste = null;
         if (typeof _getExternalSourceTarget === 'function' && node.externalSource) {
@@ -147,7 +153,8 @@ function allocateTopDown(node, target, strategy, visited) {
         // failure condition's own class allows (fc_auto_trees.js ceiling): a limit, on the same channel
         let linkCeil = null;
         if (typeof slLinkCeiling === 'function') linkCeil = slLinkCeiling(node);
-        const _caps = [extSrc, paste, shared, linkCeil].filter(function (v) { return v !== null && isFinite(v); });
+        apxB = slApxCap(node);
+        const _caps = [extSrc, paste, shared, linkCeil, apxB].filter(function (v) { return v !== null && isFinite(v); });
         if (_caps.length) extTarget = Math.min.apply(null, _caps);
     } catch (e) { extTarget = null; }
     if (extTarget !== null && isFinite(extTarget)) {
@@ -162,7 +169,7 @@ function allocateTopDown(node, target, strategy, visited) {
             // Phase 66.19 — which constraint won, so the panel can name it rather than
             // showing a number with no explanation.
             source:      (node._sharedStrictest && extTarget === slSharedStrictestTarget(node)) ? 'shared-strictest'
-                       : (node._pasteOrigin ? 'paste-origin' : (node.externalSource ? 'external-source' : 'cap'))
+                       : (node._pasteOrigin ? 'paste-origin' : (node.externalSource ? 'external-source' : (apxB !== null && extTarget === apxB ? 'coffe-budget' : 'cap')))
         };
         target = effective;  // children apportion from the conservative budget
     } else {
@@ -242,7 +249,7 @@ function allocateTopDown(node, target, strategy, visited) {
             let ceil = null;
             if (extSrc !== null && _slExtIsFhaCeiling(c)) { ceil = extSrc; extSrc = null; }
             if (typeof slLinkCeiling === 'function') { const lc = slLinkCeiling(c); if (lc !== null && isFinite(lc)) ceil = (ceil === null) ? lc : Math.min(ceil, lc); }
-            const caps = [extSrc, paste, shared].filter(function (v) { return v !== null && isFinite(v); });
+            const caps = [extSrc, paste, shared, slApxCap(c)].filter(function (v) { return v !== null && isFinite(v); });
             const hard = caps.length ? Math.min.apply(null, caps) : null;
             if (ceil !== null) {
                 const nat = _slNaturalShare(node, actualChildren, c, target, strategy);

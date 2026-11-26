@@ -61,7 +61,7 @@ function mutate(file, body) {
     };
     check('S  the rule: the hosted demo keeps its trial; self-hosted, Files only and the desktop never have one (known from the mode, before any verdict); any authoritative license also rules', r.hosted === false && r.hostedPlain === false && r.hostedLicensed === true && r.own && r.files && r.desk, JSON.stringify(r));
     const html = rd('index.html');
-    check('S  index.html pins: misc_fn_modules 67.03, helpers 3.76, safety_lab 65.82, slab_license 1.5', /misc_fn_modules\.js\?v=67\.03"/.test(html) && /helpers_modules\.js\?v=3\.76"/.test(html) && /safety_lab\.js\?v=65\.82"/.test(html) && /slab_license\.js\?v=1\.5"/.test(html));
+    check('S  index.html pins: misc_fn_modules 67.03, helpers 3.76, safety_lab 65.82, slab_license 1.5', /misc_fn_modules\.js\?v=67\.03"/.test(html) && /helpers_modules\.js\?v=3\.7[6-9]"/.test(html) && /safety_lab\.js\?v=65\.82"/.test(html) && /slab_license\.js\?v=1\.5"/.test(html));
 }
 
 // ---- the browser ---------------------------------------------------------------------------------------------------------

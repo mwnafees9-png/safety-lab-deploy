@@ -76,6 +76,10 @@ console.log('\n[nplan] _slAutoNumber: the switch finally covers what its callers
               // (same-condition id reuse across flight phases, Waqas's ruling);
               // blank-desc rows still fall through to _slFillField, so every
               // expected id below is unchanged.
+              // 26 Nov 2026: system failure conditions have their own template (sysFailureCond) and {SYS} is the system's short
+              // name (slSysCode); a minted id some FHA row already uses is never handed out (_slFcIdTaken)
+              seg(/function slSysCode\(sysId\)[\s\S]*?\n\}/) + '\n' +
+              seg(/function _slFcIdTaken\(id\)[\s\S]*?\n\}/) + '\n' +
               seg(/function _slAssignFcId\(data, rows, ctx\)[\s\S]*?\n\}/) + '\n' +
               seg(/function _slBlank\(v\)[\s\S]*?\n\}/) + '\n' +
               seg(/function _slFillField\(kind, field, data, extraCtx[^)]*\)[\s\S]*?\n\}/) + '\n' +

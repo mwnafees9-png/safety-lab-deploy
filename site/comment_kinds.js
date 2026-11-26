@@ -23,7 +23,7 @@
  */
 (function (root) {
     'use strict';
-    var VERSION = '1.2';   // 1.2 24 Nov 2026: a MAC rule's or a CoFFE case's comment opens its Autopilot at its failure condition (the earlier pages are retired)
+    var VERSION = '1.3';   // 1.3 26 Nov 2026: a CoFFE Autopilot case's comment is titled in words (Case n: ...). 1.2 24 Nov 2026: a MAC rule's or a CoFFE case's comment opens its Autopilot at its failure condition (the earlier pages are retired)
     function _g(n) {
         try { var E = root.SLEnv; if (E && typeof E.get === 'function') { var v = E.get(n); if (v !== undefined) return v; } } catch (_) {}
         try { return root[n]; } catch (_) { return undefined; }
@@ -48,6 +48,13 @@
     function _markov() { var p = _pc(); return (p && Array.isArray(p.markovModels)) ? p.markovModels : []; }
     function _macRules() { var p = _pc(); return (p && Array.isArray(p.macModels)) ? p.macModels : []; }
     function _fracas() { var p = _pc(); return (p && p.ram && Array.isArray(p.ram.field)) ? p.ram.field : []; }
+    function _cofCaseWords(fcKey, c) {
+        try {
+            var Cof = root.SLApxCof, Au = root.SLApxAuto; if (!Cof || !Au || !/^[FDOABM]+$/.test(S(c))) return '';
+            var fc = Au.model.fcOf(fcKey), sol = fc ? Cof.model.solved(fc) : null; if (!sol || !sol.ds || sol.ds.length !== S(c).length) return '';
+            return 'Case ' + (sol.cases.indexOf(S(c)) + 1) + ': ' + Cof.model.caseText(S(c), sol.ds);
+        } catch (_) { return ''; }
+    }
     function _coffe() { var p = _pc(); return (p && p.coffe && typeof p.coffe === 'object') ? p.coffe : null; }
     function _resources() { var r = _g('resourcesData'); return Array.isArray(r) ? r : []; }
     function _ccmrRow(id) {
@@ -93,7 +100,8 @@
             // 24 Nov 2026: the CoFFE tab is the CoFFE Autopilot; a case's comment opens it at that case's failure condition
             label: 'CoFFE', tab: 'coffe',
             post: function (t) { var k = S(t.id).split('§')[0], A = root.SLApxAuto; try { if (A && A._ui) { A._ui.fc = k; A.setAp('cof'); if (A.kit && A.kit.draw) A.kit.draw(); return; } } catch (_) {} try { _coffeSelectedFc = k; } catch (_) {} _call('renderCoffePanel'); },
-            title: function (t) { var p = S(t.id).split('§'), r = _fhaAny(p[0]); return (r ? _fcLabel(r) : p[0]) + ' · ' + _clip((p[1] || '').replace(/∧/g, ' and '), 80); },
+            // 26 Nov 2026: a case of the CoFFE Autopilot's table (a string of states, one per column) is said in words
+            title: function (t) { var p = S(t.id).split('§'), r = _fhaAny(p[0]), words = _cofCaseWords(p[0], p[1]); return (r ? _fcLabel(r) : p[0]) + ' · ' + _clip(words || (p[1] || '').replace(/∧/g, ' and '), 80); },
             anem: function (t) { return 'the CoFFE case "' + t.id + '" (table coffe, _id "' + t.id + '"; fields verdict "yes"|"no" and note; it is kept as ANEM\'s proposal until the engineer signs it)'; }
         },
         resource: {

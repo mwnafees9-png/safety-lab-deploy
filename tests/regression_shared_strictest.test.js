@@ -251,7 +251,7 @@ console.log('\n[6] Wiring — the cap rides the existing external-cap channel');
   const quant = read('fta_quant_modules.js');
   check('the allocator reads the shared cap', /slSharedStrictestTarget\(node\)/.test(quant));
   check('it is min-ed with the external-source and paste caps',
-    /_caps = \[extSrc, paste, shared, linkCeil\]/.test(quant));   // 11 Nov 2026: and the link ceiling (a system failure condition's own class)
+    /_caps = \[extSrc, paste, shared, linkCeil(, apxB)?\]/.test(quant));   // 11 Nov 2026: and the link ceiling (a system failure condition's own class); 26 Nov 2026: and a CoFFE budget (apx_trees.js)
   check('A9: the allocator consults the decision register',
     /SLBudgetDecisions/.test(quant) && /decisionFor\(node\.id\)/.test(quant));
   check('11 Nov 2026: the rebalance is automatic and flagged; a reserve decision keeps the tighter budgets, an absorb accepts it',
@@ -259,7 +259,7 @@ console.log('\n[6] Wiring — the cap rides the existing external-cap channel');
   check('A9: the default records _budgetMargin with the tri-state',
     /_budgetMargin/.test(quant) && /'over-committed'/.test(quant) && /'under-allocated'/.test(quant) && /'reserve'/.test(quant));
   check('the cap is a CHILD CONSTRAINT, which is what triggers the redistribute',
-    /const caps = \[extSrc, paste, shared\]/.test(quant));
+    /const caps = \[extSrc, paste, shared(, slApxCap\(c\))?\]/.test(quant));
   check('only ROOT pages are allocated project-wide (transfer targets are seeded by their parent)',
     /transferTargets\.has\(p\.id\)/.test(quant));
   check('a verification-side page allocates nothing', /p\.mode === 'bottom-up'/.test(quant));

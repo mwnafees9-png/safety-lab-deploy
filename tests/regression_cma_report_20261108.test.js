@@ -1,4 +1,6 @@
-/* regression_cma_report_20261108.test.js: the CMA Autopilot and the CMA report (cma_autopilot.js v1.1, SLCmaAuto) on the shared
+/* 26 Nov 2026: a gate built from the CoFFE (apx_trees.js) is named <FC>.CoFFE, the book's id, and a claim drafted for it is the
+ * CoFFE's independence principle; both are accepted here.
+ * regression_cma_report_20261108.test.js: the CMA Autopilot and the CMA report (cma_autopilot.js v1.1, SLCmaAuto) on the shared
  * report frame (cca_report.js v1.1, SLCcaReport), with no duplicate CMAs anywhere (no_dupes.js v1.1, cma_flow.js v1.3).
  *
  * Waqas, 8 Nov 2026: "PRA build and ZSA similar to the planing autopilot, ability to see the reports etc. can we do
@@ -104,11 +106,11 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
             // ---- [B] the builder on the demo as it ships -------------------------------------------------------------
             const before = JSON.stringify(cmaData) + JSON.stringify(projectConfig.cmaAuto || null);
             const secs = A.reportSections();
-            R.b = { n: secs.length, want: A.claimList().length, rows: live().length, ids: new Set(secs.map(s => s.id)).size, titled: secs.every(s => s.cmaId ? s.title.indexOf(s.cmaId) === 0 : (s.virtual && /^Independence of the inputs of G-/.test(s.title))), pure: JSON.stringify(cmaData) + JSON.stringify(projectConfig.cmaAuto || null) === before, critFirst: secs.findIndex(s => !s.critical) < 0 || secs.slice(secs.findIndex(s => !s.critical)).every(s => !s.critical) };
+            R.b = { n: secs.length, want: A.claimList().length, rows: live().length, ids: new Set(secs.map(s => s.id)).size, titled: secs.every(s => s.cmaId ? s.title.indexOf(s.cmaId) === 0 : (s.virtual && /^Independence of the inputs of (G-|\S+\.(CoFFE|MAC)\b)/.test(s.title))), pure: JSON.stringify(cmaData) + JSON.stringify(projectConfig.cmaAuto || null) === before, critFirst: secs.findIndex(s => !s.critical) < 0 || secs.slice(secs.findIndex(s => !s.critical)).every(s => !s.critical) };
             const s1 = secs.find(s => s.cmaId === 'CMA-001');
             const gt = s1.blocks.find(b => b.type === 'table' && /-gates-t$/.test(b.id));
             R.b.gateRow = gt && gt.rows[0].cells;
-            R.b.allGateCellsNamed = secs.every(s => s.blocks.filter(b => /-gates-t$/.test(b.id)).every(b => b.rows.every(rw => (/^G-\S+ \S/.test(rw.cells[0]) || /^[A-Z]+-\S+ \S.*\(not an AND gate/.test(rw.cells[0]) || /^A gate no longer in the fault tree "/.test(rw.cells[0])) && rw.cells[1] && rw.cells[3] && !/pg-[a-z]/.test(rw.cells.join(' ')))));
+            R.b.allGateCellsNamed = secs.every(s => s.blocks.filter(b => /-gates-t$/.test(b.id)).every(b => b.rows.every(rw => (/^(G-\S+|\S+\.(CoFFE|MAC)) \S/.test(rw.cells[0]) || /^[A-Z]+-\S+ \S.*\(not an AND gate/.test(rw.cells[0]) || /^A gate no longer in the fault tree "/.test(rw.cells[0])) && rw.cells[1] && rw.cells[3] && !/pg-[a-z]/.test(rw.cells.join(' ')))));
             R.b.figure = !!s1.blocks.find(b => b.type === 'figure' && /<svg/.test(b.svg) && b.nodes.length >= 3 && b.nodes.every(n => n.label && n.accept));
             const cats = A.categoriesPlain();
             R.b.cats = cats.length;
@@ -146,7 +148,7 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
             recalc();
             R.w.heldBack = !gnode._cmaSubstantiatedBy && gnode._dalPending === true;
             const qc = 'cma/' + row.internalId + '/claim';
-            R.w.claimDrafted = A.answer(qc, 'drafted').ok && row.flow.claim === A.draftClaim(row) && /share no single cause/.test(row.flow.claim);
+            R.w.claimDrafted = A.answer(qc, 'drafted').ok && row.flow.claim === A.draftClaim(row) && /share no single cause|not result from a single failure or event/.test(row.flow.claim);
             const c0 = cats[0].id, qcat = 'cma/' + row.internalId + '/cat/' + c0;
             const ca = A.answer(qcat, 'concern', { why: 'Both lanes take power from the same essential bus.' });
             const qsAfter = A.questions(row.internalId);
@@ -351,9 +353,11 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
             const cp = pv().querySelector('p[data-ccq="' + qc + '"]');
             X.r2.see = !!see && !!cp && cp.classList.contains('ccr-flash') && /^The claim: /.test(cp.textContent);
             // a figure box opens its panel
-            const box = pv().querySelector('[data-ccnode^="' + A.anchorOf(row) + '-g-"][data-cckey="cma"]');   // 10 Nov 2026: the tree picture's boxes
-            if (box) box.dispatchEvent(new MouseEvent('click', { bubbles: true })); await wait(400);
-            const panel = host.querySelector('[data-cc-node]');
+            // 26 Nov 2026: a tree built from the CoFFE draws its top event first, so the critical gate's box is looked for among
+            // the picture's boxes (the first whose panel names a gate) rather than taken as the first box
+            const boxes = Array.from(pv().querySelectorAll('[data-ccnode^="' + A.anchorOf(row) + '-g-"][data-cckey="cma"]')).slice(0, 30);   // 10 Nov 2026: the tree picture's boxes
+            let box = null, panel = null;
+            for (const b of boxes) { b.dispatchEvent(new MouseEvent('click', { bubbles: true })); await wait(250); const pn = host.querySelector('[data-cc-node]'); if (pn && /^(G-\S+|\S+\.(CoFFE|MAC)) /.test(pn.textContent)) { box = b; panel = pn; break; } }
             X.r3 = { box: !!box, panel: panel ? panel.textContent.slice(0, 1600) : '' };
             // outputs accepted in the frame by role, reopened by a changed answer; one store
             const oid = 'cma.claim.' + row.internalId;
@@ -448,7 +452,7 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
         check('[R] picking a claim shows its questions and lights up its section', F2.r1.selected && F2.r1.secFlash, JSON.stringify(F2.r1));
         check('[R] an answer card in the frame answers, and the table row it wrote lights up', F2.r2.answered && F2.r2.rowLit && /Does not apply/.test(F2.r2.rowText), JSON.stringify(F2.r2));
         check('[R] "See where it goes" lights up the paragraph the answer wrote', F2.r2.see);
-        check('[R] a gate box in the figure opens its panel: inputs, outputs and how each is accepted', F2.r3.box && /^G-\S+ /.test(F2.r3.panel) && /Accepted when/.test(F2.r3.panel) && /Inputs/.test(F2.r3.panel), F2.r3.panel);
+        check('[R] a gate box in the figure opens its panel: inputs, outputs and how each is accepted', F2.r3.box && /^(G-\S+|\S+\.(CoFFE|MAC)) /.test(F2.r3.panel) && /Accepted when/.test(F2.r3.panel) && /Inputs/.test(F2.r3.panel), F2.r3.panel);
         check('[R] an output accepted in the frame (by role) is accepted in the CMA module too, and both reopen on a changed answer', F2.r4.btn && F2.r4.a1 === 'accepted' && F2.r4.m1 === 'accepted' && F2.r4.a2 === 'reopened' && F2.r4.m2 === 'reopened' && /Reopened/.test(F2.r4.pill || '') && F2.r4.role === 'Chief safety engineer', JSON.stringify(F2.r4));
         check('[R] one record of acceptance: the frame\'s store; v1.0\'s is moved into it once', F2.r4.oneStore && F2.r4.migrated, JSON.stringify(F2.r4));
         let docText = ''; try { const tmp = path.join(require('os').tmpdir(), 'cma_report_' + process.pid + '.docx'); fs.writeFileSync(tmp, Buffer.from(F2.w.b64, 'base64')); docText = require('child_process').execFileSync('unzip', ['-p', tmp, 'word/document.xml'], { maxBuffer: 64 * 1024 * 1024 }).toString().replace(/<[^>]+>/g, ' '); fs.unlinkSync(tmp); } catch (e) { docText = 'unzip failed: ' + e.message; }

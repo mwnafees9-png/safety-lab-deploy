@@ -13,7 +13,7 @@
 (function () {
   'use strict';
 
-  var KIND_ORDER = ['acFunction', 'subFunction', 'fcimMode', 'failureCond', 'faultTree', 'gate', 'basicEvent', 'requirement'];
+  var KIND_ORDER = ['acFunction', 'subFunction', 'fcimMode', 'failureCond', 'sysFailureCond', 'faultTree', 'gate', 'basicEvent', 'requirement'];
   var SCOPES = [['global', 'Global'], ['system', 'Per system'], ['parent', 'Per parent']];
   var INP = 'width:100%; box-sizing:border-box; font-family:var(--font-mono,monospace); font-size:12.5px; padding:5px 7px; border:1px solid var(--color-border,#ccc); border-radius:6px; background:var(--color-surface,#fff); color:var(--color-text-primary,#111);';
   var SEL = 'font-size:12.5px; padding:4px 6px; border:1px solid var(--color-border,#ccc); border-radius:6px; background:var(--color-surface,#fff); color:var(--color-text-primary,#111);';

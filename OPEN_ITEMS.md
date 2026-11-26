@@ -21,9 +21,10 @@ The connections deck (artifact "One Thread Across Every Tool") presents all of t
 - [ ] **TD-3 GENESYS live connection** (REST API, read and send), beside today's ReqIF and XMI files. Add a driver to alm_engine.js.
 - [ ] **TD-4 DOORS Next and Cameo send-back proven** against a real installation; then drop pilotSend so sending is on. Cameo stays canOwn:false (only elements Safety Lab created).
 - [ ] **TD-5 Native CAFTA and FaultTree+ file import** in fta_exchange.js (gates, events, type codes, numbers). Needs a real program file to build against.
-- [ ] **TD-6 Brief Waqas again on the CoFFE/MAC fault-tree structure** before building anything. His rulings so far: create whatever layers exist without architectural specifics; a baselined tree changes only through a change request and a PR; CoFFE and interdependence fill the first layers, MAC adds detail.
+- [x] **TD-6 Brief Waqas again on the CoFFE/MAC fault-tree structure** before building anything. DONE 26 Nov: briefed, signed off and built (apx_trees.js, HANDOFF 26 Nov). The aircraft tree stops at the system FHA lines (ARP4761A Figure Q.4-1); the MAC decides the events, it is not a layer; only empty trees are filled; generated nodes change through the Autopilot; a baselined PASA waits for a PR. His rulings so far: create whatever layers exist without architectural specifics; a baselined tree changes only through a change request and a PR; CoFFE and interdependence fill the first layers, MAC adds detail.
 - [ ] **TD-7 Radia license renewal:** SL-LIC-2026-RADIA-T5 ends 4 Dec.
-- [ ] **TD-8 Loose ends:** comment buttons on each CoFFE case; the CMA Autopilot not reading projectConfig.apx.cma; system FHA lines numbered FC-001 next to the aircraft FC-01.
+- [x] **TD-8 Loose ends:** comment buttons on each CoFFE case; the CMA Autopilot not reading projectConfig.apx.cma; system FHA lines numbered FC-001 next to the aircraft FC-01. DONE 26 Nov: a Comment cell on every CoFFE case; the CMA states the CoFFE's independence principles; system failure conditions have their own numbering template ({SYS}-FC-###, set on Program Planning) with a shown-first renumber for the Autopilots' lines.
+- [ ] **TD-10 Test the CoFFE/MAC tree layers on the web build** (Waqas, 26 Nov: web only until he has tested it), then a desktop release.
 - [ ] **TD-9 landing-1.html:** keep or delete (Waqas to decide).
 
 ## 24 Oct 2026, NEXT SESSION ORDERS (Waqas)

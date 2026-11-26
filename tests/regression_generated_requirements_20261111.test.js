@@ -56,7 +56,7 @@ function src(file) {
 
 (async function main() {
     const html = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8');
-    check('[X] pins: cma_autopilot.js 1.7, pasa_autopilot.js 2.7 (24 Nov 2026: the Interdependence and CoFFE Autopilots ask), pssa_autopilot.js 2.4 (17 Nov 2026), cca_report.js 2.2; headers the same', ['cma_autopilot.js?v=1.7"', 'pasa_autopilot.js?v=2.7"', 'pssa_autopilot.js?v=2.4"', 'cca_report.js?v=2.2"'].every(x => html.indexOf(x) > 0) && /SLCmaAuto v1\.7/.test(fs.readFileSync(path.join(SITE, 'cma_autopilot.js'), 'utf8').slice(0, 200)) && /SLCcaReport v2\.2/.test(fs.readFileSync(path.join(SITE, 'cca_report.js'), 'utf8').slice(0, 200)));
+    check('[X] pins: cma_autopilot.js 1.8, pasa_autopilot.js 2.8 (26 Nov 2026: trees built from the CoFFE or MAC), pssa_autopilot.js 2.4 (17 Nov 2026), cca_report.js 2.2; headers the same', ['cma_autopilot.js?v=1.8"', 'pasa_autopilot.js?v=2.8"', 'pssa_autopilot.js?v=2.4"', 'cca_report.js?v=2.2"'].every(x => html.indexOf(x) > 0) && /SLCmaAuto v1\.8/.test(fs.readFileSync(path.join(SITE, 'cma_autopilot.js'), 'utf8').slice(0, 200)) && /SLCcaReport v2\.2/.test(fs.readFileSync(path.join(SITE, 'cca_report.js'), 'utf8').slice(0, 200)));
     const EM = String.fromCharCode(0x2014);
     check('[X] no em dash in this test', fs.readFileSync(__filename, 'utf8').indexOf(EM) < 0);
 

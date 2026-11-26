@@ -1,4 +1,4 @@
-// cma_autopilot.js (SLCmaAuto v1.7, 11 Nov 2026: Raise a requirement starts from the requirement the tool writes; v1.6, 11 Nov 2026: a claim's questions are kept for the turn; v1.5, 10 Nov 2026: the AI drafts only once the questions are answered; v1.4 10 Nov 2026; v1.3 9 Nov 2026; v1.2 v1.1 8 Nov 2026): the CMA Autopilot. The Common Mode Analysis written by answering plain
+// cma_autopilot.js (SLCmaAuto v1.8, 26 Nov 2026: the CoFFE's independence principles (projectConfig.apx.cma) on the gates built from it; v1.7, 11 Nov 2026: Raise a requirement starts from the requirement the tool writes; v1.6, 11 Nov 2026: a claim's questions are kept for the turn; v1.5, 10 Nov 2026: the AI drafts only once the questions are answered; v1.4 10 Nov 2026; v1.3 9 Nov 2026; v1.2 v1.1 8 Nov 2026): the CMA Autopilot. The Common Mode Analysis written by answering plain
 // questions, one independence claim at a time, with the CMA report built from the answers.
 //
 // Waqas, 8 Nov 2026: "PRA build and ZSA similar to the planing autopilot, ability to see the reports etc. can we do
@@ -53,7 +53,7 @@
 //     becomes a concern of the CMA, closed the way any concern is (a requirement, evidence or a written reason).
 (function (root) {
     'use strict';
-    var VERSION = '1.7';   // 1.7 11 Nov 2026: Raise a requirement starts from the requirement the tool writes. 1.6 11 Nov 2026: a claim's questions are kept for the turn. 1.5 10 Nov 2026: the AI drafts a report's parts only once every claim's questions are answered (aiReady);   // 1.3 9 Nov 2026: proposed mitigations, path to compliance and conclusion once per report, written or AI drafted and accepted;   // 1.2 9 Nov 2026: one report per system and one at the aircraft level, picked from a dropdown
+    var VERSION = '1.8';   // 1.8 26 Nov 2026: a gate built from the CoFFE brings its independence principle from projectConfig.apx.cma into the claim and the report. 1.7 11 Nov 2026: Raise a requirement starts from the requirement the tool writes. 1.6 11 Nov 2026: a claim's questions are kept for the turn. 1.5 10 Nov 2026: the AI drafts a report's parts only once every claim's questions are answered (aiReady);   // 1.3 9 Nov 2026: proposed mitigations, path to compliance and conclusion once per report, written or AI drafted and accepted;   // 1.2 9 Nov 2026: one report per system and one at the aircraft level, picked from a dropdown
 
     // ==== THE SWITCH ================================================================================================
     // Flip to true in phase 2, once the CMA report (cca_report.js) is on the page: the CMA table, its hidden entry form
@@ -207,9 +207,28 @@
     // the claims in report order: those a DAL reduction rests on first, then by CMA id, then the claims with no row yet
     function claims() { return claimList().map(function (c) { return c.row; }); }
     function sysName(id) { var s = arr('systemsData').find(function (x) { return x && S(x.id) === S(id); }); return s ? T(s.name || s.id) : S(id); }
+    // v1.8 (26 Nov 2026, Waqas: "the CMA Autopilot not reading projectConfig.apx.cma"): a gate built from the CoFFE
+    // (apx_trees.js) stands for one combination of Table Q.4-8, and the CoFFE sent that combination's independence principle
+    // (Table Q.4-12) into projectConfig.apx.cma[<failure condition>]. The principles of a claim's gates are read from there,
+    // so the words the PASA states are the words the CMA reviews. A principle the CoFFE no longer holds is not shown.
+    function apxPrinciples(r) {
+        var p = pc(), cma = p && p.apx && p.apx.cma ? p.apx.cma : null, out = [], seen = {};
+        if (!cma) return out;
+        cgates(r).map(gateInfo).forEach(function (x) {
+            var n = x && x.node; if (!n || !n.apxGen || !Array.isArray(n.apxIndep)) return;
+            var rec = cma[S(n.apxGen.fc)]; if (!rec || !Array.isArray(rec.principles)) return;
+            n.apxIndep.forEach(function (ip) {
+                var cur = rec.principles.filter(function (q) { return q && S(q.id) === S(ip.id); })[0];
+                if (!cur || seen[S(rec.fcId) + S(cur.id)]) return; seen[S(rec.fcId) + S(cur.id)] = 1;
+                out.push({ id: S(cur.id), text: T(cur.text), fcId: S(rec.fcId), gate: x.id, by: S(rec.by), at: S(rec.at).slice(0, 10) });
+            });
+        });
+        return out;
+    }
     function draftClaim(r) {
         var gs = cgates(r).map(gateInfo).filter(function (x) { return !x.gone; });
         if (!gs.length) return '';
+        var ap = apxPrinciples(r); if (ap.length) return ap.map(function (x) { return x.text.replace(/[.]$/, ''); }).join('; ') + '.';
         var c0 = claimFor(r), oneClaim = c0 && c0.groups.length === 1 && c0.gates.every(function (k) { return c0.groups[0].gates.indexOf(k) >= 0; });
         if (oneClaim && gs.length > 1) { var cw = gs[0].inputs || []; if (cw.length) return 'The inputs ' + listJoin(cw.map(function (n) { return '"' + n + '"'; })) + ' share no single cause that can make them fail together, so ' + listJoin(gs.map(function (x) { return x.id; })) + ' fail only when these inputs fail on their own.'; }
         if (gs.length === 1) { var x = gs[0]; return 'The inputs of ' + x.id + (x.name ? ' (' + x.name + ')' : '') + ', ' + listJoin(x.inputs.map(function (n) { return '"' + n + '"'; })) + ', share no single cause that can make them happen together, so the gate fails only when they fail on their own.'; }
@@ -577,6 +596,9 @@
                 ? 'What is claimed independent: ' + listJoin(quoted(cw)) + '. ' + (real.length > 1 ? listJoin(real.map(function (x) { return x.id; })) + ' all rely on exactly this claim, so this one review covers each of them.' : real[0].id + ' relies on this claim.')
                 : 'Each gate below names the inputs it claims independent; this review covers them together.', gq));
         }
+        // v1.8: the independence principles the PASA states for these gates (from the CoFFE, projectConfig.apx.cma)
+        var aps = apxPrinciples(r);
+        if (aps.length) blocks.push(P(anchor + '-apx', 'The PASA states ' + (aps.length > 1 ? 'these independence principles' : 'this independence principle') + ' for ' + (aps.length > 1 ? 'these gates' : 'this gate') + ' (from the CoFFE for ' + listJoin(uniqS(aps.map(function (x) { return x.fcId; }))) + '): ' + aps.map(function (x) { return x.id + ', ' + x.text.replace(/[.]$/, ''); }).join('; ') + '. This review is what substantiates ' + (aps.length > 1 ? 'them' : 'it') + '.', null));
         // the claim
         var claim = T(f ? f.claim : r.claim) || (r._virtual ? T(draftClaim(r)) : '');
         blocks.push(P(anchor + '-claim', claim ? 'The claim: ' + claim + (/[.!?]$/.test(claim) ? '' : '.') : 'The claim has not been written yet.', cq));

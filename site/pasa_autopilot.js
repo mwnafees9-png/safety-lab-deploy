@@ -54,7 +54,7 @@
 // Every number comes from SLTopBasis and the trees. window.SLPasaAuto.
 (function (root) {
     'use strict';
-    var VERSION = '2.7';   // 2.7 24 Nov 2026: the Interdependence and CoFFE Autopilots ask the interdependence and CoFFE questions (on for everyone); the PASA shows where they stand and opens them. // 2.6 23 Nov 2026: an appendix shows the PASA assumptions the Autopilots record. // 2.5 15 Nov 2026: an appendix shows what the Interdependence, MAC and CoFFE Autopilots sent (apx_bridge.js). // 2.2 11 Nov 2026: a gate whose inputs are all held tighter than their shares says what they use of its budget
+    var VERSION = '2.8';   // 2.8 26 Nov 2026: a tree built from the CoFFE or MAC (apx_trees.js) asks no linking question for what it placed; without one, each traced line is asked "on its own, or only together with others?" and placed; a change waiting on a baseline and additions left without their gate are open items. // 2.7 24 Nov 2026: the Interdependence and CoFFE Autopilots ask the interdependence and CoFFE questions (on for everyone); the PASA shows where they stand and opens them. // 2.6 23 Nov 2026: an appendix shows the PASA assumptions the Autopilots record. // 2.5 15 Nov 2026: an appendix shows what the Interdependence, MAC and CoFFE Autopilots sent (apx_bridge.js). // 2.2 11 Nov 2026: a gate whose inputs are all held tighter than their shares says what they use of its budget
     function g(n) { try { if (root.SLEnv && root.SLEnv.get) { var v = root.SLEnv.get(n); if (v !== undefined) return v; } } catch (_) {} try { return root[n]; } catch (_) { return undefined; } }
     function arr(v) { return Array.isArray(v) ? v : []; }
     function S(v) { return v == null ? '' : String(v); }
@@ -193,11 +193,51 @@
                 var viaNode = !!(page && F && F.linked && F.linked(page, { sysId: c.sysId, fcId: c.fcId })), viaXfer = false;
                 if (page && c.tree) walk(page.root, function (n) { if (S(n.transferOutTo || n.linkedPageId || '') === S(c.tree.id)) viaXfer = true; });
                 c.via = viaNode ? 'node' : viaXfer ? 'transfer' : null; c.linked = !!c.via;
-                c.answer = c.linked ? 'yes' : (st.link[c.key] === 'no' ? 'no' : null);
+                // v2.8: placed by the layers built from the CoFFE or MAC (apx_trees.js): nothing to ask; or placed only together with others
+                var where = viaNode ? nodeWhere(page, c) : null; c.gen = !!(where && where.gen); c.combo = where && where.combo ? where.combo : null;
+                c.answer = c.gen ? 'yes' : c.linked ? (c.combo ? 'combo' : 'yes') : (st.link[c.key] === 'no' ? 'no' : null);
                 out.push(c);
             });
         });
         return out;
+    }
+    // v2.8: where a system failure condition's shared node sits in a tree: built by apx_trees.js (gen), or inside a group the
+    // engineer said happens only together (combo: the gate), or plainly under the top
+    function nodeWhere(page, c) {
+        var F = Tr(), e = F && F.nodeKey ? F.nodeKey({ sysId: c.sysId, fcId: c.fcId }, false) : null, out = null; if (!e || !page || !page.root) return null;
+        (function w(n, par) { if (!n || out) return; if (n.type !== 'gate' && S(n.logicalId) === S(e.lid)) { out = { gen: !!n.apxGen, combo: par && par.pasaCombo ? par : null, parent: par, node: n }; return; } kids(n).forEach(function (k) { w(k, n); }); })(page.root, null);
+        return out;
+    }
+    function nid() { try { return internalIdCounter++; } catch (_) { return Date.now() + Math.floor(Math.random() * 1e6); } }   // eslint-disable-line no-undef
+    // takes a line's node out of the top or out of a together-group (never out of anything the engineer built); a group left
+    // with fewer than two lines is taken out, and its other line asked again
+    function takeOut(gr, page, c) {
+        var w0 = nodeWhere(page, c); if (!w0 || w0.gen) return;
+        if (w0.parent === page.root) { page.root.children = kids(page.root).filter(function (k) { return k !== w0.node; }); return; }
+        if (!w0.combo) return;
+        var gt = w0.combo; gt.children = kids(gt).filter(function (k) { return k !== w0.node; });
+        if (kids(gt).length < 2) {
+            var st = fcStore(gr.fcId); if (!st.link) st.link = {};
+            linkCands(gr).forEach(function (o) { var wo = nodeWhere(page, o); if (wo && wo.combo === gt) delete st.link[o.key]; });
+            page.root.children = kids(page.root).filter(function (k) { return k !== gt; });
+        }
+    }
+    // v2.8: the line and the lines named with it go under one AND gate "Only together: ..." under the top
+    function placeCombo(gr, c, partners) {
+        var page = treeOf(gr), F = Tr(); if (!page || !page.root || !F || !F.link) throw fail('This failure condition has no fault tree to place it in.');
+        var members = [c].concat(partners).filter(function (m, i, a) { return a.indexOf(m) === i && !m.gen; });
+        if (members.length < 2) throw fail('Tick at least one other line it happens together with.');
+        members.forEach(function (m) { takeOut(gr, page, m); });
+        var key = members.map(function (m) { return m.key; }).sort().join('+'), gt = kids(page.root).filter(function (k) { return k.pasaCombo === key; })[0];
+        if (!gt) { var id = nid(); gt = { id: id, logicalId: id, type: 'gate', gateType: 'AND', displayId: 'G-' + id, probability: 0, children: [], name: 'Only together: ' + members.map(function (m) { return m.name; }).join(' and '), pasaCombo: key }; }
+        members.forEach(function (m) {
+            var r = F.link(page, { sysId: m.sysId, fcId: m.fcId }); if (!r.ok) throw fail(r.why || 'Not placed.');
+            page.root.children = kids(page.root).filter(function (k) { return k !== r.node; });
+            if (kids(gt).indexOf(r.node) < 0) gt.children.push(r.node);
+        });
+        page.root.children = kids(page.root).filter(function (k) { return k !== gt && !(k.type === 'undeveloped' && /^Decompose: causes of /.test(k.name || '')); }).concat([gt]);
+        var st = fcStore(gr.fcId); if (!st.link) st.link = {};
+        members.forEach(function (m) { st.link[m.key] = 'combo'; });
     }
     // gates of the tree the tool rebalanced and nobody has accepted yet, and gates whose inputs take more than their budget
     function gateFlags(gr) {
@@ -454,6 +494,10 @@
         if (rows.some(function (r) { return r.state === 'open' || r.state === 'proposed'; })) left.push('Which systems feed ' + gr.fcId + '? ' + (AXQ ? '(the Interdependence Autopilot asks this)' : '(the interdependence table)'));
         untraced(gr).forEach(function (u) { if (!u.ex) left.push(u.row.sysName + ' feeds ' + gr.fcId + ' with nothing traced: trace one of its failure conditions, or say why it does not'); });
         if (isQuant(gr) && treeOf(gr)) linkCands(gr).forEach(function (c) { if (!c.answer) left.push('Is the fault tree for ' + c.label + ' ready to be linked into the ' + gr.fcId + ' tree?'); });
+        // v2.8: a change from the Autopilots waiting on a baseline; additions whose gate the Autopilots no longer build
+        var tp = isQuant(gr) ? treeOf(gr) : null;
+        if (tp && tp.apxPending) left.push('The Autopilots sent a change to the ' + gr.fcId + ' fault tree after the PASA was baselined. Raise a PR to reopen the PASA for its fault trees and the tree follows.');
+        if (tp && tp.apxTree && tp.apxTree.orphans) left.push(tp.apxTree.orphans + ' of the branches added to the ' + gr.fcId + ' tree sat under a gate the Autopilots no longer build. They are under the top now: move them where they belong.');
         resources(gr).forEach(function (r) { if (!resWhere(gr, r)) left.push('Where is ' + lc(r.name) + ' dispositioned?'); });
         if (coffeOn()) { var cOpen = coffeCasesOf(gr).filter(function (k) { return !coffeVerdictOf(gr, k); }); if (AXQ) { if (cOpen.length) left.push(cOpen.length + ' CoFFE case' + (cOpen.length > 1 ? 's' : '') + ' for ' + gr.fcId + (cOpen.length > 1 ? ' are' : ' is') + ' not answered yet (the CoFFE Autopilot asks them)'); } else cOpen.forEach(function (k) { left.push('Does ' + caseWords(k) + ' produce ' + gr.fcId + '?'); }); }
         return left;
@@ -811,12 +855,23 @@
         // 4. the tree: nothing to answer
         var pg = pageOf(gr);
         // v2.1: each system failure condition traced here: is its tree ready to be linked into this one?
-        if (isQuant(gr) && pg) linkCands(gr).forEach(function (c) {
+        if (isQuant(gr) && pg) { var LC = linkCands(gr); LC.forEach(function (c) {
+            if (c.gen) return;   // v2.8: placed by the layers built from the CoFFE or MAC
             var qid = 'fc.' + f + '.link.' + c.key;
             var state = !c.tree ? 'It has no fault tree yet.' : c.treeBuilt ? 'Its fault tree (' + T(c.tree.name || c.tree.id) + ') has inputs built.' : 'Its fault tree (' + T(c.tree.name || c.tree.id) + ') has its top only so far.';
-            h += card(qid, Q({ id: qid, text: 'Is the fault tree for ' + c.label + ' ready to be linked into the ' + f + ' tree?', why: E(state + ' Linked, it is one node, the same in every aircraft tree it feeds: it keeps the strictest budget any of them gives it, and its own tree takes that budget as its target.') + (c.via === 'transfer' ? '<br>' + E('It is already in the ' + f + ' tree, by a transfer to its tree.') : ''), picked: c.answer,
-                options: [{ id: 'yes', label: 'Yes, link it', impact: 'It goes into the ' + f + ' tree under the top, with its share of the budget. Move it inside the tree in the Fault trees tab if it belongs lower down.' }, { id: 'no', label: 'Not yet', impact: 'It stays out of the ' + f + ' tree. The report says it is not linked yet.' }] }), !!c.answer);
-        });
+            var others = LC.filter(function (o) { return o !== c && !o.gen; });
+            var opts = [{ id: 'yes', label: 'Yes, on its own', impact: 'It goes into the ' + f + ' tree under the top, with its share of the budget: it causes ' + f + ' by itself.' }];
+            if (others.length) opts.push({ id: 'combo', label: 'Yes, only together with others', impact: 'It goes into the ' + f + ' tree in an AND with the lines you tick: ' + f + ' happens only when they all fail.' });
+            opts.push({ id: 'no', label: 'Not yet', impact: 'It stays out of the ' + f + ' tree. The report says it is not linked yet.' });
+            var picked = ui.open[qid] === 'combo' ? 'combo' : c.answer;
+            var body = Q({ id: qid, text: 'Is the fault tree for ' + c.label + ' ready to be linked into the ' + f + ' tree, and does it cause ' + f + ' on its own?', why: E(state + ' Linked, it is one node, the same in every aircraft tree it feeds: it keeps the strictest budget any of them gives it, and its own tree takes that budget as its target.') + (c.via === 'transfer' ? '<br>' + E('It is already in the ' + f + ' tree, by a transfer to its tree.') : ''), picked: picked, options: opts });
+            if (picked === 'combo') {
+                var now0 = c.combo ? LC.filter(function (o) { var wo = nodeWhere(pg, o); return o !== c && wo && wo.combo === c.combo; }).map(function (o) { return o.key; }) : [];
+                body += '<div class="paq-x">' + E(f + ' happens only when ' + c.name + ' fails together with:') + '</div>' + others.map(function (o) { return '<label class="paq-x" style="display:block;cursor:pointer"><input type="checkbox" data-paq-combo="' + E(qid) + '" value="' + E(o.key) + '"' + (now0.indexOf(o.key) >= 0 ? ' checked' : '') + '> ' + E(o.label) + '</label>'; }).join('')
+                    + '<button type="button" class="paq-b on" onclick="SLPasaAuto.ui.combo(' + J(qid) + ')">Place them together</button>';
+            }
+            h += card(qid, body, !!c.answer && ui.open[qid] !== 'combo');
+        }); }
         if (isQuant(gr)) h += card('fc.' + f + '.tree', '<div class="slap-q">The fault tree, what it says, the numbers</div><div class="paq-x">' + (built(gr) ? 'Read from the tree. Nothing to answer.' : 'The fault tree for ' + E(f) + ' has not been created yet: link the system trees that are ready, or build it in the Fault trees tab.') + '</div>' + (pg ? '<button type="button" class="paq-b" onclick="SLPasaAuto.ui.openTree(' + J(pg.id) + ')">Open the fault tree</button>' : ''), built(gr));
         return h;
     }
@@ -871,10 +926,14 @@
                 var grL = groupOf(m[1]), pgL = grL ? treeOf(grL) : null, FL = Tr(); if (!grL || !pgL || !FL || !FL.link) throw fail('This failure condition has no fault tree to link into.');
                 var cL = linkCands(grL).filter(function (x) { return x.key === m[2] + '\u00A7' + m[3]; })[0]; if (!cL) throw fail('That system failure condition is no longer traced here.');
                 var stL = fcStore(grL.fcId); if (!stL.link) stL.link = {};
-                if (opt === 'yes') { if (!cL.linked) { var rL = FL.link(pgL, { sysId: cL.sysId, fcId: cL.fcId }); if (!rL.ok) throw fail(rL.why || 'Not linked.'); } delete stL.link[cL.key]; }
+                if (cL.gen) throw fail('It was placed by the layers built from the CoFFE or MAC. Change it in that Autopilot.');
+                if (opt === 'combo') { ui.open[qid] = 'combo'; var Rc = R0(); if (Rc) Rc.render(); return; }
+                delete ui.open[qid];
+                if (opt === 'yes') { if (cL.combo) takeOut(grL, pgL, cL); if (!cL.linked || cL.combo) { var rL = FL.link(pgL, { sysId: cL.sysId, fcId: cL.fcId }); if (!rL.ok) throw fail(rL.why || 'Not linked.'); } delete stL.link[cL.key]; }
                 else {
                     if (cL.via === 'transfer') throw fail('It is in the ' + grL.fcId + ' tree by a transfer. Take the transfer out in the Fault trees tab.');
-                    if (cL.via === 'node') { var uL = FL.unlink(pgL, { sysId: cL.sysId, fcId: cL.fcId }); if (!uL.ok) throw fail(uL.why || 'Not taken out.'); }
+                    if (cL.combo) takeOut(grL, pgL, cL);
+                    else if (cL.via === 'node') { var uL = FL.unlink(pgL, { sysId: cL.sysId, fcId: cL.fcId }); if (!uL.ok) throw fail(uL.why || 'Not taken out.'); }
                     stL.link[cL.key] = 'no';
                 }
                 try { if (FL.sweep) FL.sweep({ quiet: true, noAsk: true }); } catch (_) {}
@@ -887,6 +946,20 @@
                 var p = pc(); if (!p.coffe) p.coffe = { verdicts: {} }; if (!p.coffe.verdicts) p.coffe.verdicts = {};
                 p.coffe.verdicts[S(gr2.gov.internalId) + '§' + m[2]] = { verdict: opt === 'yes' ? 'yes' : 'no', by: who(), at: now() };
             } else return;
+            save(); done(qid);
+        } catch (e) { msg(e && e.userFacing ? e.message : 'Not saved: ' + (e && e.message || e), true); }
+    }
+    // v2.8: "only together with others": the lines ticked go with it under one AND gate
+    function combo(qid) {
+        try {
+            var m = /^fc\.(.+)\.link\.([^\u00A7]+)\u00A7(.+)$/.exec(qid); if (!m) return;
+            var gr = groupOf(m[1]); if (!gr) throw fail('This failure condition is no longer offered.');
+            var LC = linkCands(gr), c = LC.filter(function (x) { return x.key === m[2] + '\u00A7' + m[3]; })[0]; if (!c) throw fail('That system failure condition is no longer traced here.');
+            var ticks = typeof document !== 'undefined' ? Array.prototype.slice.call(document.querySelectorAll('input[data-paq-combo]')).filter(function (el) { return el.getAttribute('data-paq-combo') === qid && el.checked; }).map(function (el) { return el.value; }) : [];
+            placeCombo(gr, c, LC.filter(function (x) { return ticks.indexOf(x.key) >= 0; }));
+            delete ui.open[qid];
+            try { var FL = Tr(); if (FL && FL.sweep) FL.sweep({ quiet: true, noAsk: true }); } catch (_) {}
+            try { if (typeof root._slSharedStrictestRound === 'function') root._slSharedStrictestRound(); } catch (_) {}
             save(); done(qid);
         } catch (e) { msg(e && e.userFacing ? e.message : 'Not saved: ' + (e && e.message || e), true); }
     }
@@ -1047,7 +1120,7 @@
         cutsets: cutsets, metricsOf: metricsOf, allocated: allocated, cgOf: cgOf, cmas: cmas, CLOSE: CLOSE, acRef: acRef, regulation: regulation, style: style, sysName: sysName, sysById: sysById, systems: systems, traceList: traceList };
     var api = { VERSION: VERSION, lib: lib, besideGo: besideGo, placeBeside: placeBeside, candidates: candidates, picks: picks, appendices: appendices, functions: functions, fnGroups: fnGroups, fnSection: fnSection, routeOf: routeOf, isQuant: isQuant, fnLeft: fnLeft, linkCands: linkCands, built: built, gateFlags: gateFlags, fnOf: fnOf, fnTitle: fnTitle, feeders: feeders, critGates: critGates, treeOf: treeOf, groupOf: groupOf, idpRows: idpRows, untraced: untraced, resources: resources, treeFacts: treeFacts, reqsFor: reqsFor,
         frontLeft: frontLeft, fcLeft: fcLeft, openItems: openItems, tracedNotInTree: tracedNotInTree, treeNotInTable: treeNotInTable, section: section, front: front, coffeOn: coffeOn, store: store, outputs: outputs,
-        resReq: resReq, ui: { pick: pick, text: text, cell: cell, idpNone: idpNone, idpAi: idpAi, level: level, levelReset: levelReset, acceptReqs: acceptReqs, genResReq: genResReq, openTree: openTree } };
+        resReq: resReq, ui: { pick: pick, text: text, cell: cell, idpNone: idpNone, idpAi: idpAi, level: level, levelReset: levelReset, acceptReqs: acceptReqs, genResReq: genResReq, openTree: openTree, combo: combo } };
     try { root.SLPasaAuto = api; } catch (_) {}
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

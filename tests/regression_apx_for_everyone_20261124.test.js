@@ -50,7 +50,7 @@ function mutate(file, body) {
     check('S no "preview", "our team", "Today\'s page" or way back to the earlier pages in the three Autopilots and the bridge', [au, br0, mac, cof].every(t => !words.test(t)), [au, br0, mac, cof].map(t => (t.match(words) || [''])[0]));
     check('S the Interdependence tab is not sent to the PASA any more', !/_apxOn/.test(sup) && /if \(tabId === 'coffe' \|\| tabId === 'cockpit'\) \{ switchTab\('pasa'\); return; \}/.test(sup));
     check('S the menu: "Interdependence, MAC and CoFFE" right after the PASA Autopilot; the page is named for the three', /id="snav-apx" onclick="switchTab\('interdep'\)"/.test(idx) && idx.indexOf('id="snav-pasa"') < idx.indexOf('id="snav-apx"') && /<h3>Interdependence, MAC and CoFFE Autopilots<\/h3>/.test(idx));
-    check('S pins: apx_autopilots 1.8, apx_mac 1.4, apx_coffe 1.8, apx_bridge 1.9, pasa_autopilot 2.7, support_modules 66.66, comment_kinds 1.2', ['apx_autopilots.js?v=1.8"', 'apx_mac.js?v=1.4"', 'apx_coffe.js?v=1.8"', 'apx_bridge.js?v=1.9"', 'pasa_autopilot.js?v=2.7"', 'support_modules.js?v=66.66"', 'comment_kinds.js?v=1.2"'].every(x => idx.indexOf(x) > 0));
+    check('S pins: apx_autopilots 1.8, apx_mac 1.4, apx_coffe 1.9, apx_bridge 1.9, pasa_autopilot 2.8, support_modules 66.66, comment_kinds 1.3', ['apx_autopilots.js?v=1.8"', 'apx_mac.js?v=1.4"', 'apx_coffe.js?v=1.9"', 'apx_bridge.js?v=1.9"', 'pasa_autopilot.js?v=2.8"', 'support_modules.js?v=66.66"', 'comment_kinds.js?v=1.3"'].every(x => idx.indexOf(x) > 0));
 
     let pw = null; try { pw = require('playwright'); } catch (_) {}
     if (!pw) { console.log('  SKIP  Playwright is not installed: the browser part did not run'); return done(); }

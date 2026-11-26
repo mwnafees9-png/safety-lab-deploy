@@ -28,7 +28,8 @@
     acFunction:  { type: 'AF',  label: 'Aircraft function' },
     subFunction: { type: 'SF',  label: 'Sub-function' },
     fcimMode:    { type: 'FM',  label: 'FCIM failure mode' },
-    failureCond: { type: 'FC',  label: 'Failure condition' },
+    failureCond: { type: 'FC',  label: 'Failure condition (aircraft)' },
+    sysFailureCond: { type: 'FC', label: 'Failure condition (system)' },
     faultTree:   { type: 'FT',  label: 'Fault tree (top event)' },
     gate:        { type: 'G',   label: 'Gate' },
     basicEvent:  { type: 'BE',  label: 'Basic event' },
@@ -179,6 +180,7 @@
       subFunction: { type: 'SF',  pattern: '{TYPE}-{SEQ:000}',        counterScope: 'global' },
       fcimMode:    { type: 'FM',  pattern: '{PARENT}-{MODE}',         counterScope: 'global', derived: true },
       failureCond: { type: 'FC',  pattern: '{TYPE}-{SEQ:000}',        counterScope: 'global' },
+      sysFailureCond: { type: 'FC', pattern: '{SYS}-{TYPE}-{SEQ:000}', counterScope: 'system' },
       faultTree:   { type: 'FT',  pattern: '{TYPE}-{SEQ:000}',        counterScope: 'global' },
       gate:        { type: 'G',   pattern: '{TYPE}-{SEQ:000}',        counterScope: 'global' },
       basicEvent:  { type: 'BE',  pattern: '{TYPE}-{SEQ:000}',        counterScope: 'global' },
@@ -195,6 +197,7 @@
         subFunction: { type: 'SF',  pattern: '{TYPE}-{SEQ:000}',          counterScope: 'global' },
         fcimMode:    { type: 'FM',  pattern: '{PARENT}-{MODE}',           counterScope: 'global', derived: true },
         failureCond: { type: 'FC',  pattern: '{SYS}-{TYPE}-{SEQ:000}',    counterScope: 'system' },
+        sysFailureCond: { type: 'FC', pattern: '{SYS}-{TYPE}-{SEQ:000}',  counterScope: 'system' },
         faultTree:   { type: 'FT',  pattern: '{SYS}-{TYPE}-{SEQ:000}',    counterScope: 'system' },
         gate:        { type: 'G',   pattern: '{TYPE}-{SEQ:000}',          counterScope: 'global' },
         basicEvent:  { type: 'BE',  pattern: '{TYPE}-{SEQ:000}',          counterScope: 'global' },
@@ -208,6 +211,7 @@
         subFunction: { type: 'SF',  pattern: '{PROGRAM}.{TYPE}.{SEQ:000}',  counterScope: 'global' },
         fcimMode:    { type: 'FM',  pattern: '{PARENT}-{MODE}',             counterScope: 'global', derived: true },
         failureCond: { type: 'FC',  pattern: '{PROGRAM}.{TYPE}.{SEQ:000}',  counterScope: 'global' },
+        sysFailureCond: { type: 'FC', pattern: '{PROGRAM}.{SYS}.{TYPE}.{SEQ:000}', counterScope: 'system' },
         faultTree:   { type: 'FT',  pattern: '{PROGRAM}.{TYPE}.{SEQ:000}',  counterScope: 'global' },
         gate:        { type: 'G',   pattern: '{PROGRAM}.{TYPE}.{SEQ:000}',  counterScope: 'global' },
         basicEvent:  { type: 'BE',  pattern: '{PROGRAM}.{TYPE}.{SEQ:000}',  counterScope: 'global' },
@@ -216,12 +220,15 @@
     }
   ];
 
-  function cloneScheme(s) { return JSON.parse(JSON.stringify(s)); }
+  // 26 Nov 2026: a scheme saved before a kind existed takes that kind's default (system failure conditions got their own
+  // template: Waqas, "allow users to add their own numbering scheme"), so editing and saving it never trips on a gap
+  function withDefaults(s) { var c = JSON.parse(JSON.stringify(s || DEFAULT_SCHEME)); if (!c.templates) c.templates = {}; Object.keys(KINDS).forEach(function (k) { if (!c.templates[k]) c.templates[k] = JSON.parse(JSON.stringify(DEFAULT_SCHEME.templates[k])); }); return c; }
+  function cloneScheme(s) { return withDefaults(s); }
 
   function validateScheme(scheme) {
     var errs = {};
     Object.keys(KINDS).forEach(function (kind) {
-      var t = scheme.templates && scheme.templates[kind];
+      var t = (scheme.templates && scheme.templates[kind]) || DEFAULT_SCHEME.templates[kind];
       if (!t) { errs[kind] = ['Missing template.']; return; }
       var r = validateTemplate(t.pattern, { derived: !!t.derived });
       if (!r.ok) errs[kind] = r.errors;
@@ -244,6 +251,7 @@
     makeSharedId: makeSharedId,
     previewId: previewId,
     computeOutline: computeOutline,
-    cloneScheme: cloneScheme
+    cloneScheme: cloneScheme,
+    withDefaults: withDefaults
   };
 }));
