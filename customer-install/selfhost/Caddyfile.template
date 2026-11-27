@@ -1,7 +1,8 @@
 {$PROXY_DOMAIN} {
     __TLS_LINE__
 
-    @safetylab_ai path /v1/ai/*
+    # 27 Nov 2026: the Safety Lab API and MCP server are the same service as the AI one
+    @safetylab_ai path /v1/ai/* /v1/oauth/* /v1/projects /v1/projects/* /v1/mcp
     handle @safetylab_ai {
         reverse_proxy ai-proxy:8787
     }

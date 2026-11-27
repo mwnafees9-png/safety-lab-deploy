@@ -24,6 +24,9 @@
 
 import { itarProvider, sovereignChat, sovereignEmbed } from "./sovereign_router.js";
 
+// 27 Nov 2026: the Safety Lab API and MCP server (/v1/oauth/token, /v1/projects..., /v1/mcp) live in api_v1.js, beside this file.
+import { handleApi, isApiPath } from "./api_v1.js";
+
 const ANTHROPIC_UPSTREAM = "https://api.anthropic.com/v1/messages";
 const VOYAGE_UPSTREAM = "https://api.voyageai.com/v1/embeddings";
 
@@ -1126,8 +1129,12 @@ async function routeRequest(request, env, ctx) {
         const features = [];
         if (env.__serverKey && typeof env.__serverKey.handle === "function") features.push("server-ai-key");
         if (env.__seats && typeof env.__seats.handle === "function") features.push("seats");
+        if (env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) features.push("api", "mcp");   // 27 Nov 2026: the API and MCP server need the database
         return jsonResponse(200, { ok: true, service: "safety-lab-proxy", ts: Date.now(), features });
       }
+      // 27 Nov 2026: the Safety Lab API and MCP server. Its own sign-in (an API client or a personal API key), never a
+      // licence or a browser session; it reads projects and stages what tools send, and never writes a project.
+      if (isApiPath(url.pathname)) return handleApi(request, env, ctx, url, { sbFetch, checkRateLimit });
       if (!url.pathname.startsWith("/v1/ai/")) {
         return jsonResponse(404, { error: { type: "not_found", message: "Unknown endpoint." } });
       }

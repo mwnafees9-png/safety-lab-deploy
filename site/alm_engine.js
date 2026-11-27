@@ -1,5 +1,7 @@
 // ============================================================================
-// alm_engine.js, v1.0, 28 Oct 2026: the live connection to Polarion and Codebeamer, on the Connections framework.
+// alm_engine.js, v1.1, 27 Nov 2026 (v1.1: a driver may be local, with no login and its own way to read and write, and tools can
+// be added while the app runs: the Safety Lab API's clients, api_connect.js). v1.0, 28 Oct 2026: the live connection to Polarion
+// and Codebeamer, on the Connections framework.
 //
 // Waqas: live two-way links with "Jama, Polarion, DOORS Next, Codebeamer, Cameo" and GENESYS, one owner per linked
 // item, "never update[d] automatically without their engineering teams consent". Jama has its own bridge
@@ -934,7 +936,7 @@
         }
         var _rt = {};   // per session look-ups (key names, field ids) that are not settings
         function rcfg() { return Object.assign(_rt, cfg()); }
-        function configured() { var c = cfg(); return !!(c.baseUrl && c.project); }
+        function configured() { if (drv.configured) { try { return !!drv.configured(cfg()); } catch (_) { return false; } } var c = cfg(); return !!(c.baseUrl && c.project); }
         function watch() { try { return localStorage.getItem(WATCH) === '1'; } catch (_) { return false; } }
 
         // ---- the login
@@ -946,10 +948,12 @@
             return hasLogin();
         }
         function hasLogin() {
+            if (drv.local) return true;   // 27 Nov 2026: a local driver (the Safety Lab API's clients) has no login of its own: it reads with the person's Safety Lab session
             if (_isDesktop()) return !!_deskHas;
             var st = _store(); return !!(st && st.door() === 'vault' && st.has(tid + '_token'));
         }
         function doorProblem() {
+            if (drv.local) { try { return (drv.problem && drv.problem()) || ''; } catch (_) { return ''; } }
             if (_desktopOld()) return 'This version of the desktop app cannot reach ' + drv.label + '. Update the app.';
             if (_isDesktop() && drv.needsOpts && !(W.slabBridge && W.slabBridge.toolOpts === true)) return 'This version of the desktop app cannot reach ' + drv.label + ' yet. Update the app.';
             if (_isDesktop()) return '';
@@ -1305,6 +1309,7 @@
         function _btn(label, js, primary) { return '<button type="button" class="ckpt-m-btn' + (primary ? ' ckpt-m-btn-primary' : '') + '" onclick="' + js + '">' + label + '</button>'; }
         var NS = 'SLAlm.ui(\'' + tid + '\')';
         async function setupUi() {
+            if (drv.setupUi) return drv.setupUi(api);
             var c = cfg(), p = doorProblem();
             await refreshHas();
             var auth = c.auth || drv.auths[0][0];
@@ -1397,7 +1402,7 @@
         var _containers = null;
         async function browseUi() {
             if (!configured()) { await setupUi(); return; }
-            _modal('alm-browse', '<h3>' + _esc(drv.label) + ': choose what is linked</h3><p class="cx-dim">Reading the ' + drv.containers + ' in ' + _esc(cfg().project) + '...</p>');
+            _modal('alm-browse', '<h3>' + _esc(drv.label) + ': choose what is linked</h3><p class="cx-dim">Reading the ' + drv.containers + ' in ' + _esc(drv.local ? 'this project' : cfg().project) + '...</p>');
             var list;
             try { list = await drv.listContainers(rcfg(), req); _containers = list; }
             catch (e) { _modal('alm-browse', '<h3>' + _esc(drv.label) + '</h3><div class="cx-err">' + _esc((e && e.message) || e) + '</div><div class="cx-row">' + _btn('Connection settings', 'SLAlm.close(\'alm-browse\');SLConnections.setup(\'' + tid + '\')') + '<span class="cx-right">' + _btn('Close', 'SLAlm.close(\'alm-browse\')') + '</span></div>'); return; }
@@ -1409,7 +1414,7 @@
             var pxSel = function (p) { if (!px) return ''; var cur = (p && p[px.key]) || ''; return '<td><select class="alm-px" aria-label="' + _esc(px.label) + '"><option value="">Default for what it holds</option>' + px.options().map(function (o) { return '<option value="' + o[0] + '"' + (cur === o[0] ? ' selected' : '') + '>' + _esc(o[1]) + '</option>'; }).join('') + '</select></td>'; };
             var html = '<h3>' + _esc(drv.label) + ': choose what is linked</h3><p class="cx-dim">Tick each ' + drv.container + ' Safety Lab should follow, say what it holds and whether it is for the aircraft or a system. ' + _esc(drv.label) + ' owns what comes in: it is locked in Safety Lab, and its changes wait in Incoming changes for an engineer to sign. In a functions ' + drv.container + ', an item’s parent in ' + _esc(drv.short) + ' is its parent function here.</p>' +
                 '<div class="cx-pop-list"><table class="cx-table"><thead><tr><th></th><th>' + _esc(drv.label) + ' ' + drv.container + '</th><th>Holds</th>' + (px ? '<th>' + _esc(px.label) + '</th>' : '') + '<th>For</th></tr></thead><tbody>' +
-                (list.length ? list.map(function (x) { var p = pk[String(x.id)]; return '<tr class="alm-pick" data-id="' + _esc(x.id) + '" data-name="' + _esc(x.name) + '"><td><input type="checkbox" class="alm-on" aria-label="Link"' + (p ? ' checked' : '') + '></td><td><b>' + _esc(x.name) + '</b>' + (x.where ? ' <span class="cx-dim">' + _esc(x.where) + '</span>' : '') + '<div class="cx-dim">' + _esc(x.id) + '</div></td><td>' + kindSel(p ? p.kind : 'req') + '</td>' + pxSel(p) + '<td>' + scopeSel(p ? (p.scope || 'ac') : 'ac') + '</td></tr>'; }).join('') : '<tr><td colspan="4" class="cx-dim">This project has no ' + drv.containers + ' this login can see.</td></tr>') +
+                (list.length ? list.map(function (x) { var p = pk[String(x.id)]; return '<tr class="alm-pick" data-id="' + _esc(x.id) + '" data-name="' + _esc(x.name) + '"><td><input type="checkbox" class="alm-on" aria-label="Link"' + (p ? ' checked' : '') + '></td><td><b>' + _esc(x.name) + '</b>' + (x.where ? ' <span class="cx-dim">' + _esc(x.where) + '</span>' : '') + '<div class="cx-dim">' + _esc(x.id) + '</div></td><td>' + kindSel(p ? p.kind : (x.kind || 'req')) + '</td>' + pxSel(p) + '<td>' + scopeSel(p ? (p.scope || 'ac') : 'ac') + '</td></tr>'; }).join('') : '<tr><td colspan="4" class="cx-dim">This project has no ' + drv.containers + ' this login can see.</td></tr>') +
                 '</tbody></table></div><div class="cx-row cx-gap cx-pop-foot">' + _btn('Save and check', NS + '.savePicks()', true) + '<span class="cx-right">' + _btn('Close', 'SLAlm.close(\'alm-browse\')') + '</span></div>';
             _modal('alm-browse', html);
         }
@@ -1439,15 +1444,16 @@
         if (W.SLConnections && typeof W.SLConnections.register === 'function') {
             W.SLConnections.register(tid, {
                 label: drv.label, configured: configured,
-                where: function () { var c = cfg(); return _host(c.baseUrl) + (c.project ? ' · project ' + c.project : ''); },
+                where: function () { if (drv.where) { try { return drv.where(cfg()); } catch (_) { return ''; } } var c = cfg(); return _host(c.baseUrl) + (c.project ? ' · project ' + c.project : ''); },
                 checkedAt: function () { return state.checkedAt; },
                 held: function () { return false; },
-                warnings: function () { return state.warnings.slice(); },
+                warnings: function () { var w = state.warnings.slice(); if (drv.notes) { try { w = w.concat(drv.notes(cfg()) || []); } catch (_) {} } return w; },
                 changes: changes, check: function (silent) { return check(!!silent); },
-                autoCheck: function () { return watch() && hasLogin(); },
+                autoCheck: function () { return (drv.local && drv.autoCheck === true && configured()) || (watch() && hasLogin()); },
                 applyKeys: applyKeys, setup: function () { setupUi().catch(function (e) { _report(e, 'setup'); }); }, browse: function () { browseUi().catch(function (e) { _report(e, 'browse'); }); },
                 linkedRows: linkedRows, outgoing: outgoing, send: send, sendSettingsHtml: sendSettingsHtml,
-                canOwn: drv.canOwn !== false, pilot: function () { return !sendOn(); }
+                canOwn: drv.canOwn !== false, pilot: function () { return !sendOn(); },
+                decided: drv.decided ? function (lines, status, signer, why) { return drv.decided(lines, status, signer, why, api); } : null
             });
         }
         refreshHas().catch(function (e) { _report(e, 'login status'); });
@@ -1460,6 +1466,8 @@
         RULES: ALM_RULES, almRequestProblem: almRequestProblem, plain: plain, wikiPlain: wikiPlain, parseXml: parseXml, rdfParse: rdfParse,
         buildTree: buildTree, diffTree: diffTree, applyTree: applyTree, diffFlat: diffFlat, applyFlat: applyFlat,
         drivers: DRIVERS, tools: tools, tool: function (id) { return tools[id] || null; },
+        // 27 Nov 2026: a tool added while the app runs (one per Safety Lab API client that reaches the project)
+        addTool: function (drv) { if (!drv || !drv.id) return null; if (tools[drv.id]) { Object.assign(tools[drv.id].driver, drv); return tools[drv.id]; } DRIVERS[drv.id] = drv; tools[drv.id] = makeTool(drv); return tools[drv.id]; },
         ui: function (id) { return (tools[id] && tools[id].ui) || {}; },
         close: function (id) { var p = document.getElementById(id); if (p) p.remove(); }
     };

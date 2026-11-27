@@ -1,5 +1,7 @@
 // ============================================================================
-// connections.js, v1.1, 28 Oct 2026 (v1.1: a change the person made a moment ago is collected as theirs before the framework writes): Safety Lab Connections.
+// connections.js, v1.2, 27 Nov 2026 (v1.2: tools can be added while the app runs, a tool is told what an engineer decided on its
+// lines, and a module can add a card to the Connections page: the Safety Lab API, api_connect.js). v1.1, 28 Oct 2026 (a change the
+// person made a moment ago is collected as theirs before the framework writes): Safety Lab Connections.
 //
 // Waqas: "go for it, and lets get this built". The agreed model, in his words:
 //   * every linked item has ONE owner, its source of truth, chosen "only for the items being linked not for all the
@@ -73,7 +75,12 @@
     // a tool's own id on the rows it wrote (Jama's rows say 'jama-live') is the same tool here
     var ALIAS = { 'jama-live': 'jama' };
     function _tid(t) { t = String(t == null ? '' : t); return ALIAS[t] || t; }
-    function _toolLabel(id) { id = _tid(id); var t = TOOLS.filter(function (x) { return x.id === id; })[0]; return t ? t.label : String(id || ''); }
+    function _toolLabel(id) {
+        id = _tid(id); var t = TOOLS.filter(function (x) { return x.id === id; })[0]; if (t) return t.label;
+        // 27 Nov 2026: a Safety Lab API client is named by the project when the server has not said who it is yet
+        try { var pc = _pc(), c = pc && pc.almTools && pc.almTools[id]; if (c && c.label) return String(c.label); } catch (_) {}
+        return String(id || '');
+    }
 
     // ------------------------------------------------------------------ who
     function whoAmI() {
@@ -234,6 +241,7 @@
             rejDone.push(c);
         });
         if (rejDone.length) {
+            _tell(rejDone, 'rejected', signer, reason);
             log({ tool: rejDone[0].tool, what: 'rejected', text: 'Rejected ' + rejDone.length + ' incoming change' + (rejDone.length === 1 ? '' : 's') + ' (kept out of the analysis; the item' + (rejDone.length === 1 ? ' is' : 's are') + ' out of step with ' + _toolLabel(rejDone[0].tool) + ')',
                   items: rejDone.map(_lineWord), why: reason, signedBy: signer, result: 'kept out' });
         }
@@ -248,12 +256,19 @@
             results[tool] = r;
             if (!r || r.ok === false) { err = (r && r.err) || 'The apply failed.'; return; }
             applied = applied.concat(byTool[tool]);
+            _tell(byTool[tool], 'accepted', signer, reason);
             log({ tool: tool, what: 'signed', text: 'Signed ' + byTool[tool].length + ' incoming change' + (byTool[tool].length === 1 ? '' : 's') + ' from ' + _toolLabel(tool) + ' into the analysis',
                   items: byTool[tool].map(_lineWord), why: reason, signedBy: signer, result: (r.refused && r.refused.length) ? ('applied; not placed: ' + r.refused.join(' | ')) : 'applied' });
         });
         _save(); _renderAll();
         if (err) return { ok: false, err: err, applied: applied.length, rejected: rejDone.length, results: results };
         return { ok: true, applied: applied.length, rejected: rejDone.length, results: results };
+    }
+    // 27 Nov 2026: a tool that wants to know what an engineer decided on its lines is told (the Safety Lab API shows a
+    // client where each item it sent stands). Never in the way of the decision: a tool that cannot be told is skipped.
+    function _tell(lines, status, signer, reason) {
+        var by = {}; (lines || []).forEach(function (c) { (by[c.tool] = by[c.tool] || []).push(c); });
+        Object.keys(by).forEach(function (tool) { var a = _ad[tool]; if (a && typeof a.decided === 'function') { try { Promise.resolve(a.decided(by[tool], status, signer, reason)).catch(function () {}); } catch (_) {} } });
     }
     function _lineWord(c) { return (CHANGE[c.change] || c.change) + ': ' + (KIND[c.kind] || c.kind) + ' ' + (c.slId || c.extKey || c.remoteId) + (c.name ? ' ' + _clip(c.name, 60) : ''); }
     // The page panels on Functions, FCIM, FHA, Assumptions and Requirements sign through here: every line of that page
@@ -391,8 +406,11 @@
             var ready = !!_ad[t.id];
             return '<div class="cx-off"><b>' + _esc(t.label) + '</b><span class="cx-dim">' + _esc(t.how) + '</span>' + (ready ? _btn('Connect', 'SLConnections.setup(\'' + t.id + '\')', 'primary') : '<span class="cx-dim">Live connection not available yet. ' + _esc(FILES[t.id] || '') + '</span>') + '</div>';
         }).join('') + '</div><p class="cx-dim">No live connection allowed by your IT? ReqIF and XMI files still work from Requirements exchange and Architecture import.</p></section>';
+        // 27 Nov 2026: a module's own card on this page (the Safety Lab API's keys)
+        _cards.forEach(function (fn) { try { html += fn() || ''; } catch (_) {} });
         return html;
     }
+    var _cards = [];
     function _kv(o) {
         var ks = Object.keys(o || {}); if (!ks.length) return '<span class="cx-dim">(nothing)</span>';
         return ks.map(function (k) { return '<div><span class="cx-dim">' + _esc(k) + ':</span> ' + _esc(_clip(o[k], 400)) + '</div>'; }).join('');
@@ -640,6 +658,9 @@
     // ------------------------------------------------------------------ UI handlers
     var api = {
         TOOLS: TOOLS, register: register, adapter: adapter, connected: connected,
+        // 27 Nov 2026: a tool added while the app runs (one per Safety Lab API client that reaches the project); a card on the page
+        addTool: function (t) { if (!t || !t.id) return; var cur = TOOLS.filter(function (x) { return x.id === t.id; })[0]; if (cur) Object.assign(cur, t); else TOOLS.push(t); _renderAll(); },
+        addCard: function (fn) { if (typeof fn === 'function' && _cards.indexOf(fn) < 0) _cards.push(fn); },
         store: store, ownerOf: ownerOf, setOwner: setOwner,
         incoming: incoming, rejected: rejected, counts: counts, pendingCount: pendingCount, pillText: pillText, touches: touches,
         decide: decide, signLines: signLines, reconsider: reconsider, checked: checked,

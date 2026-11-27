@@ -21,6 +21,8 @@ for f in $(ls $KIT/[0-9][0-9]_*.sql | sort); do
   $PG -d $DB -f $f >/dev/null 2>/tmp/slab_proof_apply.err || { echo "APPLY FAILED: $f"; cat /tmp/slab_proof_apply.err; exit 2; }
 done
 $PG -d $DB -f $W/proof_fixture.sql >/dev/null || { echo "FIXTURE FAILED"; exit 2; }
+# 27 Nov 2026: a proof may add its own rows on top of the five people (EXTRA_FIXTURE=<file beside this script>)
+if [ -n "${EXTRA_FIXTURE:-}" ]; then $PG -d $DB -f "$W/$(basename "$EXTRA_FIXTURE")" >/dev/null || { echo "EXTRA FIXTURE FAILED"; exit 2; }; fi
 declare -A U=( [O]=00000000-0000-0000-0000-0000000000a1 [E]=00000000-0000-0000-0000-0000000000a2 \
                [R]=00000000-0000-0000-0000-0000000000a3 [V]=00000000-0000-0000-0000-0000000000a4 \
                [X]=00000000-0000-0000-0000-0000000000a5 )
