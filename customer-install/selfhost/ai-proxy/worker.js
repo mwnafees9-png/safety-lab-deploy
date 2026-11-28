@@ -428,11 +428,34 @@ var ALM_RULES = {
         },
         read: { POST: [/^resources\/[\w-]+\/branches\/[\w-]+\/elements$/, /^resources\/[\w-]+\/branches\/[\w-]+\/revisions\/\d+\/elements$/] },
         query: [], headers: ['accept', 'content-type']
+    },
+    // An MCP server (Model Context Protocol, Streamable HTTP): one address, a POST with one JSON-RPC message. Safety
+    // Lab only reads through it: the handshake, the list of tools, and calls to the tools that were named when the
+    // login was saved (meta.tools). No other method, no other tool, no other path.
+    mcp: {
+        mcp: true, root: /^(.*)$/, write: {}, read: { POST: [] }, query: [],
+        headers: ['accept', 'content-type', 'mcp-protocol-version', 'mcp-session-id']
     }
 };
+// the MCP half of the fence. meta: what was saved with the login (path, tools). body: the JSON-RPC message, as text.
+function mcpRequestProblem(m, u, meta, body) {
+    if (m !== 'POST') return 'an MCP server is only ever sent a POST';
+    var path = String((meta && meta.path) || '');
+    if (!path || u.pathname !== path) return 'only the saved MCP address can be reached';
+    if (u.search) return 'no query string on an MCP request';
+    var j = null; try { j = typeof body === 'string' ? JSON.parse(body) : null; } catch (_) { j = null; }
+    if (!j || typeof j !== 'object' || Array.isArray(j) || j.jsonrpc !== '2.0' || typeof j.method !== 'string') return 'the body is not one JSON-RPC message';
+    if (j.method === 'initialize' || j.method === 'notifications/initialized' || j.method === 'ping' || j.method === 'tools/list') return '';
+    if (j.method !== 'tools/call') return 'Safety Lab only lists and calls the tools of an MCP server';
+    var name = (j.params && typeof j.params.name === 'string') ? j.params.name : '';
+    var may = String((meta && meta.tools) || '').split(' ').filter(Boolean);
+    if (!name || may.indexOf(name) < 0) return 'the tool ' + (name || '(none)') + ' was not approved when this login was saved';
+    return '';
+}
 // '' when the request may go, or the reason it may not. savedHost: the host saved with the login. headers: the
 // extra request headers the page asks for (only the tool's own protocol headers pass).
-function almRequestProblem(tool, method, rawUrl, savedHost, headers) {
+// meta, body: only an MCP server's rule reads them (what was saved with the login; the message).
+function almRequestProblem(tool, method, rawUrl, savedHost, headers, meta, body) {
     var R = Object.prototype.hasOwnProperty.call(ALM_RULES, tool) ? ALM_RULES[tool] : null; if (!R) return 'not a connected tool';
     var m = String(method || '').toUpperCase();
     var u; try { u = new URL(String(rawUrl)); } catch (_) { return 'not a valid address'; }
@@ -441,6 +464,7 @@ function almRequestProblem(tool, method, rawUrl, savedHost, headers) {
     var mm = R.root.exec(u.pathname); if (!mm) return 'only the tool\u2019s REST API is reached';
     var hk = Object.keys(headers || {}).map(function (k) { return String(k).toLowerCase(); }).filter(function (k) { return R.headers.indexOf(k) < 0; });
     if (hk.length) return 'the header ' + hk[0] + ' is not sent to this tool';
+    if (R.mcp) return mcpRequestProblem(m, u, meta, body);
     var rest = mm[1];
     if (m === 'GET') return '';
     var keys = []; u.searchParams.forEach(function (v, k) { keys.push(k); });
@@ -450,7 +474,37 @@ function almRequestProblem(tool, method, rawUrl, savedHost, headers) {
     if (m === 'DELETE') return 'Safety Lab never deletes anything in a connected tool';
     return 'Safety Lab only reads, creates, changes, links and comments on items in the tool';
 }
-const TOOL_LABEL = { polarion: "Polarion", codebeamer: "Codebeamer", doors: "DOORS Next", cameo: "Cameo" };
+const TOOL_LABEL = { polarion: "Polarion", codebeamer: "Codebeamer", doors: "DOORS Next", cameo: "Cameo", mcp: "the MCP server" };
+// 27 Nov 2026 (reading from an MCP server): an MCP server may answer a POST as an event stream. The stream is read
+// only until the answer to this request has arrived (the JSON-RPC message with the same id), then let go, so a server
+// that keeps its stream open cannot hold the relay. 8 MB at most.
+const MCP_ANSWER_MAX = 8 * 1024 * 1024;
+async function mcpAnswerText(upstream, wantId) {
+  const ct = String(upstream.headers.get("content-type") || "").toLowerCase();
+  if (ct.indexOf("text/event-stream") < 0 || !upstream.body || typeof upstream.body.getReader !== "function") {
+    const t = await upstream.text();
+    return t.length > MCP_ANSWER_MAX ? null : t;
+  }
+  const reader = upstream.body.getReader(), dec = new TextDecoder();
+  let buf = "";
+  const answered = () => {
+    const events = buf.replace(/\r\n/g, "\n").split("\n\n");
+    for (let i = 0; i < events.length - 1; i++) {
+      const data = events[i].split("\n").filter(l => l.indexOf("data:") === 0).map(l => l.slice(5).replace(/^ /, "")).join("\n");
+      if (!data) continue;
+      try { const j = JSON.parse(data); if (j && typeof j === "object" && !Array.isArray(j) && (wantId == null || j.id === wantId) && (j.result !== undefined || j.error !== undefined)) return true; } catch (_) {}
+    }
+    return false;
+  };
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (value) buf += dec.decode(value, { stream: true });
+    if (buf.length > MCP_ANSWER_MAX) { try { await reader.cancel(); } catch (_) {} return null; }
+    if (done) break;
+    if (answered()) { try { await reader.cancel(); } catch (_) {} break; }
+  }
+  return buf;
+}
 // DOORS Next signs in with a session (as IBM's own clients do): cookies kept here, per user and host, for 25 minutes,
 // never sent to the page. The sign-in only ever goes to the saved host or the sign-in server saved with the login.
 const _toolJars = new Map();
@@ -521,20 +575,28 @@ async function handleToolBridge(request, env, caller, url, tool) {
   const phRaw = request.headers.get("x-slab-tool-headers");
   if (phRaw) { try { ph = JSON.parse(phRaw); } catch (_) { return jsonResponse(400, { error: { type: "bad_request", message: "Not sent: malformed headers." } }); } }
   if (!ph || typeof ph !== "object" || Array.isArray(ph) || Object.keys(ph).some(k => typeof ph[k] !== "string" || ph[k].length > 2048 || /[\r\n]/.test(ph[k]))) return jsonResponse(400, { error: { type: "bad_request", message: "Not sent: malformed headers." } });
-  const fp = almRequestProblem(tool, method, chk.target.toString(), savedHost, ph);
+  // an MCP server's rule reads the message itself, so it is checked once the body has been read (below)
+  const isMcp = ALM_RULES[tool].mcp === true;
+  const fp = isMcp ? "" : almRequestProblem(tool, method, chk.target.toString(), savedHost, ph);
   if (fp) return jsonResponse(400, { error: { type: "bad_request", message: "Not sent: " + fp + "." } });
-  let body;
+  let body, mcpId = null;
   if (method !== "GET") {
     body = await request.text().catch(() => "");
     if (body.length > BRIDGE_WRITE_MAX) return jsonResponse(400, { error: { type: "bad_write", message: "Not sent: the body is larger than 2 MB." } });
     if (!raw) { try { JSON.parse(body || "null"); } catch (_) { return jsonResponse(400, { error: { type: "bad_write", message: "Not sent: the body is not JSON." } }); } }
+  }
+  if (isMcp) {
+    const fp2 = almRequestProblem(tool, method, chk.target.toString(), savedHost, ph, sec.meta || {}, body);
+    if (fp2) return jsonResponse(400, { error: { type: "bad_request", message: "Not sent: " + fp2 + "." } });
+    // what was checked is what is sent: the message is written out again from what the fence read
+    const msg = JSON.parse(body); body = JSON.stringify(msg); mcpId = msg.id === undefined ? null : msg.id;
   }
   const user = String((sec.meta && sec.meta.user) || "");
   const headers = method === "GET" ? { accept: "application/json" } : { accept: "application/json", "content-type": "application/json" };
   Object.keys(ph).forEach(k => { delete headers[k.toLowerCase()]; headers[k.toLowerCase()] = ph[k]; });
   const session = tool === "doors";
   if (!session) {
-    const bearer = tool === "polarion" || (sec.meta && sec.meta.auth === "bearer");
+    const bearer = tool === "polarion" || isMcp || (sec.meta && sec.meta.auth === "bearer");
     headers["authorization"] = bearer ? "Bearer " + sec.secret : "Basic " + btoa(user + ":" + sec.secret);
   }
   const init = { method: method, redirect: "manual", headers, body: method === "GET" ? undefined : body, signal: AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined };
@@ -551,9 +613,10 @@ async function handleToolBridge(request, env, caller, url, tool) {
     }
     if (upstream.status === 401) return jsonResponse(401, { error: { type: "connector_refused", message: label + " did not accept the saved login (HTTP 401). Open Connection settings and sign in again." } });
     if (upstream.status >= 300 && upstream.status < 400) return jsonResponse(502, { error: { type: "upstream_redirect", message: "upstream redirected (" + upstream.status + "): redirects are not followed" } });
-    const text = await upstream.text();
+    const text = isMcp ? await mcpAnswerText(upstream, mcpId) : await upstream.text();
+    if (text === null) return jsonResponse(502, { error: { type: "upstream_too_large", message: "The answer from " + label + " is larger than 8 MB." } });
     const ra = upstream.headers.get("retry-after");
-    if (raw) return jsonResponse(200, { raw: true, status: upstream.status, text: text, etag: upstream.headers.get("etag") || "", location: upstream.headers.get("location") || "", retryAfter: Number(ra) || 0 });
+    if (raw) return jsonResponse(200, { raw: true, status: upstream.status, text: text, etag: upstream.headers.get("etag") || "", location: upstream.headers.get("location") || "", session: (isMcp && upstream.headers.get("mcp-session-id")) || "", retryAfter: Number(ra) || 0 });
     const extra = {}; if (ra) extra["retry-after"] = ra;
     return new Response(text, { status: upstream.status, headers: { "content-type": upstream.headers.get("content-type") || "application/json", "cache-control": "no-store", "x-content-type-options": "nosniff", ...CORS, ...extra } });
   } catch (e) {

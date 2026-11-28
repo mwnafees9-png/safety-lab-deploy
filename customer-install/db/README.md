@@ -45,6 +45,7 @@ This runs the SQL files in order:
 29. `28_project_recoveries.sql`: a recovery puts back what a saved version of a project had and the project lost, on top of the project as it is now; the table holds the saved version and who approved it, and the app applies it once.
 30. `29_history_keeps_fullest_versions.sql`: the project history also keeps the 10 versions holding the most data, so the fullest copies of a project are never the ones pruned.
 31. `30_api_clients_and_collections.sql`: the Safety Lab API and MCP server. API clients and personal API keys (only a SHA-256 of each secret is kept, and no user of the database can read the key table), and the collections where a connected tool keeps what it sends; nothing a tool sends enters a project until an engineer accepts it in the app and signs.
+32. `31_mcp_secret_kind.sql`: the vault also keeps each person's token for an MCP server Safety Lab reads from (Connections, MCP server), with the server's address and the names of the tools Safety Lab may call there; only the server's AI service reads it, to make the call.
 
 Run this once, on an empty database. It is a fresh-install sequence, not an upgrade script:
 `00_schema_baseline.sql` fails if the tables already exist. To upgrade an existing install,

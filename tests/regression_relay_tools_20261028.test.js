@@ -20,7 +20,7 @@ const check = (n, c, d) => { if (c) { pass++; console.log('  PASS  ' + n); } els
 const REPO = path.join(__dirname, '..');
 const MUT = process.env.MUTATE || '';
 const MUTATIONS = {
-  fence: ['  const fp = almRequestProblem(tool, method, chk.target.toString(), savedHost, ph);\n  if (fp) return', '  const fp = "";\n  if (fp) return'],
+  fence: ['  const fp = isMcp ? "" : almRequestProblem(tool, method, chk.target.toString(), savedHost, ph);\n  if (fp) return', '  const fp = "";\n  if (fp) return'],
   host:  ['  const chk = bridgeTargetProblem(url.searchParams.get("target"), savedHost, env, true);\n  if (chk.error) return', '  const chk = { target: new URL(url.searchParams.get("target")) };\n  if (chk.error) return'],
   json:  ['    if (!raw) { try { JSON.parse(body || "null"); } catch (_) { return jsonResponse(400, { error: { type: "bad_write", message: "Not sent: the body is not JSON." } }); } }', ''],
   jar:   ['  const headers = Object.assign({}, init.headers || {}); if (ck) headers["cookie"] = ck;', '  const headers = Object.assign({}, init.headers || {});'],

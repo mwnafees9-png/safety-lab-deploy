@@ -1,5 +1,6 @@
 // ============================================================================
-// alm_engine.js, v1.1, 27 Nov 2026 (v1.1: a driver may be local, with no login and its own way to read and write, and tools can
+// alm_engine.js, v1.2, 27 Nov 2026 (v1.2: Safety Lab reads from an MCP server, the 'mcp' driver, read only; and every tool
+// can be checked again on a timer while the project is open. v1.1: a driver may be local, with no login and its own way to read and write, and tools can
 // be added while the app runs: the Safety Lab API's clients, api_connect.js). v1.0, 28 Oct 2026: the live connection to Polarion
 // and Codebeamer, on the Connections framework.
 //
@@ -74,11 +75,34 @@
             },
             read: { POST: [/^resources\/[\w-]+\/branches\/[\w-]+\/elements$/, /^resources\/[\w-]+\/branches\/[\w-]+\/revisions\/\d+\/elements$/] },
             query: [], headers: ['accept', 'content-type']
+        },
+        // An MCP server (Model Context Protocol, Streamable HTTP): one address, a POST with one JSON-RPC message. Safety
+        // Lab only reads through it: the handshake, the list of tools, and calls to the tools that were named when the
+        // login was saved (meta.tools). No other method, no other tool, no other path.
+        mcp: {
+            mcp: true, root: /^(.*)$/, write: {}, read: { POST: [] }, query: [],
+            headers: ['accept', 'content-type', 'mcp-protocol-version', 'mcp-session-id']
         }
     };
+    // the MCP half of the fence. meta: what was saved with the login (path, tools). body: the JSON-RPC message, as text.
+    function mcpRequestProblem(m, u, meta, body) {
+        if (m !== 'POST') return 'an MCP server is only ever sent a POST';
+        var path = String((meta && meta.path) || '');
+        if (!path || u.pathname !== path) return 'only the saved MCP address can be reached';
+        if (u.search) return 'no query string on an MCP request';
+        var j = null; try { j = typeof body === 'string' ? JSON.parse(body) : null; } catch (_) { j = null; }
+        if (!j || typeof j !== 'object' || Array.isArray(j) || j.jsonrpc !== '2.0' || typeof j.method !== 'string') return 'the body is not one JSON-RPC message';
+        if (j.method === 'initialize' || j.method === 'notifications/initialized' || j.method === 'ping' || j.method === 'tools/list') return '';
+        if (j.method !== 'tools/call') return 'Safety Lab only lists and calls the tools of an MCP server';
+        var name = (j.params && typeof j.params.name === 'string') ? j.params.name : '';
+        var may = String((meta && meta.tools) || '').split(' ').filter(Boolean);
+        if (!name || may.indexOf(name) < 0) return 'the tool ' + (name || '(none)') + ' was not approved when this login was saved';
+        return '';
+    }
     // '' when the request may go, or the reason it may not. savedHost: the host saved with the login. headers: the
     // extra request headers the page asks for (only the tool's own protocol headers pass).
-    function almRequestProblem(tool, method, rawUrl, savedHost, headers) {
+    // meta, body: only an MCP server's rule reads them (what was saved with the login; the message).
+    function almRequestProblem(tool, method, rawUrl, savedHost, headers, meta, body) {
         var R = Object.prototype.hasOwnProperty.call(ALM_RULES, tool) ? ALM_RULES[tool] : null; if (!R) return 'not a connected tool';
         var m = String(method || '').toUpperCase();
         var u; try { u = new URL(String(rawUrl)); } catch (_) { return 'not a valid address'; }
@@ -87,6 +111,7 @@
         var mm = R.root.exec(u.pathname); if (!mm) return 'only the tool\u2019s REST API is reached';
         var hk = Object.keys(headers || {}).map(function (k) { return String(k).toLowerCase(); }).filter(function (k) { return R.headers.indexOf(k) < 0; });
         if (hk.length) return 'the header ' + hk[0] + ' is not sent to this tool';
+        if (R.mcp) return mcpRequestProblem(m, u, meta, body);
         var rest = mm[1];
         if (m === 'GET') return '';
         var keys = []; u.searchParams.forEach(function (v, k) { keys.push(k); });
@@ -916,6 +941,382 @@
         link: null, comment: null
     };
 
+    // ---- An MCP server (Model Context Protocol, Streamable HTTP). 27 Nov 2026, TD-11.
+    // Waqas, to Violet, 6 Nov 2026: "Safety Lab will pull the Jama and GENESYS data from Violet's MCP on its own
+    // schedule", "every change that comes in ... waits in Safety Lab until an engineer accepts it". This driver reads
+    // any MCP server the same way; nothing in it is Violet's. READ ONLY: it has no update, create, link or comment,
+    // and the fence lets through nothing but the handshake, the tool list and the tools named with the login.
+    //
+    // An MCP server offers tools, and each server names and shapes its own. So the connection says how to read it,
+    // as one or more READERS (one per kind of data behind the server: "Jama", "GENESYS"):
+    //   sources  the tool that lists what can be read (projects, sets, folders). Optional.
+    //   items    the tool that lists the items of one source, a page at a time.
+    //   one      the tool that returns one item by its id. Optional.
+    // with the argument names each tool takes and, when the server's field names are not the usual ones, where each
+    // field is. A source is "<reader key>|<the server's source id>"; an item is "<reader key>:<the server's item id>",
+    // so two readers can never collide.
+    var MCP_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
+    var MCP_F = {
+        id: ['id', 'itemId', 'globalId', 'uuid', 'guid', 'identifier', 'uri'],
+        key: ['key', 'documentKey', 'displayId', 'number', 'identifier', 'id'],
+        name: ['name', 'title', 'summary', 'label'],
+        text: ['text', 'description', 'body', 'content', 'statement'],
+        parent: ['parentId', 'parent', 'parent_id', 'parentItem'],
+        sort: ['sort', 'sortOrder', 'sequence', 'order', 'index', 'position'],
+        type: ['type', 'itemType', 'kind', 'class'],
+        modified: ['modified', 'modifiedDate', 'lastModified', 'lastModifiedDate', 'updatedAt', 'updated', 'version', 'revision', 'etag']
+    };
+    var MCP_LISTS = ['items', 'data', 'results', 'records', 'elements', 'entities', 'sources', 'containers', 'projects', 'sets', 'folders', 'documents', 'value'];
+    var MCP_NEXT = ['nextCursor', 'next_cursor', 'nextPageToken', 'pageInfo.endCursor', 'meta.nextCursor'];
+    var MCP_TOTAL = ['total', 'totalCount', 'totalResults', 'pageInfo.totalResults', 'meta.pageInfo.totalResults', 'meta.total'];
+    var MCP_ARGS = {
+        source: ['source', 'sourceId', 'container', 'containerId', 'set', 'setId', 'folder', 'folderId', 'collection', 'collectionId', 'document', 'documentId', 'project', 'projectId', 'parent', 'parentId'],
+        cursor: ['cursor', 'nextCursor', 'pageToken', 'after'],
+        offset: ['offset', 'startAt', 'start', 'skip'],
+        limit: ['limit', 'maxResults', 'pageSize', 'count', 'top'],
+        id: ['id', 'itemId', 'item', 'guid', 'uuid', 'globalId', 'key', 'identifier', 'uri']
+    };
+    var MCP_SKIP = 'folder, set, component, text, heading';
+    function mcpGet(o, path) {
+        var cur = o, parts = String(path || '').split('.').filter(Boolean);
+        for (var i = 0; i < parts.length; i++) { if (cur == null || typeof cur !== 'object') return undefined; cur = cur[parts[i]]; }
+        return cur;
+    }
+    // the first of the candidate fields that holds something; an object there gives its own id (a parent: { id })
+    function mcpPick(o, cands, own) {
+        var list = S(own) ? [S(own)] : arrOf(cands);
+        for (var i = 0; i < list.length; i++) {
+            var v = mcpGet(o, list[i]);
+            if (v != null && typeof v === 'object' && !Array.isArray(v)) v = v.id != null ? v.id : (v.key != null ? v.key : null);
+            if (v != null && v !== '' && typeof v !== 'object') return v;
+        }
+        return null;
+    }
+    // where the list is in an answer: the path that was said, the answer itself, a usual name, or its only list
+    function mcpArr(data, path) {
+        if (S(path)) { var p = mcpGet(data, path); return Array.isArray(p) ? p : null; }
+        if (Array.isArray(data)) return data;
+        if (!data || typeof data !== 'object') return null;
+        for (var i = 0; i < MCP_LISTS.length; i++) { if (Array.isArray(data[MCP_LISTS[i]])) return data[MCP_LISTS[i]]; }
+        var ks = Object.keys(data).filter(function (k) { return Array.isArray(data[k]); });
+        return ks.length === 1 ? data[ks[0]] : null;
+    }
+    // an answer that came as an event stream: the JSON-RPC message with this id
+    function mcpMessage(text, id) {
+        var t = String(text || '');
+        if (/^\s*[\[{]/.test(t)) { try { return JSON.parse(t); } catch (_) { return null; } }
+        var events = t.replace(/\r\n/g, '\n').split('\n\n'), found = null;
+        events.forEach(function (ev) {
+            var data = ev.split('\n').filter(function (l) { return l.indexOf('data:') === 0; }).map(function (l) { return l.slice(5).replace(/^ /, ''); }).join('\n');
+            if (!data) return;
+            try { var j = JSON.parse(data); if (j && typeof j === 'object' && j.id === id && (j.result !== undefined || j.error !== undefined)) found = j; } catch (_) {}
+        });
+        return found;
+    }
+    // the argument names a tool takes, read from its own description (inputSchema)
+    function mcpGuess(tool) {
+        var props = (tool && tool.inputSchema && tool.inputSchema.properties) || {}, names = Object.keys(props), out = {};
+        Object.keys(MCP_ARGS).forEach(function (k) {
+            var hit = MCP_ARGS[k].filter(function (c) { return names.indexOf(c) >= 0; })[0];
+            if (hit) { out[k] = hit; var ty = props[hit] && props[hit].type; out[k + 'Num'] = ty === 'integer' || ty === 'number'; }
+        });
+        return out;
+    }
+    function mcpHash(s) { var h = 5381, t = String(s); for (var i = 0; i < t.length; i++) h = ((h * 33) ^ t.charCodeAt(i)) >>> 0; return 'h' + h.toString(36); }
+    function mcpText(v) { var t = v == null ? '' : String(v); return /<[a-z!\/][^>]*>/i.test(t) ? plain(t) : S(t); }
+    // one item of the server, as the engine's item. null when it has no id; false when its type is one to skip.
+    function mcpItem(raw, reader, i) {
+        if (!raw || typeof raw !== 'object') return null;
+        var f = (reader && reader.fields) || {};
+        var id = mcpPick(raw, MCP_F.id, f.id); if (id == null) return null;
+        var type = S(mcpPick(raw, MCP_F.type, f.type));
+        var skip = String(reader && reader.skipTypes != null ? reader.skipTypes : MCP_SKIP).split(',').map(function (x) { return x.trim().toLowerCase(); }).filter(Boolean);
+        if (type && skip.indexOf(type.toLowerCase()) >= 0) return false;
+        var name = mcpText(mcpPick(raw, MCP_F.name, f.name)), text = mcpText(mcpPick(raw, MCP_F.text, f.text));
+        var parent = mcpPick(raw, MCP_F.parent, f.parent), sort = Number(mcpPick(raw, MCP_F.sort, f.sort));
+        var mod = mcpPick(raw, MCP_F.modified, f.modified);
+        var k = reader.key + ':';
+        return { id: k + String(id), key: S(mcpPick(raw, MCP_F.key, f.key)) || String(id), name: name, text: text,
+                 // a server that gives no change mark: any change to the words or the place is the mark
+                 modified: mod != null ? String(mod) : mcpHash(name + '|' + text + '|' + (parent == null ? '' : parent)),
+                 parentId: parent == null ? null : k + String(parent), sort: isFinite(sort) && mcpPick(raw, MCP_F.sort, f.sort) != null ? sort : i, type: type };
+    }
+    function mcpReaders(c) { return arrOf(c && c.readers).filter(function (r) { return r && S(r.key) && r.items && S(r.items.tool); }); }
+    function mcpTools(c) {
+        var out = [];
+        arrOf(c && c.readers).forEach(function (r) { [r && r.sources, r && r.items, r && r.one].forEach(function (x) { var t = S(x && x.tool); if (t && out.indexOf(t) < 0) out.push(t); }); });
+        return out;
+    }
+    function mcpNum(v, isNum) { return isNum && /^-?\d+$/.test(String(v)) ? Number(v) : v; }
+    var _mcpOpen = null, _mcpId = 0;   // this session's handshake with the server: { url, sid, ver }
+    DRIVERS.mcp = {
+        id: 'mcp', container: 'source', containers: 'sources', readOnly: true, canOwn: false, needsFlag: 'toolMcp', everyDefault: 15,
+        auths: [['bearer', 'Access token']],
+        get label() { var pc = _pc(), c = pc && pc.almTools && pc.almTools.mcp; return S(c && c.label) || 'MCP server'; },
+        get short() { return this.label; },
+        hint: 'Safety Lab reads from an MCP server (Model Context Protocol), for example an integration platform that reaches Jama and GENESYS. It only reads: the items wait in Incoming changes for an engineer to accept and sign, and Safety Lab never writes to the server.',
+        configured: function (c) { return !!(c && c.baseUrl && mcpReaders(c).length); },
+        where: function (c) { return _host(c.baseUrl) + ' · ' + (mcpReaders(c).map(function (r) { return r.name || r.key; }).join(', ') || 'nothing to read yet'); },
+        // one JSON-RPC message. A request gives back its result; a notification gives back nothing.
+        async rpc(c, req, method, params, again) {
+            var self = this, isCall = method !== 'notifications/initialized';
+            if (method !== 'initialize' && isCall && (!_mcpOpen || _mcpOpen.url !== c.baseUrl)) await self.open(c, req);
+            var s = (_mcpOpen && _mcpOpen.url === c.baseUrl) ? _mcpOpen : { url: c.baseUrl, sid: '', ver: '' };
+            var msg = { jsonrpc: '2.0', method: method }; if (isCall) msg.id = ++_mcpId; if (params !== undefined) msg.params = params;
+            var h = { 'accept': 'application/json, text/event-stream', 'content-type': 'application/json' };
+            if (s.ver) h['mcp-protocol-version'] = s.ver;
+            if (s.sid) h['mcp-session-id'] = s.sid;
+            var r = await req('POST', c.baseUrl, JSON.stringify(msg), { raw: true, headers: h, okStatus: [400, 404] });
+            if (r.status === 404 || r.status === 400) {
+                // the server has let the session go (it answers 404, some answer 400): shake hands again, once
+                if (s.sid && !again && method !== 'initialize') { _mcpOpen = null; return self.rpc(c, req, method, params, true); }
+                var why = ''; try { var je = mcpMessage(r.text, msg.id); why = S(je && je.error && je.error.message); } catch (_) {}
+                throw new Error(self.label + ' answered HTTP ' + r.status + (why ? ': ' + why : '') + '.');
+            }
+            if (!isCall) return null;
+            var j = mcpMessage(r.text, msg.id);
+            if (!j) throw new Error(self.label + ' did not answer ' + method + ' with a JSON-RPC message.');
+            if (j.error) throw new Error(self.label + ' says: ' + (S(j.error.message) || ('error ' + j.error.code)));
+            if (method === 'initialize') j.result = Object.assign({}, j.result, { _session: r.session || '' });
+            return j.result;
+        },
+        async open(c, req) {
+            _mcpOpen = null;
+            var res = await this.rpc(c, req, 'initialize', { protocolVersion: MCP_VERSIONS[0], capabilities: {}, clientInfo: { name: 'Safety Lab', version: '1' } });
+            var ver = S(res && res.protocolVersion);
+            if (MCP_VERSIONS.indexOf(ver) < 0) throw new Error(this.label + ' speaks MCP version ' + (ver || '(none)') + ', which Safety Lab does not. It speaks ' + MCP_VERSIONS.join(', ') + '.');
+            _mcpOpen = { url: c.baseUrl, sid: S(res && res._session), ver: ver, name: S(res && res.serverInfo && res.serverInfo.name) };
+            try { await this.rpc(c, req, 'notifications/initialized'); } catch (_) {}
+            return _mcpOpen;
+        },
+        async tools(c, req) {
+            var out = [], cursor;
+            for (var g = 0; g < 50; g++) {
+                var r = await this.rpc(c, req, 'tools/list', cursor ? { cursor: cursor } : {});
+                arrOf(r && r.tools).forEach(function (t) { if (t && S(t.name)) out.push({ name: S(t.name), description: S(t.description), inputSchema: t.inputSchema || {} }); });
+                cursor = S(r && r.nextCursor); if (!cursor) break;
+            }
+            return out;
+        },
+        // a tool's answer, as data: its structured answer, or its text read as JSON
+        async call(c, req, name, args) {
+            var r = await this.rpc(c, req, 'tools/call', { name: name, arguments: args || {} });
+            var texts = arrOf(r && r.content).filter(function (x) { return x && x.type === 'text'; }).map(function (x) { return String(x.text || ''); });
+            if (r && r.isError) throw new Error(this.label + ' refused ' + name + ': ' + (texts.join(' ').slice(0, 300) || 'no reason given') + '.');
+            if (r && r.structuredContent && typeof r.structuredContent === 'object') return r.structuredContent;
+            for (var i = 0; i < texts.length; i++) { try { var j = JSON.parse(texts[i]); if (j && typeof j === 'object') return j; } catch (_) {} }
+            throw new Error(this.label + ' answered ' + name + ' with text that is not data Safety Lab can read.');
+        },
+        // every page of a tool that lists things
+        async pages(c, req, x, args, path, each) {
+            var a = Object.assign({}, args), lim = Math.max(1, Math.min(1000, Number(x.limit) || 100)), off = 0, firstSeen = null, capped = false;
+            if (S(x.limitArg)) a[x.limitArg] = lim;
+            for (var g = 0; ; g++) {
+                if (g >= ((W.SLAlm && W.SLAlm._mcpPageCap) || 500)) { capped = true; break; }
+                var data = await this.call(c, req, x.tool, a);
+                var arr = mcpArr(data, path);
+                if (!arr) throw new Error('The answer of ' + x.tool + ' has no list Safety Lab can find. Say where the list is in Connection settings (Details).');
+                var first = arr.length ? JSON.stringify(arr[0]).slice(0, 400) : '';
+                if (g > 0 && first && first === firstSeen) break;   // the server is not turning the page: what it gave is what there is
+                if (g === 0) firstSeen = first;
+                arr.forEach(each);
+                if (!arr.length) break;
+                if (S(x.cursorArg)) { var nc = mcpPick(data, MCP_NEXT); if (nc == null || nc === false) break; a[x.cursorArg] = nc; continue; }
+                if (S(x.offsetArg)) {
+                    off += arr.length;
+                    var total = mcpPick(data, MCP_TOTAL);
+                    if (total != null ? off >= Number(total) : arr.length < lim) break;
+                    a[x.offsetArg] = off; continue;
+                }
+                break;
+            }
+            return { capped: capped };
+        },
+        async listContainers(c, req) {
+            var out = [], self = this, rs = mcpReaders(c);
+            for (var i = 0; i < rs.length; i++) {
+                var r = rs[i], sx = r.sources || {};
+                if (!S(sx.tool)) { out.push({ id: r.key + '|', name: (r.name || r.key) + ': everything ' + r.items.tool + ' returns', where: r.name || r.key }); continue; }
+                var f = r.sourceFields || {};
+                await self.pages(c, req, sx, sx.args || {}, r.sourcesPath, function (raw) {
+                    var id = mcpPick(raw, MCP_F.id, f.id); if (id == null) return;
+                    var ty = S(mcpPick(raw, MCP_F.type, f.type));
+                    out.push({ id: r.key + '|' + String(id), name: mcpText(mcpPick(raw, MCP_F.name, f.name)) || String(id), where: [r.name || r.key, ty].filter(Boolean).join(', '),
+                               kind: /assum/i.test(ty) ? 'asm' : (/func/i.test(ty) ? 'fn' : 'req') });
+                });
+            }
+            return out;
+        },
+        async read(c, req, container) {
+            var cut = String(container).indexOf('|'), key = cut < 0 ? String(container) : String(container).slice(0, cut), sid = cut < 0 ? '' : String(container).slice(cut + 1);
+            var r = mcpReaders(c).filter(function (x) { return x.key === key; })[0];
+            if (!r) throw new Error('This source was chosen from a reader (' + key + ') that is no longer in Connection settings.');
+            var ix = r.items, args = Object.assign({}, ix.args || {});
+            if (sid) { if (!S(ix.sourceArg)) throw new Error('Connection settings do not say which argument of ' + ix.tool + ' takes the source.'); args[ix.sourceArg] = mcpNum(sid, ix.sourceNum); }
+            var out = [], seen = {}, noId = 0, n = 0;
+            var pg = await this.pages(c, req, ix, args, r.itemsPath, function (raw) {
+                var it = mcpItem(raw, r, n++);
+                if (it === null) { noId++; return; }
+                if (it === false || seen[it.id]) return;
+                seen[it.id] = 1; it.container = String(container); out.push(it);
+            });
+            var warn = [];
+            if (noId) warn.push(noId + ' item(s) from ' + this.label + ' (' + (r.name || r.key) + ') have no id Safety Lab can find, so they are not staged. Say which field is the id in Connection settings (Details).');
+            if (pg.capped) warn.push(this.label + ' (' + (r.name || r.key) + ') has more items in this source than Safety Lab reads in one check (' + ((W.SLAlm && W.SLAlm._mcpPageCap) || 500) + ' pages). Nothing from it is flagged as missing.');
+            out.sort(function (a, b) { return a.sort - b.sort; });
+            return { items: out, warnings: warn, partial: !!pg.capped };
+        },
+        async seen(c, req, id) {
+            var cut = String(id).indexOf(':'), key = String(id).slice(0, cut), raw = String(id).slice(cut + 1);
+            var r = mcpReaders(c).filter(function (x) { return x.key === key; })[0];
+            if (!r || !r.one || !S(r.one.tool) || !S(r.one.idArg)) return null;
+            var a = Object.assign({}, r.one.args || {}); a[r.one.idArg] = mcpNum(raw, r.one.idNum);
+            var data = await this.call(c, req, r.one.tool, a);
+            // the item itself, or the item inside the usual wrapper ({ data: {...} }, { item: {...} })
+            var it = mcpItem(data, r, 0);
+            if (!it && data && typeof data === 'object') { var wrap = ['item', 'data', 'result', 'entity', 'value'].filter(function (k) { return data[k] && typeof data[k] === 'object' && !Array.isArray(data[k]); })[0]; if (wrap) it = mcpItem(data[wrap], r, 0); }
+            return it ? { id: it.id, name: it.name, text: it.text, modified: it.modified } : null;
+        },
+        update: null, create: null, link: null, comment: null,
+
+        // ---- the connection screen
+        setupUi: async function (T) {
+            var drv = this, NS = 'SLAlm.ui(\'mcp\')';
+            var w = drv._w = { tools: null, readers: JSON.parse(JSON.stringify(arrOf(T.cfg().readers))) };
+            var btn = function (label, js, primary) { return '<button type="button" class="ckpt-m-btn' + (primary ? ' ckpt-m-btn-primary' : '') + '" onclick="' + js + '">' + label + '</button>'; };
+            var val = function (id) { var e = document.getElementById(id); return e ? String(e.value || '').trim() : ''; };
+            var err = function (t) { var e = document.getElementById('mcp-err'); if (e) e.textContent = t || ''; };
+            var slug = function (name) {
+                var base = String(name || 'reader').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24) || 'reader', k = base, n = 2;
+                while (w.readers.some(function (r) { return r.key === k; })) k = base + '-' + (n++);
+                return k;
+            };
+            var toolSel = function (i, role, cur, none) {
+                var names = (w.tools || []).map(function (t) { return t.name; }); if (cur && names.indexOf(cur) < 0) names.unshift(cur);
+                return '<select onchange="' + NS + '.set(' + i + ', \'' + role + '.tool\', this.value)">' + (none ? '<option value="">' + _esc(none) + '</option>' : '<option value="">Choose</option>') +
+                    names.map(function (n) { return '<option value="' + _esc(n) + '"' + (n === cur ? ' selected' : '') + '>' + _esc(n) + '</option>'; }).join('') + '</select>';
+            };
+            var txt = function (i, path, v, ph, wide) { return '<input type="text" class="cx-num" style="width:' + (wide ? 260 : 150) + 'px" value="' + _esc(v == null ? '' : v) + '" placeholder="' + _esc(ph || '') + '" onchange="' + NS + '.set(' + i + ', \'' + path + '\', this.value)">'; };
+            var argsText = function (o) { try { return o && Object.keys(o).length ? JSON.stringify(o) : ''; } catch (_) { return ''; } };
+            var readerHtml = function (r, i) {
+                var sx = r.sources || {}, ix = r.items || {}, ox = r.one || {}, f = r.fields || {};
+                var desc = function (n) { var t = (w.tools || []).filter(function (x) { return x.name === n; })[0]; return t && t.description ? '<div class="cx-dim">' + _esc(t.description.slice(0, 200)) + '</div>' : ''; };
+                var row = function (label, a, b) { return '<tr><td>' + label + '</td><td>' + a + '</td><td>' + (b || '') + '</td></tr>'; };
+                return '<div class="cx-sub" data-reader="' + _esc(r.key) + '"><div class="cx-row cx-gap"><label class="cx-lab cx-grow">What this reads (a name your engineers will see, for example Jama)' +
+                    '<input type="text" value="' + _esc(r.name || '') + '" onchange="' + NS + '.set(' + i + ', \'name\', this.value)"></label><span class="cx-right">' + btn('Remove', NS + '.del(' + i + ')') + '</span></div>' +
+                    '<table class="cx-table"><thead><tr><th>Job</th><th>The server’s tool</th><th>Takes</th></tr></thead><tbody>' +
+                    row('List what can be read', toolSel(i, 'sources', S(sx.tool), 'None: one source, everything the items tool returns') + desc(sx.tool), '') +
+                    row('List the items of one source', toolSel(i, 'items', S(ix.tool)) + desc(ix.tool), S(ix.tool) ? 'the source as ' + txt(i, 'items.sourceArg', ix.sourceArg, 'argument name') : '') +
+                    row('Return one item by its id', toolSel(i, 'one', S(ox.tool), 'None') + desc(ox.tool), S(ox.tool) ? 'the id as ' + txt(i, 'one.idArg', ox.idArg, 'argument name') : '') +
+                    '</tbody></table>' +
+                    '<details class="cx-fold"><summary>Details: paging, fixed arguments and field names (' + (Object.keys(f).filter(function (k) { return S(f[k]); }).length) + ' field name(s) set)</summary>' +
+                    '<div class="cx-dim">Safety Lab fills these from each tool’s own description and finds the usual field names by itself. Change one only when a check says it could not find something.</div>' +
+                    '<table class="cx-table"><tbody>' +
+                    row('Paging of the items tool', 'page size as ' + txt(i, 'items.limitArg', ix.limitArg, 'argument name') + ' of ' + txt(i, 'items.limit', ix.limit, '100'), 'next page as cursor ' + txt(i, 'items.cursorArg', ix.cursorArg, 'argument name') + ' or offset ' + txt(i, 'items.offsetArg', ix.offsetArg, 'argument name')) +
+                    row('Fixed arguments (JSON)', 'sources ' + txt(i, 'sources.args', argsText(sx.args), '{}', true), 'items ' + txt(i, 'items.args', argsText(ix.args), '{}', true)) +
+                    row('Where the list is in an answer', 'sources ' + txt(i, 'sourcesPath', r.sourcesPath, 'found by itself'), 'items ' + txt(i, 'itemsPath', r.itemsPath, 'found by itself')) +
+                    row('Field names of an item', ['id', 'key', 'name', 'text'].map(function (k) { return k + ' ' + txt(i, 'fields.' + k, f[k], MCP_F[k][0]); }).join(' '), ['parent', 'sort', 'type', 'modified'].map(function (k) { return k + ' ' + txt(i, 'fields.' + k, f[k], MCP_F[k][0]); }).join(' ')) +
+                    row('Item types to leave out', txt(i, 'skipTypes', r.skipTypes != null ? r.skipTypes : MCP_SKIP, MCP_SKIP, true), '') +
+                    '</tbody></table></details></div>';
+            };
+            var paint = function () {
+                var box = document.getElementById('mcp-readers'); if (!box) return;
+                var c = T.cfg();
+                if (!w.tools && !w.readers.length) { box.innerHTML = '<div class="cx-dim">Connect first. Safety Lab then lists the server’s tools, and you say which ones list what can be read and return its items.</div>'; return; }
+                box.innerHTML = (w.tools ? '<details class="cx-fold"><summary>The server’s tools (' + w.tools.length + ')</summary><table class="cx-table"><tbody>' + w.tools.map(function (t) { return '<tr><td><b>' + _esc(t.name) + '</b></td><td class="cx-dim">' + _esc(t.description.slice(0, 240)) + '</td></tr>'; }).join('') + '</tbody></table></details>'
+                    : '<div class="cx-dim">Press Connect to list the server’s tools again' + (c.baseUrl ? '' : '') + '.</div>') +
+                    w.readers.map(readerHtml).join('') +
+                    '<div class="cx-row cx-gap">' + btn('Add something to read', NS + '.add()') + '</div>';
+            };
+            var keep = function (url, name) { var c = T.cfg(); c.baseUrl = url; c.label = name; c.auth = 'bearer'; return c; };
+            var meta = function (url, readers) { var u = new URL(url); return { path: u.pathname, tools: mcpTools({ readers: readers }).join(' ') }; };
+            Object.assign(T.ui, {
+                connect: async function () {
+                    var url = val('mcp-url'), name = val('mcp-name') || 'MCP server', tok = (document.getElementById('mcp-tok') || {}).value || '';
+                    if (!/^https:\/\/[^\/\s]+/i.test(url)) { err('The address must start with https://'); return; }
+                    var c0 = T.cfg(), moved = S(c0.baseUrl) !== url;
+                    if (!tok && (moved || !T.hasLogin())) { err('Type the token.'); return; }
+                    err('Connecting...');
+                    // the tools already chosen stay approved; a tool chosen after this is approved when Save is pressed
+                    if (tok) { var r = await T.saveLogin(url, 'bearer', '', tok, '', meta(url, w.readers)); if (!r.ok) { err(r.err); return; } }
+                    T.cfgSave(Object.assign(keep(url, name), { readers: arrOf(c0.readers) }), moved ? ((c0.baseUrl ? 'Changed the address of ' : 'Connected ') + name + ': ' + _host(url)) : '');
+                    _mcpOpen = null;
+                    try { w.tools = await drv.tools(T.cfg(), T.req); err(''); _toast(name + ' answered: ' + w.tools.length + ' tool(s).', 'success'); if (!w.readers.length) T.ui.add(); else paint(); }
+                    catch (e) { err('Saved, but the server could not be read: ' + ((e && e.message) || e)); }
+                },
+                add: function () { w.readers.push({ key: slug('reader'), name: '', sources: {}, items: {}, one: {}, fields: {} }); paint(); },
+                del: function (i) {
+                    var r = w.readers[i]; if (!r) return;
+                    var used = arrOf(T.cfg().picks).some(function (p) { return String(p.container).indexOf(r.key + '|') === 0; });
+                    if (used) { err('Sources from “' + (r.name || r.key) + '” are linked. Untick them in Choose what is linked first.'); return; }
+                    w.readers.splice(i, 1); paint();
+                },
+                set: function (i, path, v) {
+                    var r = w.readers[i]; if (!r) return;
+                    var parts = path.split('.'), o = r; v = String(v == null ? '' : v).trim();
+                    for (var k = 0; k < parts.length - 1; k++) { if (!o[parts[k]] || typeof o[parts[k]] !== 'object') o[parts[k]] = {}; o = o[parts[k]]; }
+                    var last = parts[parts.length - 1];
+                    // a reader's key is part of every item's id, so it is set from its name once, before it is first saved
+                    if (path === 'name' && v && !arrOf(T.cfg().readers).some(function (x) { return x && x.key === r.key; })) { r.key = ''; r.key = slug(v); }
+                    if (last === 'args') { if (!v) delete o.args; else { try { var j = JSON.parse(v); if (!j || typeof j !== 'object' || Array.isArray(j)) throw 0; o.args = j; } catch (_) { err('Fixed arguments are a JSON object, like {"project": 12}.'); return; } } }
+                    else if (last === 'limit') { if (v) o.limit = Math.max(1, Math.min(1000, Number(v) || 100)); else delete o.limit; }
+                    else if (v || last === 'skipTypes') o[last] = v; else delete o[last];
+                    err('');
+                    if (last === 'tool') {
+                        // the argument names, from the tool's own description
+                        var t = (w.tools || []).filter(function (x) { return x.name === v; })[0], g = mcpGuess(t), role = parts[0];
+                        if (role === 'items') { ['sourceArg', 'cursorArg', 'offsetArg', 'limitArg'].forEach(function (a) { delete o[a]; }); if (g.source) { o.sourceArg = g.source; o.sourceNum = !!g.sourceNum; } if (g.cursor) o.cursorArg = g.cursor; else if (g.offset) o.offsetArg = g.offset; if (g.limit) o.limitArg = g.limit; }
+                        if (role === 'sources') { ['cursorArg', 'offsetArg', 'limitArg'].forEach(function (a) { delete o[a]; }); if (g.cursor) o.cursorArg = g.cursor; else if (g.offset) o.offsetArg = g.offset; if (g.limit) o.limitArg = g.limit; }
+                        if (role === 'one') { delete o.idArg; if (g.id) { o.idArg = g.id; o.idNum = !!g.idNum; } }
+                        paint();
+                    }
+                },
+                save: async function () {
+                    var url = val('mcp-url'), name = val('mcp-name') || 'MCP server', tok = (document.getElementById('mcp-tok') || {}).value || '';
+                    if (!/^https:\/\/[^\/\s]+/i.test(url)) { err('The address must start with https://'); return; }
+                    var bad = '';
+                    w.readers.forEach(function (r) {
+                        if (bad) return;
+                        if (!S(r.name)) bad = 'Give each thing Safety Lab reads a name (for example Jama).';
+                        else if (!S(r.items && r.items.tool)) bad = S(r.name) + ': choose the tool that lists the items of one source.';
+                        else if (S(r.sources && r.sources.tool) && !S(r.items.sourceArg)) bad = S(r.name) + ': say which argument of ' + r.items.tool + ' takes the source.';
+                        else if (S(r.one && r.one.tool) && !S(r.one.idArg)) bad = S(r.name) + ': say which argument of ' + r.one.tool + ' takes the id.';
+                    });
+                    if (!w.readers.length) bad = 'Add at least one thing to read.';
+                    if (bad) { err(bad); return; }
+                    var c0 = T.cfg(), moved = S(c0.baseUrl) !== url, m = meta(url, w.readers), had = T.loginMeta();
+                    // the tools Safety Lab may call are saved with the login, so a new tool needs the token once more
+                    var newTools = m.tools.split(' ').filter(function (t) { return t && String(had.tools || '').split(' ').indexOf(t) < 0; });
+                    if (!tok && (moved || !T.hasLogin() || newTools.length || S(had.path) !== m.path)) { err(newTools.length && T.hasLogin() && !moved ? 'Type the token once more: the tools Safety Lab may call (' + newTools.join(', ') + ') are saved with the login, so nothing else can ever be called with it.' : 'Type the token.'); return; }
+                    err('Saving...');
+                    if (tok) { var r = await T.saveLogin(url, 'bearer', '', tok, '', m); if (!r.ok) { err(r.err); return; } }
+                    var first = !drv.configured(c0), c = keep(url, name); c.readers = JSON.parse(JSON.stringify(w.readers));
+                    T.cfgSave(c, (first ? 'Connected ' : 'Changed the connection to ') + name + ': ' + _host(url) + ', reading ' + w.readers.map(function (r) { return r.name; }).join(', ') + ' (tools ' + m.tools.split(' ').join(', ') + ')');
+                    T.setWatch(!!(document.getElementById('mcp-watch') || {}).checked, val('mcp-every'));
+                    _mcpOpen = null; err('Testing...');
+                    try { var list = await drv.listContainers(T.cfg(), T.req); err(''); _toast(name + ': ' + list.length + ' source(s) can be read.', 'success'); W.SLAlm.close('alm-setup'); T.render(); if (!arrOf(T.cfg().picks).length) T.browse().catch(function (e) { _report(e, 'browse'); }); }
+                    catch (e) { err('Saved, but the test read failed: ' + ((e && e.message) || e)); T.render(); }
+                }
+            });
+            var c = T.cfg(), p = T.doorProblem();
+            await T.refreshHas();
+            var ov = T.modal('alm-setup', '<h3>MCP server: connection</h3><p class="cx-dim">' + _esc(drv.hint) + '</p>' +
+                (p ? '<div class="cx-warn">' + _esc(p) + '</div>' : '') +
+                '<div class="cx-pop-list"><label class="cx-lab">Name (what your engineers will see)<input type="text" id="mcp-name" value="' + _esc(c.label || '') + '" placeholder="MCP server"></label>' +
+                '<label class="cx-lab">Address of the MCP server<input type="url" id="mcp-url" value="' + _esc(c.baseUrl || '') + '" placeholder="https://"></label>' +
+                '<label class="cx-lab">Token<input type="password" id="mcp-tok" autocomplete="off" placeholder="' + (T.hasLogin() ? 'saved; type a new one to replace it' : '') + '"></label>' +
+                '<div class="cx-row cx-gap">' + btn('Connect', NS + '.connect()', !drv.configured(c)) + '</div>' +
+                '<div id="mcp-readers"></div>' +
+                '<label class="cx-radio"><input type="checkbox" id="mcp-watch"' + (T.watch() ? ' checked' : '') + '> Check when this project opens (this computer)</label>' +
+                '<label class="cx-lab">Check again every (minutes, while the project is open; 0 for never; this computer)<input type="number" id="mcp-every" min="0" max="1440" value="' + T.every() + '"></label>' +
+                '<div class="cx-dim">The token is kept ' + (_isDesktop() ? 'in this computer’s keychain' : 'in your Safety Lab server’s vault') + ' and is never part of the project. Saved with it: the address and the names of the tools above, so the token can never be used for another address or another tool. Everyone on the project shares the address, what is read and what is linked.</div></div>' +
+                '<div class="cx-err" role="alert" id="mcp-err"></div>' +
+                '<div class="cx-row cx-gap cx-pop-foot">' + btn('Save and test', NS + '.save()', drv.configured(c)) + (drv.configured(c) ? btn('Choose what is linked', NS + '.browse()') : '') + '<span class="cx-right">' + btn('Close', 'SLAlm.close(\'alm-setup\')') + '</span></div>');
+            paint();
+            return ov;
+        }
+    };
+
     // ================================================================== one connected tool
     function makeTool(drv) {
         var tid = drv.id;
@@ -938,12 +1339,31 @@
         function rcfg() { return Object.assign(_rt, cfg()); }
         function configured() { if (drv.configured) { try { return !!drv.configured(cfg()); } catch (_) { return false; } } var c = cfg(); return !!(c.baseUrl && c.project); }
         function watch() { try { return localStorage.getItem(WATCH) === '1'; } catch (_) { return false; } }
+        // 27 Nov 2026: checked again on a timer while the project is open ("on its own schedule"). Minutes, kept on
+        // this computer like the choice above; 0 is never. A driver may say its own starting value (everyDefault).
+        var EVERY = 'safetyLab.alm.' + tid + '.every';
+        function every() { var d = Number(drv.everyDefault) || 0; try { var v = localStorage.getItem(EVERY); if (v == null || v === '') return d; var n = Math.floor(Number(v)); return isFinite(n) ? Math.max(0, Math.min(1440, n)) : d; } catch (_) { return d; } }
+        function setWatch(on, mins) {
+            try { localStorage.setItem(WATCH, on ? '1' : '0'); } catch (_) {}
+            if (mins != null && mins !== '') { var n = Math.floor(Number(mins)); try { localStorage.setItem(EVERY, String(isFinite(n) ? Math.max(0, Math.min(1440, n)) : 0)); } catch (_) {} }
+        }
+        var _last = Date.now(), _autoErr = '';
+        // the timer's turn: quiet, never on top of a check that is running, never without a project and a login
+        function tick(now) {
+            var m = every(); if (!m || state.checking) return false;
+            if (now - _last < m * 60000) return false;
+            var ok = false; try { ok = configured() && !doorProblem() && hasLogin(); } catch (_) { ok = false; }
+            if (!ok) return false;
+            _last = now;
+            check(true).then(function () { _autoErr = ''; }).catch(function (e) { _autoErr = (e && e.message) || String(e); _render(); });
+            return true;
+        }
 
         // ---- the login
-        var _deskHas = null;
+        var _deskHas = null, _deskMeta = {};
         async function refreshHas() {
             if (_isDesktop() && W.slabSecrets && typeof W.slabSecrets.status === 'function') {
-                try { var r = await W.slabSecrets.status(); _deskHas = ((r && r.secrets) || []).some(function (e) { return e && e.kind === tid; }); } catch (_) { _deskHas = false; }
+                try { var r = await W.slabSecrets.status(); var mine = ((r && r.secrets) || []).filter(function (e) { return e && e.kind === tid; })[0]; _deskHas = !!mine; _deskMeta = (mine && mine.meta) || {}; } catch (_) { _deskHas = false; _deskMeta = {}; }
             }
             return hasLogin();
         }
@@ -952,19 +1372,26 @@
             if (_isDesktop()) return !!_deskHas;
             var st = _store(); return !!(st && st.door() === 'vault' && st.has(tid + '_token'));
         }
+        // what was saved with the login (never the login): its host and, for an MCP server, its path and tools
+        function loginMeta() {
+            if (_isDesktop()) return _deskMeta || {};
+            var st = _store(); try { return (st && typeof st.meta === 'function' && st.meta(tid + '_token')) || {}; } catch (_) { return {}; }
+        }
         function doorProblem() {
             if (drv.local) { try { return (drv.problem && drv.problem()) || ''; } catch (_) { return ''; } }
             if (_desktopOld()) return 'This version of the desktop app cannot reach ' + drv.label + '. Update the app.';
             if (_isDesktop() && drv.needsOpts && !(W.slabBridge && W.slabBridge.toolOpts === true)) return 'This version of the desktop app cannot reach ' + drv.label + ' yet. Update the app.';
+            if (_isDesktop() && drv.needsFlag && !(W.slabBridge && W.slabBridge[drv.needsFlag] === true)) return 'This version of the desktop app cannot reach ' + drv.label + ' yet. Update the app.';
             if (_isDesktop()) return '';
             var st = _store();
             if (st && st.door() === 'vault') return '';
             return drv.label + ' connects through the Safety Lab desktop app or your company’s Safety Lab server, which keep the login in the computer’s keychain or the server’s vault. A browser-only session has nowhere safe to keep it.';
         }
-        async function saveLogin(baseUrl, auth, user, token, authHost) {
+        async function saveLogin(baseUrl, auth, user, token, authHost, more) {
             var p = doorProblem(); if (p) return { ok: false, err: p };
             var meta = { baseHost: _host(baseUrl), user: user || '', auth: auth };
             if (authHost) meta.authHost = String(authHost).toLowerCase();
+            if (more && typeof more === 'object') Object.keys(more).forEach(function (k) { if (more[k] != null && more[k] !== '') meta[k] = String(more[k]); });
             if (!meta.baseHost) return { ok: false, err: 'The address is not a valid https address.' };
             if (_isDesktop()) {
                 var r = await W.slabSecrets.save(tid, { user: user || '', token: token }, meta);
@@ -982,7 +1409,7 @@
         // { status, text, etag, location }, whatever its status, so the driver can read an ETag, a Location, or a 412.
         async function req(method, url, body, opts) {
             var c = cfg(), o = opts || {}, hdr = o.headers || {};
-            var bad = almRequestProblem(tid, method, url, _host(c.baseUrl), hdr); if (bad) throw new Error('Not sent: ' + bad + '.');
+            var bad = almRequestProblem(tid, method, url, _host(c.baseUrl), hdr, loginMeta(), body); if (bad) throw new Error('Not sent: ' + bad + '.');
             var p = doorProblem(); if (p) throw new Error(p);
             var scale = (W.SLAlm && W.SLAlm._waitScale != null ? W.SLAlm._waitScale : 1);
             for (var tries = 0; ; tries++) {
@@ -1013,7 +1440,7 @@
                 if (env) {
                     var es = Number(env.status) || 0;
                     if (es === 429 && tries < 3) { await _sleep(Math.min(60, Math.max(2, Number(env.retryAfter) || 10)) * 1000 * scale); continue; }
-                    if ((es >= 200 && es < 300) || es === 409 || es === 412 || (o.okStatus && o.okStatus.indexOf(es) >= 0)) return { status: es, text: String(env.text || ''), etag: env.etag || '', location: env.location || '' };
+                    if ((es >= 200 && es < 300) || es === 409 || es === 412 || (o.okStatus && o.okStatus.indexOf(es) >= 0)) return { status: es, text: String(env.text || ''), etag: env.etag || '', location: env.location || '', session: env.session || '' };
                     var e0 = new Error('HTTP ' + es + ' from ' + drv.label + ' at ' + _where(url) + (env.text ? ': ' + _clipText(env.text) : '')); e0.status = es; throw e0;
                 }
                 if (status === 429 && tries < 3) { await _sleep(Math.min(60, Math.max(2, wait || 10)) * 1000 * scale); continue; }
@@ -1039,7 +1466,7 @@
             var dp = doorProblem(); if (dp) throw new Error(dp);
             if (!hasLogin()) await refreshHas();
             if (!hasLogin()) throw new Error('No ' + drv.label + ' login is saved for you on this ' + (_isDesktop() ? 'computer' : 'server') + ': open Connection settings and sign in.');
-            state.checking = true;
+            state.checking = true; _last = Date.now();
             try {
                 var c = rcfg(), pk = picks(), warn = [], groups = {}, read = {};
                 state.seen = new Map();
@@ -1049,7 +1476,7 @@
                     state.progress = 'Reading ' + (p.containerName || p.container) + '...'; _render();
                     var r;
                     try { r = await drv.read(c, req, p.container, p); }
-                    catch (e) { warn.push('Could not read ' + drv.container + ' ' + (p.containerName || p.container) + ': ' + ((e && e.message) || e) + '. Nothing from it is flagged as missing.'); continue; }
+                    catch (e) { warn.push('Could not read ' + drv.container + ' ' + (p.containerName || p.container) + ': ' + String((e && e.message) || e).replace(/\.+$/, '') + '. Nothing from it is flagged as missing.'); continue; }
                     arrOf(r.warnings).forEach(function (w) { warn.push(w); });
                     var g = sc + '|' + p.kind;
                     (groups[g] = groups[g] || []);
@@ -1205,7 +1632,7 @@
         }
         // a pilot tool (DOORS Next, Cameo) sends nothing until sending has been proven on a real server; SLAlm._proveSend
         // switches it on for that proof (from the console, by Safety Lab), never from the page
-        function sendOn() { return !drv.pilotSend || !!(W.SLAlm && W.SLAlm._proveSend && W.SLAlm._proveSend[tid]); }
+        function sendOn() { if (drv.readOnly) return false; return !drv.pilotSend || !!(W.SLAlm && W.SLAlm._proveSend && W.SLAlm._proveSend[tid]); }
         function outgoing() {
             var out = [], C = W.SLConnections; if (!C || !configured() || !sendOn()) return out;
             // 1. items from the tool that Safety Lab now owns: Safety Lab's words, where they differ from the tool's copy
@@ -1241,6 +1668,7 @@
         }
         async function send(lines, signer, reason) {
             if (!configured()) return { ok: false, err: 'Connect ' + drv.label + ' first.' };
+            if (drv.readOnly) return { ok: false, err: 'Safety Lab only reads from ' + drv.label + '. Nothing is sent to it.' };
             if (!sendOn()) return { ok: false, err: 'Sending to ' + drv.label + ' is not switched on yet: it is switched on once it has been proven on a real ' + drv.label + ' server.' };
             var c = rcfg(), sc = sendCfg(), res = { ok: true, sent: 0, held: [], failed: [], items: [] };
             var note = 'Sent from Safety Lab by ' + signer + (reason ? ': ' + reason : '') + '.';
@@ -1324,6 +1752,7 @@
                 '<label class="cx-lab" id="alm-user-w"' + (_needsUser(auth) ? '' : ' style="display:none"') + '>Username<input type="text" id="alm-user" autocomplete="username" value="' + _esc(c.user || '') + '"></label>' +
                 '<label class="cx-lab"><span id="alm-tok-l">' + _secretWord(auth, true) + '</span><input type="password" id="alm-tok" autocomplete="off" placeholder="' + (hasLogin() ? 'saved; type a new one to replace it' : '') + '"></label>' +
                 '<label class="cx-radio"><input type="checkbox" id="alm-watch"' + (watch() ? ' checked' : '') + '> Check ' + _esc(drv.label) + ' when this project opens (this computer)</label>' +
+                '<label class="cx-lab">Check again every (minutes, while the project is open; 0 for never; this computer)<input type="number" id="alm-every" min="0" max="1440" value="' + every() + '"></label>' +
                 '<div class="cx-dim">The login is kept ' + (_isDesktop() ? 'in this computer’s keychain' : 'in your Safety Lab server’s vault') + ' and is never part of the project. Everyone on the project shares the address, the project and what is linked.</div></div>' +
                 '<div class="cx-err" role="alert" id="alm-err"></div>' +
                 '<div class="cx-row cx-gap cx-pop-foot">' + _btn('Save and test', NS + '.saveSetup()', true) + (configured() ? _btn('Choose what is linked', NS + '.browse()') : '') + '<span class="cx-right">' + _btn('Close', 'SLAlm.close(\'alm-setup\')') + '</span></div>';
@@ -1369,7 +1798,7 @@
                 (drv.extra || []).forEach(function (f) { if (xv[f.key]) c[f.key] = xv[f.key]; else delete c[f.key]; });
                 _rt = {};   // look-ups made for the old settings
                 cfgSave(c, (first ? 'Connected ' : 'Changed the connection to ') + drv.label + ': ' + _host(url) + ', project ' + proj);
-                try { localStorage.setItem(WATCH, (document.getElementById('alm-watch') || {}).checked ? '1' : '0'); } catch (_) {}
+                setWatch(!!(document.getElementById('alm-watch') || {}).checked, _val('alm-every'));
                 _err('alm-err', 'Testing...');
                 try { var nm = await drv.test(rcfg(), req); _err('alm-err', ''); _toast('Connected to ' + drv.label + ': ' + nm + '.', 'success'); _close('alm-setup'); _render(); if (!picks().length) browseUi().catch(function (e) { _report(e, 'browse'); }); }
                 catch (e) { _err('alm-err', 'Saved, but the test failed: ' + ((e && e.message) || e)); _render(); }
@@ -1402,7 +1831,7 @@
         var _containers = null;
         async function browseUi() {
             if (!configured()) { await setupUi(); return; }
-            _modal('alm-browse', '<h3>' + _esc(drv.label) + ': choose what is linked</h3><p class="cx-dim">Reading the ' + drv.containers + ' in ' + _esc(drv.local ? 'this project' : cfg().project) + '...</p>');
+            _modal('alm-browse', '<h3>' + _esc(drv.label) + ': choose what is linked</h3><p class="cx-dim">Reading the ' + drv.containers + ' in ' + _esc(drv.local ? 'this project' : (cfg().project || drv.label)) + '...</p>');
             var list;
             try { list = await drv.listContainers(rcfg(), req); _containers = list; }
             catch (e) { _modal('alm-browse', '<h3>' + _esc(drv.label) + '</h3><div class="cx-err">' + _esc((e && e.message) || e) + '</div><div class="cx-row">' + _btn('Connection settings', 'SLAlm.close(\'alm-browse\');SLConnections.setup(\'' + tid + '\')') + '<span class="cx-right">' + _btn('Close', 'SLAlm.close(\'alm-browse\')') + '</span></div>'); return; }
@@ -1419,6 +1848,7 @@
             _modal('alm-browse', html);
         }
         function sendSettingsHtml() {
+            if (drv.readOnly) return '<div class="cx-sub"><b>What Safety Lab sends to ' + _esc(drv.label) + '</b><div class="cx-dim">Nothing. Safety Lab only reads from ' + _esc(drv.label) + '; what it reads waits in Incoming changes for an engineer to accept and sign.</div></div>';
             var sc = sendCfg();
             var opts = function (k) {
                 var cur = (sc[k] || {}).container || '';
@@ -1439,20 +1869,23 @@
         var api = {
             id: tid, driver: drv, cfg: cfg, cfgSave: cfgSave, configured: configured, check: check, changes: changes, applyKeys: applyKeys, linkedRows: linkedRows,
             outgoing: outgoing, send: send, setup: setupUi, browse: browseUi, sendSettingsHtml: sendSettingsHtml, ui: ui, req: req, saveLogin: saveLogin, hasLogin: hasLogin, refreshHas: refreshHas,
-            state: function () { return state; }, _stage: restage
+            state: function () { return state; }, _stage: restage,
+            loginMeta: loginMeta, doorProblem: doorProblem, watch: watch, every: every, setWatch: setWatch, tick: tick, modal: _modal, render: _render
         };
         if (W.SLConnections && typeof W.SLConnections.register === 'function') {
             W.SLConnections.register(tid, {
-                label: drv.label, configured: configured,
+                label: drv.label,
+                // a tool the project names (an MCP server): the Connections page shows the name the project gave it
+                configured: function () { if (drv.readOnly) { try { var tt = W.SLConnections.TOOLS.filter(function (x) { return x.id === tid; })[0]; if (tt && tt.label !== drv.label) tt.label = drv.label; } catch (_) {} } return configured(); },
                 where: function () { if (drv.where) { try { return drv.where(cfg()); } catch (_) { return ''; } } var c = cfg(); return _host(c.baseUrl) + (c.project ? ' · project ' + c.project : ''); },
                 checkedAt: function () { return state.checkedAt; },
                 held: function () { return false; },
-                warnings: function () { var w = state.warnings.slice(); if (drv.notes) { try { w = w.concat(drv.notes(cfg()) || []); } catch (_) {} } return w; },
+                warnings: function () { var w = state.warnings.slice(); if (_autoErr) w.push('The last timed check of ' + drv.label + ' did not finish: ' + _autoErr); if (drv.notes) { try { w = w.concat(drv.notes(cfg()) || []); } catch (_) {} } return w; },
                 changes: changes, check: function (silent) { return check(!!silent); },
                 autoCheck: function () { return (drv.local && drv.autoCheck === true && configured()) || (watch() && hasLogin()); },
                 applyKeys: applyKeys, setup: function () { setupUi().catch(function (e) { _report(e, 'setup'); }); }, browse: function () { browseUi().catch(function (e) { _report(e, 'browse'); }); },
                 linkedRows: linkedRows, outgoing: outgoing, send: send, sendSettingsHtml: sendSettingsHtml,
-                canOwn: drv.canOwn !== false, pilot: function () { return !sendOn(); },
+                canOwn: drv.canOwn !== false, readOnly: !!drv.readOnly, every: every, pilot: function () { return !drv.readOnly && !sendOn(); },
                 decided: drv.decided ? function (lines, status, signer, why) { return drv.decided(lines, status, signer, why, api); } : null
             });
         }
@@ -1462,8 +1895,19 @@
 
     var tools = {};
     Object.keys(DRIVERS).forEach(function (k) { tools[k] = makeTool(DRIVERS[k]); });
+    // 27 Nov 2026: the timer. Twice a minute, each connected tool is asked whether its time has come. A tab nobody is
+    // looking at waits (the check runs as soon as it is looked at again), and so does a project that is being opened.
+    function tickAll(now) {
+        var n = 0;
+        try { if (typeof document !== 'undefined' && document.hidden) return 0; } catch (_) {}
+        try { var ack = W.SLChangeAck; if (ack && typeof ack.restoring === 'function' && ack.restoring()) return 0; } catch (_) {}
+        Object.keys(tools).forEach(function (k) { try { if (tools[k].tick(now == null ? Date.now() : now)) n++; } catch (e) { _report(e, 'timer'); } });
+        return n;
+    }
+    try { if (typeof setInterval === 'function') { var _tm = setInterval(function () { tickAll(); }, 30000); if (_tm && typeof _tm.unref === 'function') _tm.unref(); } } catch (_) {}
     W.SLAlm = {
-        RULES: ALM_RULES, almRequestProblem: almRequestProblem, plain: plain, wikiPlain: wikiPlain, parseXml: parseXml, rdfParse: rdfParse,
+        RULES: ALM_RULES, almRequestProblem: almRequestProblem, mcpRequestProblem: mcpRequestProblem, tickAll: tickAll,
+        mcp: { get: mcpGet, pick: mcpPick, arr: mcpArr, message: mcpMessage, guess: mcpGuess, item: mcpItem, tools: mcpTools, readers: mcpReaders, reset: function () { _mcpOpen = null; } }, plain: plain, wikiPlain: wikiPlain, parseXml: parseXml, rdfParse: rdfParse,
         buildTree: buildTree, diffTree: diffTree, applyTree: applyTree, diffFlat: diffFlat, applyFlat: applyFlat,
         drivers: DRIVERS, tools: tools, tool: function (id) { return tools[id] || null; },
         // 27 Nov 2026: a tool added while the app runs (one per Safety Lab API client that reaches the project)

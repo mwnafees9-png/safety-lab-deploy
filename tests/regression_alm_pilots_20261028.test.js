@@ -37,7 +37,7 @@ const check = (n, c, d) => { if (c) { pass++; console.log('  PASS  ' + n); } els
 const REPO = path.join(__dirname, '..');
 const read = p => fs.readFileSync(path.join(REPO, p), 'utf8');
 const MUTATIONS = {
-  pilot:     ['site/alm_engine.js', "function sendOn() { return !drv.pilotSend || !!(W.SLAlm && W.SLAlm._proveSend && W.SLAlm._proveSend[tid]); }", 'function sendOn() { return true; }'],
+  pilot:     ['site/alm_engine.js', "function sendOn() { if (drv.readOnly) return false; return !drv.pilotSend || !!(W.SLAlm && W.SLAlm._proveSend && W.SLAlm._proveSend[tid]); }", 'function sendOn() { return true; }'],
   canown:    ['site/connections.js', "if (owner === 'sl') { var ad0 = _ad[_tid(tool)]; if (ad0 && ad0.canOwn === false) return", "if (false) { var ad0 = _ad[_tid(tool)]; if (ad0 && ad0.canOwn === false) return"],
   headers:   ['site/alm_engine.js', "if (hk.length) return 'the header ' + hk[0] + ' is not sent to this tool';", ''],
   modpath:   ['site/alm_engine.js', "PUT: [/^resources\\/(?!MD_)[\\w-]+$/, /^resources\\/MD_[\\w-]+\\/structure$/]", "PUT: [/^resources\\/[\\w-]+$/, /^resources\\/MD_[\\w-]+\\/structure$/]"],

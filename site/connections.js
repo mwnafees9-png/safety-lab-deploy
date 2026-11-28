@@ -1,5 +1,5 @@
 // ============================================================================
-// connections.js, v1.2, 27 Nov 2026 (v1.2: tools can be added while the app runs, a tool is told what an engineer decided on its
+// connections.js, v1.3, 27 Nov 2026 (v1.3: the MCP server among the tools, and a read-only tool says so on its card. v1.2: tools can be added while the app runs, a tool is told what an engineer decided on its
 // lines, and a module can add a card to the Connections page: the Safety Lab API, api_connect.js). v1.1, 28 Oct 2026 (a change the
 // person made a moment ago is collected as theirs before the framework writes): Safety Lab Connections.
 //
@@ -44,7 +44,9 @@
         { id: 'doors', label: 'DOORS Next', how: 'OSLC and the DOORS Next REST API' },
         { id: 'codebeamer', label: 'Codebeamer', how: 'Codebeamer REST API' },
         { id: 'cameo', label: 'Cameo (Teamwork Cloud)', how: 'Teamwork Cloud REST API' },
-        { id: 'genesys', label: 'GENESYS', how: 'GENESYS REST API' }
+        { id: 'genesys', label: 'GENESYS', how: 'GENESYS REST API' },
+        // 27 Nov 2026: an MCP server Safety Lab reads from (alm_engine.js); the project gives it its name
+        { id: 'mcp', label: 'MCP server', how: 'Model Context Protocol, read only' }
     ];
     // a tool with no live connection yet: what works today
     var FILES = { doors: 'ReqIF files work today, from Requirements exchange.', cameo: 'XMI files work today, from Architecture import.', genesys: 'ReqIF and XMI files work today, from Requirements exchange and Architecture import.' };
@@ -391,11 +393,12 @@
             html += '<section class="cx-card"><div class="cx-row"><h4>' + _esc(t.label) + '</h4><span class="cx-pill ok">Connected</span><span class="cx-dim">' + _esc((a.where && a.where()) || '') + '</span><span class="cx-dim cx-right">' + _esc(_ago(a.checkedAt && a.checkedAt())) + '</span></div>' +
                 '<div class="cx-tiles">' +
                 '<div class="cx-tile"><b>' + _esc(_shortName(t.id)) + ' owns</b><span class="cx-big">' + toolOwn + ' linked item' + (toolOwn === 1 ? '' : 's') + '</span><span class="cx-dim">Locked in Safety Lab.</span></div>' +
-                '<div class="cx-tile"><b>Safety Lab owns</b><span class="cx-big">' + slOwn + ' linked item' + (slOwn === 1 ? '' : 's') + '</span><span class="cx-dim">Edited here, sent to ' + _esc(_shortName(t.id)) + '.</span></div>' +
+                '<div class="cx-tile"><b>Safety Lab owns</b><span class="cx-big">' + slOwn + ' linked item' + (slOwn === 1 ? '' : 's') + '</span><span class="cx-dim">' + (a.readOnly ? 'None can be: this connection only reads.' : 'Edited here, sent to ' + _esc(_shortName(t.id)) + '.') + '</span></div>' +
                 '<button type="button" class="cx-tile cx-link" onclick="SLConnections.show(\'in\')"><b>Waiting to come in</b><span class="cx-big">' + nIn + ' change' + (nIn === 1 ? '' : 's') + '</span><span class="cx-dim">Review and sign in Incoming changes</span></button>' +
-                '<button type="button" class="cx-tile cx-link" onclick="SLConnections.show(\'out\')"><b>Waiting to go out</b><span class="cx-big">' + nOut + ' change' + (nOut === 1 ? '' : 's') + '</span><span class="cx-dim">Check and send in Ready to send</span></button>' +
+                '<button type="button" class="cx-tile cx-link" onclick="SLConnections.show(\'out\')"><b>Waiting to go out</b><span class="cx-big">' + nOut + ' change' + (nOut === 1 ? '' : 's') + '</span><span class="cx-dim">' + (a.readOnly ? 'Nothing is sent to ' + _esc(_shortName(t.id)) + '.' : 'Check and send in Ready to send') + '</span></button>' +
                 '</div>' +
                 (a.pilot && a.pilot() ? '<div class="cx-warn">Pilot: reading from ' + _esc(t.label) + ' is on. Sending is switched on once it has been proven on a real ' + _esc(_shortName(t.id)) + ' server; until then nothing is written to it.</div>' : '') +
+                (a.readOnly ? '<div class="cx-dim">Safety Lab only reads from ' + _esc(t.label) + '. Nothing is written to it.' + (a.every && a.every() ? ' Checked again every ' + a.every() + ' minute' + (a.every() === 1 ? '' : 's') + ' while the project is open.' : '') + '</div>' : '') +
                 (a.held && a.held() ? '<div class="cx-warn">Nothing from ' + _esc(t.label) + ' is staged until each kind of item under what you chose is said what it is: answer it in Mapping.</div>' : '') +
                 (warn.length ? '<div class="cx-warn">' + warn.slice(0, 4).map(_esc).join('<br>') + (warn.length > 4 ? '<br>and ' + (warn.length - 4) + ' more' : '') + '</div>' : '') +
                 '<div class="cx-row cx-gap">' + _btn('Check now', 'SLConnections.checkNow(\'' + t.id + '\')') + _btn('Linked items and owners', 'SLConnections.show(\'map\')') + _btn('Connection settings', 'SLConnections.setup(\'' + t.id + '\')') + '</div>' +

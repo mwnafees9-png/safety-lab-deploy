@@ -36,7 +36,7 @@ function mutate(file, body) {
 function done() { console.log('\n' + pass + ' passed, ' + fail + ' failed' + (MUT ? ' (mutation: ' + MUT + ')' : '')); process.exit(fail ? 1 : 0); }
 (async () => {
     const HTML = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8'), src = f => fs.readFileSync(path.join(SITE, f), 'utf8'), at = s => HTML.indexOf(s);
-    check('0 api_connect.js 1.0 loads after alm_engine.js 1.1 and connections.js 1.2', at('api_connect.js?v=1.0"') > at('alm_engine.js?v=1.1"') && at('alm_engine.js?v=1.1"') > at('connections.js?v=1.2"') && at('connections.js?v=1.2"') > 0);
+    check('0 api_connect.js 1.0 loads after alm_engine.js 1.2 and connections.js 1.3', at('api_connect.js?v=1.0"') > at('alm_engine.js?v=1.2"') && at('alm_engine.js?v=1.2"') > at('connections.js?v=1.3"') && at('connections.js?v=1.3"') > 0);
     check('0 no em dash in api_connect.js or this test', src('api_connect.js').indexOf(EM) < 0 && fs.readFileSync(__filename, 'utf8').indexOf(EM) < 0);
     let pw; try { pw = require('playwright'); } catch (_) { console.log('  SKIP  browser checks'); return done(); }
     const TYPES = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.wasm': 'application/wasm' };
